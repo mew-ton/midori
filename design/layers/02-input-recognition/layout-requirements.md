@@ -1,0 +1,81 @@
+# Layer 2 — layout 要件
+
+コンポーネントの GUI 描画を定義するセクション。GUI（View）のみが使用する。
+
+概念的には **no-code ツールのレイアウト定義に近い**。コンポーネントをどの順番でどう並べるかをざっくり宣言できれば十分。
+
+責務の境界は以下のとおり：
+
+| 責務 | 担当 |
+|---|---|
+| コンポーネントの並び順・方向・整列・折り返し | layout |
+| コンポーネントの表示色 | layout（オプション） |
+| 各コンポーネントの primitive / additionals をどう描画するか | コンポーネント設計 |
+| 余白・タイポグラフィ・アニメーション等の細部 | デザインシステム |
+
+## 使用者
+
+| 使用者 | 用途 |
+|---|---|
+| Runtime | 不使用 |
+| GUI | Input Source Editor の描画・Preview のリアルタイム表示に使用 |
+
+## 要件
+
+| # | 要件 | 補足 |
+|---|---|---|
+| 1 | `ref` で definition の component id を参照して描画対象を指定できること | definition に存在しない id の参照はエラーとする |
+| 2 | コンポーネントの並び順を宣言できること | 上から順に描画される |
+| 3 | `direction` で並べる方向を指定できること | `row`（横並び）/ `column`（縦並び） |
+| 4 | `align` で整列を指定できること | `start` / `center` / `end` |
+| 5 | `wrap` で折り返しを指定できること | デフォルト `false` |
+| 6 | コンポーネントをグループ化して入れ子にできること | グループ自体も `direction` / `align` / `wrap` を持つ |
+| 7 | コンポーネントに色を指定できること | 省略時はデフォルトカラー |
+| 8 | layout が省略された場合は definition の順に自動生成（フォールバック）すること | 全 component を `column` で並べた最小構成 |
+| 9 | layout を変更してもブリッジの再起動が不要であること | GUI のみが使用するため Runtime に影響しない |
+| 10 | ブリッジ起動中は ComponentState をリアルタイムで描画に反映できること（Preview） | stdout JSON stream 経由で GUI が受け取る |
+| 11 | ブリッジ停止中は静的表示のみとすること | リアルタイム応答なし |
+
+## レイアウトモデル
+
+| プロパティ | 値 | 意味 |
+|---|---|---|
+| `direction` | `row` / `column` | 子要素の並び方向 |
+| `align` | `start` / `center` / `end` | 主軸方向の整列 |
+| `wrap` | `true` / `false` | 溢れた場合に折り返すか（デフォルト `false`） |
+| `color` | カラーコード等 | コンポーネントの表示色（省略可） |
+
+## サンプル
+
+```yaml
+layout:
+  direction: column
+  components:
+    # 鍵盤3段を縦に並べる
+    - ref: upper
+      color: "#4af"
+    - ref: lower
+      color: "#f84"
+    - ref: pedal
+
+    # エクスプレッション類を横に並べるグループ
+    - direction: row
+      align: start
+      components:
+        - ref: upper_expression
+        - ref: upper_sustain
+```
+
+## Preview のデータフロー
+
+```
+ブリッジ
+└── ComponentState 発生
+      │ stdout JSON stream
+      ▼
+GUI バックエンド
+└── "component-state" イベントとして GUI フロントエンドに送出
+      ▼
+Input Source Editor > Preview タブ
+└── component id + value name でコンポーネントを特定し状態を更新
+```
