@@ -330,15 +330,13 @@ keyboard（ref: upper）
 ### Preview のデータフロー
 
 ```
-Runtime
-└── ComponentState 発生
-      │ stdout JSON stream
+Runtime（stdout）
+└── {"type":"device-state","direction":"input","component":"upper","note":60,"value_name":"pressed","value":true}
+      │ IPC
       ▼
-GUI src-tauri/main.rs
-└── tauri::emit("component-state", payload)
-      ▼
-GUI Input Source Editor > Preview タブ
-└── component id + value name でコンポーネントを特定して状態を更新
+Electron レンダラー > Device Profile Editor（入力）> Preview タブ
+└── direction=input でフィルタ → component + note + value_name でコンポーネントを特定して状態を更新
 ```
 
+出力の Monitor タブも同じ `device-state` イベントを `direction=output` でフィルタして表示する。
 Runtime 停止中はレイアウトの静的確認のみ。リアルタイム応答は Runtime 起動後。

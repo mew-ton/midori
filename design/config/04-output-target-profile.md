@@ -223,13 +223,12 @@ layout:
 ### Monitor のデータフロー
 
 ```
-Runtime
-└── Signal 送出
-      │ stdout JSON stream
+Runtime（stdout）
+└── {"type":"device-state","direction":"output","component":"upper","note":60,"value_name":"pressed","value":true}
+      │ IPC
       ▼
-GUI バックエンド
-└── "signal" イベントとして GUI フロントエンドに送出
-      ▼
-Device Profile Editor（出力）> Monitor タブ
-└── component id + value name でコンポーネントを特定し値を更新
+Electron レンダラー > Device Profile Editor（出力）> Monitor タブ
+└── direction=output でフィルタ → component + note + value_name でコンポーネントを特定して状態を更新
 ```
+
+入力の Preview タブも同じ `device-state` イベントを `direction=input` でフィルタして表示する。

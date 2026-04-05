@@ -12,6 +12,7 @@
 | [03-tech-stack.md](./03-tech-stack.md) | 技術スタック・Rust + Electron 構成・レイテンシ目標 |
 | [04-runtime-cli.md](./04-runtime-cli.md) | CLI オプション・ログフォーマット |
 | [05-future.md](./05-future.md) | 未解決事項・将来の拡張ポイント・参考リンク |
+| [06-error-handling.md](./06-error-handling.md) | エラー分類・クリティカル／ランタイムエラーの挙動・GUI 可視化 |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
 | [config/02-input-source-profile.md](./config/02-input-source-profile.md) | Device Profile（入力）設定仕様（direction / definition / binding / layout） |
 | [config/03-mapper.md](./config/03-mapper.md) | Mapper 設定仕様（ノードグラフ・Signal 定義） |

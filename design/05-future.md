@@ -79,7 +79,7 @@ binding:
 入力ドライバー C ─┘          出力ドライバー Y
 ```
 
-設定ファイルの `pipeline` に複数の `input_source` / `transport` を列挙できるよう拡張する。初期設計時から `driver` / `transport` をリスト構造にしておくことで移行コストを下げる。
+設定ファイルの `pipeline` に複数の `input_profile` / `output_profile` / `transport` を列挙できるよう拡張する。初期設計時から `driver` / `transport` をリスト構造にしておくことで移行コストを下げる。
 
 ### AI によるパイプライン自動構成
 
@@ -113,4 +113,5 @@ binding:
 - [VRChat OSCQuery](https://docs.vrchat.com/docs/oscquery)
 - [midir（Rust MIDI ライブラリ）](https://github.com/Boddlnagg/midir)
 - [rosc（Rust OSC ライブラリ）](https://github.com/klingtnet/rosc)
-- [Tauri](https://tauri.app)
+- [Electron](https://www.electronjs.org)
+- [Astro](https://astro.build)

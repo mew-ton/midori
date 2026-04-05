@@ -5,11 +5,11 @@ ComponentState を Signal に変換する。ノードグラフ形式で定義す
 ## メタデータ：入出力の宣言
 
 ```yaml
-input_sources:
-  - input-sources/yamaha-els03.yaml
+input_profiles:
+  - input/yamaha-els03.yaml
 
-output_targets:
-  - output-targets/vrchat-default.yaml
+output_profiles:
+  - output/vrchat-default.yaml
 ```
 
 | 目的 | 内容 |
@@ -91,11 +91,11 @@ graph:
 ## 設定例
 
 ```yaml
-input_sources:
-  - input-sources/yamaha-els03.yaml
+input_profiles:
+  - input/yamaha-els03.yaml
 
-output_targets:
-  - output-targets/vrchat-default.yaml
+output_profiles:
+  - output/vrchat-default.yaml
 
 graph:
   nodes:

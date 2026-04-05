@@ -30,6 +30,26 @@ Mapper の編集は**ノードをつないで構成するグラフ形式**の GU
 
 計算ノードなしで Input → Output を直結することもできる。
 
+### GUI の実装モデル
+
+ノードグラフ UI は責務を明確に2層に分ける。
+
+| 層 | 技術 | 責務 |
+|---|---|---|
+| ノード本体 | Svelte（Astro Island） | ノードの内部状態・パラメーター編集・ポートのリアクティブな値管理 |
+| 接続線 | Web Component + 動的 SVG | ノード間のベジエ曲線描画。ノード位置を自律監視して自動再描画 |
+
+接続線の Web Component（`<node-wire>`）は `from` / `to` 属性に接続元・先のポート要素を受け取り、`ResizeObserver` でノード位置の変化を監視して SVG ベジエを自動再描画する。Svelte 側はノードを動かすだけでよく、線の描画を関知しない。
+
+```html
+<!-- Svelte がノードを配置・管理 -->
+<div id="vel_pack"    class="node">...</div>
+<div id="vel_flatten" class="node">...</div>
+
+<!-- Web Component が接続線を担う。位置は自分で解決する -->
+<node-wire from="vel_pack.out" to="vel_flatten.in" type="float"></node-wire>
+```
+
 ---
 
 ## ポート型システム
@@ -120,7 +140,7 @@ Mapper の編集は**ノードをつないで構成するグラフ形式**の GU
 
 | # | 要件 | 補足 |
 |---|---|---|
-| 1 | 対象とする input_sources と output_targets を宣言すること | バリデーション・GUI 補完に使用 |
+| 1 | 対象とする input_profiles と output_profiles を宣言すること | バリデーション・GUI 補完に使用 |
 | 2 | Input Block のポートは Input Source の definition から自動生成されること | 手動で列挙しない |
 | 3 | 計算ノードを Input と Output の間に任意に挟めること | 0個でも複数でも可 |
 | 4 | 計算ノードを直列につなげてチェーンにできること | |

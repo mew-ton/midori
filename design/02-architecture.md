@@ -59,15 +59,15 @@ binding の方向だけが逆になる。
 ```
 GUI
 ├── Device Profile Editor（入力）   definition / binding / layout を編集
-│     └── Preview タブ              ブリッジ起動中はリアルタイム入力を可視化
+│     └── Preview タブ              type=device-state & direction=input をリアルタイム表示
 ├── Mapper Editor                   トランスフォームグラフを組み立てる
 ├── Device Profile Editor（出力）   definition / binding / layout を編集
-│     └── Monitor タブ              ブリッジ起動中はリアルタイム出力を可視化
+│     └── Monitor タブ              type=device-state & direction=output をリアルタイム表示
 ├── Preferences Editor              デバイス紐付け・送信先を設定する
-├── Pipeline Monitor                ブリッジのログをリアルタイム表示
+├── Pipeline Monitor                全イベント（raw-event / device-state / signal / log）を表示
 └── [ ▶ 実行 ] [ ■ 停止 ]           ブリッジプロセスを起動・終了する
 
-         │ プロセス起動 / stdout pipe
+         │ プロセス起動 / stdout JSON Lines
          ▼
 
 ブリッジ（CLI バイナリ: midori）
@@ -75,6 +75,8 @@ GUI
 ```
 
 **GUI はブリッジの入出力に一切触れない。純粋な設定エディター + プロセスマネージャー。**
+
+Preview と Monitor は同一の `device-state` イベントを購読し、`direction` フィールドでフィルタリングする。
 
 ---
 

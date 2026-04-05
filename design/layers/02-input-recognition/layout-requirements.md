@@ -69,13 +69,13 @@ layout:
 ## Preview のデータフロー
 
 ```
-ブリッジ
-└── ComponentState 発生
-      │ stdout JSON stream
+Runtime（stdout）
+└── {"type":"device-state","direction":"input",...}
+      │ IPC
       ▼
-GUI バックエンド
-└── "component-state" イベントとして GUI フロントエンドに送出
+Electron メインプロセス
+      │ contextBridge
       ▼
-Input Source Editor > Preview タブ
-└── component id + value name でコンポーネントを特定し状態を更新
+Device Profile Editor（入力）> Preview タブ
+└── component + note + value_name でコンポーネントを特定し状態を更新
 ```
