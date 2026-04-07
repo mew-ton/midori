@@ -11,21 +11,21 @@
                   │ raw events
                   ▼
 ┌──────────────────────────────────────────┐
-│  Device Profile（入力）                   │
+│  デバイス構成（入力）                   │
 │  definition + binding + layout           │  公開配布可能
 │  raw events → ComponentState に正規化    │
 └─────────────────┬────────────────────────┘
                   │ ComponentState
                   ▼
 ┌──────────────────────────────────────────┐
-│  マッパーレイヤー                          │
-│  Mapper                                  │  プライベート共有
+│  変換グラフレイヤー                          │
+│  変換グラフ                                  │  プライベート共有
 │  mapper.yaml                             │  ComponentState → Signal
 └─────────────────┬────────────────────────┘
                   │ Signal
                   ▼
 ┌──────────────────────────────────────────┐
-│  Device Profile（出力）                   │
+│  デバイス構成（出力）                   │
 │  definition + binding + layout           │  公開配布可能
 │  Signal → raw events に変換             │
 └─────────────────┬────────────────────────┘
@@ -40,9 +40,9 @@
 
 各層は疎結合。隣接層とのインターフェース（raw events / ComponentState / Signal）が変わらない限り、各層を独立して差し替えられる。
 
-### Device Profile の対称性
+### デバイス構成 の対称性
 
-Layer 2（入力）と Layer 4（出力）は **同一スキーマ（Device Profile）** を共有する。
+Layer 2（入力）と Layer 4（出力）は **同一スキーマ（デバイス構成）** を共有する。
 binding の方向だけが逆になる。
 
 | | Layer 2（入力） | Layer 4（出力） |
@@ -58,13 +58,13 @@ binding の方向だけが逆になる。
 
 ```
 GUI
-├── Device Profile Editor（入力）   definition / binding / layout を編集
+├── デバイス構成 Editor（入力）   definition / binding / layout を編集
 │     └── Preview タブ              type=device-state & direction=input をリアルタイム表示
-├── Mapper Editor                   トランスフォームグラフを組み立てる
-├── Device Profile Editor（出力）   definition / binding / layout を編集
+├── 変換グラフ Editor                   トランスフォームグラフを組み立てる
+├── デバイス構成 Editor（出力）   definition / binding / layout を編集
 │     └── Monitor タブ              type=device-state & direction=output をリアルタイム表示
 ├── Preferences Editor              デバイス紐付け・送信先を設定する
-├── Pipeline Monitor                全イベント（raw-event / device-state / signal / log）を表示
+├── イベントログ                全イベント（raw-event / device-state / signal / log）を表示
 └── [ ▶ 実行 ] [ ■ 停止 ]           ブリッジプロセスを起動・終了する
 
          │ プロセス起動 / stdout JSON Lines
@@ -85,9 +85,9 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 | 層 | 初回実装 | 将来の拡張例 |
 |---|---|---|
 | 入力ドライバー | `midi` | `osc`, `ble-heart-rate`, `keyboard` |
-| Device Profile（入力） | MIDI binding 構文 | ドライバーごとに追加 |
-| マッパー | 宣言的トランスフォームグラフ | — |
-| Device Profile（出力） | OSC binding 構文 | MIDI 出力等 |
+| デバイス構成（入力） | MIDI binding 構文 | ドライバーごとに追加 |
+| 変換グラフ | 宣言的トランスフォームグラフ | — |
+| デバイス構成（出力） | OSC binding 構文 | MIDI 出力等 |
 | 出力ドライバー | `udp`（OSC） | `websocket`, `serial`, `midi` |
 
 `driver` / `transport` フィールドを最初から持たせ、初回は `midi` / `udp` だけ実装する。
@@ -105,8 +105,8 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       ├── input/
 │       │   ├── mod.*                ← InputDriver インターフェース
 │       │   └── midi.*               ← MIDI ドライバー
-│       ├── device_profile.*         ← DeviceProfile（入力・出力共通）
-│       ├── mapper.*                 ← MapperRuntime
+│       ├── device_profile.*         ← デバイス構成（入力・出力共通）
+│       ├── mapper.*                 ← 変換グラフ Runtime
 │       └── output/
 │           ├── mod.*                ← OutputDriver インターフェース
 │           └── udp.*                ← UDP ドライバー
@@ -119,17 +119,15 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       │     ├── BindingEditor
 │       │     ├── LayoutEditor
 │       │     └── Preview / Monitor  ← リアルタイム可視化
-│       ├── MapperEditor/
+│       ├── 変換グラフEditor/
 │       ├── PreferencesEditor/
 │       └── PipelineMonitor/
 │
 └── profiles/                        ← 配布用サンプル設定
-    ├── input/
-    │   ├── yamaha-els03.yaml
-    │   └── generic-midi.yaml
-    ├── mappers/
-    │   └── example.yaml
-    └── output/
-        ├── vrchat-osc.yaml
-        └── generic-midi-out.yaml
+    ├── devices/                     ← direction フィールドで入力・出力・両用を識別
+    │   ├── yamaha-els03.yaml        ← direction: input
+    │   ├── generic-midi.yaml        ← direction: any
+    │   └── vrchat-osc.yaml          ← direction: output
+    └── mappers/
+        └── example.yaml
 ```

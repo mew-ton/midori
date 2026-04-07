@@ -21,10 +21,10 @@
 HTTP はドライバー固有の I/O モデルを持つ：
 
 **入力（サーバー起動型）**：ブリッジ起動時に HTTP サーバーが指定ポートで立ち上がる。
-Device Profile の `definition` は受け付ける API エンドポイントを記述し、`binding` でリクエストボディのフィールドを ComponentState にマッピングする。
+デバイス構成 の `definition` は受け付ける API エンドポイントを記述し、`binding` でリクエストボディのフィールドを ComponentState にマッピングする。
 
 ```yaml
-# 入力 Device Profile（driver: http）のイメージ
+# 入力 デバイス構成（driver: http）のイメージ
 definition:
   components:
     - id: note_trigger
@@ -34,48 +34,50 @@ definition:
       range: 0~1
 
 binding:
-  driver: http
-  mappings:
-    - from:
-        method: POST
-        path: /note
-        body: $.note        # JSON パス
-      to:
-        target: note_trigger.triggered
-        set: 1
-    - from:
-        method: POST
-        path: /expression
-        body: $.value
-      to:
-        target: expression.value
-        set: value
+  input:
+    driver: http
+    mappings:
+      - from:
+          method: POST
+          path: /note
+          body: $.note        # JSON パス
+        to:
+          target: note_trigger.triggered
+          set: 1
+      - from:
+          method: POST
+          path: /expression
+          body: $.value
+        to:
+          target: expression.value
+          set: value
 ```
 
 **出力（HTTP クライアント型）**：Signal が発生するたびに Preferences で設定した URL へ JSON body をリクエスト送出する。
 
 ```yaml
-# 出力 Device Profile（driver: http）のイメージ
+# 出力 デバイス構成（driver: http）のイメージ
 binding:
-  driver: http
-  mappings:
-    - from:
-        target: upper.{note}.pressed
-      to:
-        method: POST
-        path: /avatar/key
-        body:
-          note: "{note}"
-          pressed: "{value}"
+  output:
+    driver: http
+    mappings:
+      - from:
+          target: upper.{note}.pressed
+        to:
+          method: POST
+          path: /avatar/key
+          body:
+            note: "{note}"
+            pressed: "{value}"
 ```
 
 ### 複数入出力の同時設定
 
-初期は入力 1 系統・出力 1 系統の構成のみだが、将来は複数の入力・出力を同時に設定し、1つのマッパーでまとめてルーティングできる構成を目指す。
+初期は入力 1 系統・出力 1 系統の構成のみだが、将来は複数の入力・出力を同時に設定し、1つの変換グラフでまとめてルーティングできる構成を目指す。
 
 ```
 入力ドライバー A ─┐
-入力ドライバー B ─┤→ Mapper → 出力ドライバー X
+入力ドライバー B ─┤→ 変換グラフ → 出力ドライバー X
 入力ドライバー C ─┘          出力ドライバー Y
 ```
 
@@ -83,7 +85,7 @@ binding:
 
 ### AI によるパイプライン自動構成
 
-接続された入力デバイスと指定した出力ターゲットの情報をもとに、AI が Input Source Profile・Mapper・Output Target Profile を自動生成・提案する機能。
+接続された入力デバイスと指定した出力ターゲットの情報をもとに、AI が デバイス構成（入力）・変換グラフ・デバイス構成（出力）を自動生成・提案する機能。
 
 想定フロー：
 1. ユーザーがデバイスを接続し、出力先（例: VRChat アバター）を指定する
@@ -99,7 +101,7 @@ binding:
 |---|---|
 | ELS-03 チャンネルマップ | 実機確認が必要。判明後 `els03.yaml` の binding に反映 |
 | ELS-03 キー横傾きの MIDI 実装 | MPE / チャンネル PitchBend / SysEx のいずれかを実機確認で特定 |
-| Mapper の複合ロジック | 和音検出・時系列処理は現時点で対応外。将来拡張ポイント |
+| 変換グラフ の複合ロジック | 和音検出・時系列処理は現時点で対応外。将来拡張ポイント |
 | OSCQuery 対応 | VRChat 起動中にアバターパラメーターをリアルタイム取得。初期実装はローカルファイル読み取りで代替 |
 | VRChat アバター config 参照 | `AppData/.../OSC/{userId}/Avatars/{avatarId}.json` をパースしてパラメーター補完に使う |
 | 追加入力ドライバー | `ble-heart-rate`, `keyboard`, `osc-input` など |

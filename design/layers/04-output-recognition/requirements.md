@@ -1,10 +1,10 @@
-# Layer 4 — Device Profile（出力）要件
+# Layer 4 — デバイス構成（出力）要件
 
 ## 責務
 
 Signal を出力ドライバー固有の raw events に変換する。送信先は持たない。
 
-Layer 2（入力）と同一スキーマ（Device Profile）を使用する。binding の方向のみが逆。
+Layer 2（入力）と同一スキーマ（デバイス構成）を使用する。`binding.input` / `binding.output` サブセクションで方向を分離する。
 
 ## インターフェース
 
@@ -53,7 +53,7 @@ Layer 2（入力）と同一スキーマ（Device Profile）を使用する。bi
 | 6 | keyboard の `{note}` テンプレートを使えること | per-key の出力に展開される |
 | 7 | `from.condition` による出力条件の絞り込みをサポートすること | 省略時は値が変化するたびに送出 |
 | 8 | binding を変更した場合はブリッジの再起動が必要であること | 起動時にのみ読み込むため |
-| 9 | 送信先（ホスト・ポート等）を持たないこと | 送信先は Preferences が担う |
+| 9 | 送信先（ホスト・ポート等）を持たないこと | 送信先はプロファイルが担う |
 | 10 | `direction: input` のプロファイルを出力側に設定した場合はエラーとすること | 起動時バリデーション |
 
 ### `from.target` パスの形式
@@ -64,10 +64,10 @@ Layer 2（入力）と同一スキーマ（Device Profile）を使用する。bi
 |---|---|---|
 | `keyboard` | `<component_id>.{note}.<value_name>` | `upper.{note}.pressed` |
 | `slider` | `<component_id>.<value_name>` | `upper_expression.value` |
-| `toggle` | `<component_id>.<value_name>` | `upper_sustain.state` |
+| `switch` | `<component_id>.<value_name>` | `upper_sustain.pressed` |
 
 ---
 
 ## 設定仕様
 
-→ [config/04-output-target-profile.md](../../config/04-output-target-profile.md)
+→ [config/02-device-config.md](../../config/02-device-config.md)

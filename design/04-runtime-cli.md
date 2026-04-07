@@ -7,9 +7,9 @@ midori [OPTIONS]
 
 OPTIONS:
   --preferences     <path>   Preferences YAML（デフォルト: ./preferences.yaml）
-  --input-profile   <path>   Device Profile（入力）YAML（preferences を上書き）
-  --mapper          <path>   Mapper YAML（preferences を上書き）
-  --output-profile  <path>   Device Profile（出力）YAML（preferences を上書き）
+  --input-profile   <path>   デバイス構成（入力）YAML（preferences を上書き）
+  --mapper          <path>   変換グラフ YAML（preferences を上書き）
+  --output-profile  <path>   デバイス構成（出力）YAML（preferences を上書き）
   --log-level       <level>  error | warn | info | debug
   --log-format      <fmt>    text | json
 ```
@@ -26,7 +26,8 @@ OPTIONS:
 |---|---|---|
 | `raw-event` | Layer 1 / Layer 5 | ドライバー固有の raw I/O |
 | `device-state` | Layer 2 / Layer 4 | ComponentState の変化（入力・出力共通フォーマット） |
-| `signal` | Layer 3 | Mapper が出力した Signal |
+| `signal` | Layer 3 | 変換グラフ が出力した Signal |
+| `error-path` | 全層 | ランタイムエラーの発生経路（GUI の赤表示に使用） |
 | `log` | 全層 | エラー・警告・その他ログ |
 
 ### device-state（Layer 2 / Layer 4 共通）
@@ -68,16 +69,67 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 
 ### Runtime → GUI（モニタリング）
 
+Runtime のイベントは **SSE（Server-Sent Events）** でブラウザに配信する。
+
 ```
 Runtime（stdout）
-└── JSON Lines ストリーム
-      │ IPC（contextBridge）
-      ▼
-Electron レンダラー
-├── Pipeline Monitor    全 type を表示
-├── Preview タブ        type=device-state & direction=input  をフィルタ
-└── Monitor タブ        type=device-state & direction=output をフィルタ
+  → Electron メインプロセス（stdout を受信）
+  → Astro SSR サーバーに転送（同一 Node プロセス内のイベントエミッター）
+  → GET /events（SSE エンドポイント）からブラウザへプッシュ
+  → pure JS が dataset を更新 / イベントログ がログを追記
 ```
+
+#### SSE エンドポイント
+
+```
+GET /events
+Content-Type: text/event-stream
+```
+
+イベント種別ごとに `event:` フィールドで分類して流す。
+
+```
+event: device-state
+data: {"direction":"input","component":"upper","note":60,"value_name":"pressed","value":true}
+
+event: error-path
+data: {"nodes":["vel_scale"],"signals":["upper_key_60_velocity"],...}
+
+event: log
+data: {"level":"warn","layer":"output-driver","message":"send failed"}
+```
+
+#### クライアント側の購読
+
+```js
+const es = new EventSource('/events')
+
+// 監視コンポーネント：device-state を受けて dataset を更新
+es.addEventListener('device-state', (e) => {
+  const ev = JSON.parse(e.data)
+  const el = document.querySelector(`[data-component="${ev.component}"][data-note="${ev.note}"]`)
+  if (el) el.dataset[ev.value_name] = ev.value
+})
+
+// エラー経路の赤表示
+es.addEventListener('error-path', (e) => {
+  const ev = JSON.parse(e.data)
+  ev.components.forEach(({ component, note }) => {
+    const el = document.querySelector(`[data-component="${component}"][data-note="${note}"]`)
+    if (el) el.dataset.error = "1"
+  })
+})
+```
+
+SSE は切断時に自動再接続される。ブリッジ停止中は `/events` が接続を閉じ、再起動時に再接続される。
+
+#### GUI 上のフィルタリング
+
+| タブ | フィルタ |
+|---|---|
+| Preview | `event: device-state` かつ `direction=input` |
+| Monitor | `event: device-state` かつ `direction=output` |
+| イベントログ | 全イベントをログ表示 |
 
 ### GUI 操作フロー
 
@@ -95,7 +147,7 @@ Electron レンダラー
 
 #### 設定ファイルの操作
 
-入力 Device Profile・出力 Device Profile・Mapper それぞれに対して、以下の操作を提供する。
+入力 デバイス構成・出力 デバイス構成・変換グラフ それぞれに対して、以下の操作を提供する。
 
 | 操作 | 内容 |
 |---|---|

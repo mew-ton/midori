@@ -16,8 +16,8 @@
 | 例 | 検出層 |
 |---|---|
 | binding の `to.target` が definition に存在しないパスを参照している | Layer 2 / Layer 4 |
-| Mapper の接続ポートの型が不一致 | Layer 3 |
-| Mapper が参照する `input_profiles` / `output_profiles` のファイルが存在しない | Layer 3 |
+| 変換グラフ の接続ポートの型が不一致 | Layer 3 |
+| 変換グラフ が参照する `input_devices` / `output_devices` のファイルが存在しない | Layer 3 |
 | `direction: output` のプロファイルを入力側に設定している | Layer 2 |
 | `direction: input` のプロファイルを出力側に設定している | Layer 4 |
 
@@ -35,7 +35,7 @@
 
 | 例 | 発生層 |
 |---|---|
-| ゼロ除算・数値変換失敗 | Layer 3（Mapper 計算ノード） |
+| ゼロ除算・数値変換失敗 | Layer 3（変換グラフ 計算ノード） |
 | 出力パケット送信失敗 | Layer 5 |
 | 入力デバイスの切断 | Layer 1 |
 

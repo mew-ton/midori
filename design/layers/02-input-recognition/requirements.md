@@ -1,10 +1,10 @@
-# Layer 2 — Device Profile（入力）要件
+# Layer 2 — デバイス構成（入力）要件
 
 ## 責務
 
 raw events を ComponentState に変換・正規化する。楽器・デバイスの物理構成と値域を定義する。
 
-Layer 4（出力）と同一スキーマ（Device Profile）を使用する。binding の方向のみが逆。
+Layer 4（出力）と同一スキーマ（デバイス構成）を使用する。`binding.input` / `binding.output` サブセクションで方向を分離する。
 
 ## インターフェース
 
@@ -22,7 +22,7 @@ Layer 4（出力）と同一スキーマ（Device Profile）を使用する。bi
 | 3 | 値をレンジ定義に従い正規化すること | `0~1` または `-1~1` に変換済みの float を渡す |
 | 4 | set による定数代入と setMap による条件分岐代入をサポートすること | setMap の when 記法: 完全一致 / 比較演算子 / 範囲 |
 | 5 | binding に存在しない component / value を参照した場合はエラーとすること | 起動時にバリデーションする |
-| 9 | `direction: output` のプロファイルを入力側に設定した場合はエラーとすること | 起動時バリデーション |
+| 5b | `direction: output` のデバイス構成をプロファイルの入力側に設定した場合はエラーとすること | 起動時バリデーション |
 | 6 | layout の変更はブリッジ再起動なしに反映できること | layout は View のみが使用。Runtime は不使用 |
 | 7 | binding の変更はブリッジ再起動を必要とすること | Runtime が起動時に binding を読み込むため |
 | 8 | 楽器・デバイス1種 = YAML 1ファイルとして公開配布できること | 機種共通の情報のみを持つ。環境固有値は含まない |
@@ -42,7 +42,8 @@ Layer 4（出力）と同一スキーマ（Device Profile）を使用する。bi
 | definition | [definition-requirements.md](./definition-requirements.md) |
 | binding | [binding-requirements.md](./binding-requirements.md) |
 | layout | [layout-requirements.md](./layout-requirements.md) |
+| Signal 指定子 | [signal-specifier.md](./signal-specifier.md) |
 
 ## 設定仕様
 
-→ [config/02-input-source-profile.md](../../config/02-input-source-profile.md)
+→ [config/02-device-config.md](../../config/02-device-config.md)

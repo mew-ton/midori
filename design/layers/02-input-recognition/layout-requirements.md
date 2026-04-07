@@ -76,6 +76,6 @@ Runtime（stdout）
 Electron メインプロセス
       │ contextBridge
       ▼
-Device Profile Editor（入力）> Preview タブ
+デバイス構成 Editor（入力）> Preview タブ
 └── component + note + value_name でコンポーネントを特定し状態を更新
 ```

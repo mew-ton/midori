@@ -109,9 +109,9 @@ keyboard の additionals:   デバイスが対応するものだけ追加
 ### サンプル：他の type
 
 ```yaml
-# toggle: additionals: 不要（state は primitive）
+# switch: additionals: 不要（pressed は primitive）
 - id: upper_sustain
-  type: toggle
+  type: switch
 
 # slider: range は component レベルで指定
 - id: upper_expression

@@ -1,22 +1,22 @@
-# Mapper（プライベート共有）
+# 変換グラフ（プライベート共有）
 
 ComponentState を Signal に変換する。ノードグラフ形式で定義する。
 
 ## メタデータ：入出力の宣言
 
 ```yaml
-input_profiles:
-  - input/yamaha-els03.yaml
+input_devices:
+  - devices/yamaha-els03.yaml
 
-output_profiles:
-  - output/vrchat-default.yaml
+output_devices:
+  - devices/vrchat-default.yaml
 ```
 
 | 目的 | 内容 |
 |---|---|
-| 設定の自己記述 | Mapper 単体を見たときに「何と何をつなぐファイルか」が分かる |
+| 設定の自己記述 | 変換グラフ 単体を見たときに「何と何をつなぐファイルか」が分かる |
 | バリデーション | Input Source に存在しない component / value への接続を検出する |
-| GUI での補完・絞り込み | 対応する Mapper の候補として提示できる |
+| GUI での補完・絞り込み | 対応する 変換グラフ の候補として提示できる |
 
 ---
 
@@ -38,8 +38,8 @@ graph:
 
 | 対象 | 記法 | 例 |
 |---|---|---|
-| Input Block のポート | `input.<component_id>.<value_name>` | `input.upper.{note}.pressed` |
-| Output Block のポート | `output.<signal_name>` | `output.upper_key_{note}` |
+| Input Block のポート | `input.<Signal 指定子>` | `input.upper.{note}.pressed` |
+| Output Block のポート | `output.<Signal 指定子>` | `output.upper.{note}.pressed` |
 | 計算ノードの入力ポート | `<node_id>.in` | `scale_vel.in` |
 | 計算ノードの出力ポート | `<node_id>.out` | `scale_vel.out` |
 
@@ -91,11 +91,11 @@ graph:
 ## 設定例
 
 ```yaml
-input_profiles:
-  - input/yamaha-els03.yaml
+input_devices:
+  - devices/yamaha-els03.yaml
 
-output_profiles:
-  - output/vrchat-default.yaml
+output_devices:
+  - devices/vrchat-default.yaml
 
 graph:
   nodes:
@@ -121,34 +121,34 @@ graph:
   connections:
     # keyboard: {note} が各キーに展開される
     - from: input.upper.{note}.pressed
-      to:   output.upper_key_{note}
+      to:   output.upper.{note}.pressed
 
     - from: input.upper.{note}.velocity
       to:   scale_vel.in
     - from: scale_vel.out
-      to:   output.upper_key_{note}_velocity
+      to:   output.upper.{note}.velocity
 
     - from: input.upper.{note}.pressure
       to:   quantize_pressure.in
     - from: quantize_pressure.out
-      to:   output.upper_key_{note}_pressure
+      to:   output.upper.{note}.pressure
 
     - from: input.upper.{note}.lateral
-      to:   output.upper_key_{note}_lateral
+      to:   output.upper.{note}.lateral
 
     # pedal
     - from: input.pedal.{note}.pressed
-      to:   output.pedal_{note}
+      to:   output.pedal.{note}.pressed
 
     # expression（計算ノード経由）
     - from: input.upper_expression.value
       to:   curve_expr.in
     - from: curve_expr.out
-      to:   output.upper_expression
+      to:   output.upper_expression.value
 
     # sustain（直結）
-    - from: input.upper_sustain.state
-      to:   output.upper_sustain
+    - from: input.upper_sustain.pressed
+      to:   output.upper_sustain.pressed
 ```
 
 ---
@@ -167,11 +167,11 @@ connections:
   - from: input.upper.{note}.velocity
     to:   vel_bits_{note}.in
   - from: vel_bits_{note}.bit_0
-    to:   output.upper_key_{note}_vel_b0
+    to:   output.upper.{note}.vel_b0
   - from: vel_bits_{note}.bit_1
-    to:   output.upper_key_{note}_vel_b1
+    to:   output.upper.{note}.vel_b1
   - from: vel_bits_{note}.bit_2
-    to:   output.upper_key_{note}_vel_b2
+    to:   output.upper.{note}.vel_b2
 ```
 
 ### 押鍵中のキーの強度を左詰めで伝送する例
@@ -241,11 +241,11 @@ connections:
 
   # bool を output へ
   - from: slot_bits_0.bit_0
-    to:   output.vel_slot0_b0
+    to:   output.vel_slot_0.b0
   - from: slot_bits_0.bit_1
-    to:   output.vel_slot0_b1
+    to:   output.vel_slot_0.b1
   - from: slot_bits_0.bit_2
-    to:   output.vel_slot0_b2
+    to:   output.vel_slot_0.b2
   # slot_1 ~ slot_3 も同様 ...
 ```
 
@@ -266,7 +266,7 @@ connections:
   - value: 0.0
     to:   gate_vel_{note}.else
   - from: gate_vel_{note}.out
-    to:   output.upper_key_{note}_velocity
+    to:   output.upper.{note}.velocity
 ```
 
 ### metronome の使用例
@@ -291,17 +291,17 @@ connections:
 
   # 出力: 各拍の pulse を Signal として出力
   - from: metro.beat_0
-    to:   output.beat_1
+    to:   output.beat_1.triggered
   - from: metro.beat_1
-    to:   output.beat_2
+    to:   output.beat_2.triggered
   - from: metro.beat_2
-    to:   output.beat_3
+    to:   output.beat_3.triggered
   - from: metro.beat_3
-    to:   output.beat_4
+    to:   output.beat_4.triggered
 ```
 
 ---
 
 ## Signal の定義
 
-Output Block のポートに付けた名前が Signal 名になる。Signal は正規化済みの値（`float` または `bool`）を持つ。Output Target Profile はこの Signal 名を参照してルーティングを定義する。
+Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.upper.{note}.pressed`）。Signal は正規化済みの値（`float` または `bool`）を持つ。出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
