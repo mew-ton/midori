@@ -53,7 +53,7 @@ binding:
           set: value
 ```
 
-**出力（HTTP クライアント型）**：Signal が発生するたびに Preferences で設定した URL へ JSON body をリクエスト送出する。
+**出力（HTTP クライアント型）**：Signal が発生するたびにプロファイルの connection で設定した URL へ JSON body をリクエスト送出する。
 
 ```yaml
 # 出力 デバイス構成（driver: http）のイメージ
@@ -81,7 +81,7 @@ binding:
 入力ドライバー C ─┘          出力ドライバー Y
 ```
 
-設定ファイルの `pipeline` に複数の `input_profile` / `output_profile` / `transport` を列挙できるよう拡張する。初期設計時から `driver` / `transport` をリスト構造にしておくことで移行コストを下げる。
+プロファイルの `input.device` / `output.device` / `connection` を複数指定できるよう拡張する。初期設計時から `driver` をリスト構造にしておくことで移行コストを下げる。
 
 ### AI によるパイプライン自動構成
 

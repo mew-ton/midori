@@ -18,7 +18,7 @@
 | 使用者 | 用途 |
 |---|---|
 | Runtime | 不使用 |
-| GUI | Input Source Editor の描画・Preview のリアルタイム表示に使用 |
+| GUI | デバイス構成 Editor の描画・Preview のリアルタイム表示に使用 |
 
 ## 要件
 

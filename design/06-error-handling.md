@@ -18,8 +18,8 @@
 | binding の `to.target` が definition に存在しないパスを参照している | Layer 2 / Layer 4 |
 | 変換グラフ の接続ポートの型が不一致 | Layer 3 |
 | 変換グラフ が参照する `input_devices` / `output_devices` のファイルが存在しない | Layer 3 |
-| `direction: output` のプロファイルを入力側に設定している | Layer 2 |
-| `direction: input` のプロファイルを出力側に設定している | Layer 4 |
+| `direction: output` のデバイス構成をプロファイルの入力側に設定している | Layer 2 |
+| `direction: input` のデバイス構成をプロファイルの出力側に設定している | Layer 4 |
 
 ログ出力例：
 
@@ -65,7 +65,7 @@
 ランタイムエラーは通常の `log` イベントに加え、経路の可視化用に `error-path` イベントを出力する。
 
 ```json
-{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":["upper_key_60_velocity"],"components":[{"direction":"output","component":"upper","note":60,"value_name":"velocity"}]}
+{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":["upper.60.velocity"],"components":[{"direction":"output","component":"upper","note":60,"value_name":"velocity"}]}
 ```
 
 GUI はこのイベントを受け取り、該当する要素に `data-error="1"` を付与する。

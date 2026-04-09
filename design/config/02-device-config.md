@@ -55,8 +55,6 @@ definition:
       type: keyboard
       key_range: [c2, c7]   # Yamaha 表記。octave_offset: -1 により内部では note 36〜96
       additionals:
-        - name: pressed
-          type: bool
         - name: velocity
           type: float
           range: 0~1
@@ -71,8 +69,6 @@ definition:
       type: keyboard
       key_range: [c2, c7]
       additionals:
-        - name: pressed
-          type: bool
         - name: velocity
           type: float
           range: 0~1
@@ -81,8 +77,6 @@ definition:
       type: keyboard
       key_range: [c1, c3]
       additionals:
-        - name: pressed
-          type: bool
         - name: velocity
           type: float
           range: 0~1

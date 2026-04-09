@@ -6,10 +6,8 @@
 midori [OPTIONS]
 
 OPTIONS:
+  --profile         <path>   プロファイル YAML（デフォルト: ./profiles/default.yaml）
   --preferences     <path>   Preferences YAML（デフォルト: ./preferences.yaml）
-  --input-profile   <path>   デバイス構成（入力）YAML（preferences を上書き）
-  --mapper          <path>   変換グラフ YAML（preferences を上書き）
-  --output-profile  <path>   デバイス構成（出力）YAML（preferences を上書き）
   --log-level       <level>  error | warn | info | debug
   --log-format      <fmt>    text | json
 ```
@@ -53,7 +51,7 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 ### signal
 
 ```json
-{"type":"signal","name":"upper_key_60","value":1.0}
+{"type":"signal","name":"upper.60.pressed","value":1.0}
 ```
 
 ### log
@@ -93,7 +91,7 @@ event: device-state
 data: {"direction":"input","component":"upper","note":60,"value_name":"pressed","value":true}
 
 event: error-path
-data: {"nodes":["vel_scale"],"signals":["upper_key_60_velocity"],...}
+data: {"nodes":["vel_scale"],"signals":["upper.60.velocity"],...}
 
 event: log
 data: {"level":"warn","layer":"output-driver","message":"send failed"}

@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────┐
-│  入力レイヤー                             │
+│  入力ドライバー                           │
 │  Input Driver                            │  raw I/O のみ。意味解釈なし
 │  driver: midi | osc | ...               │
 └─────────────────┬────────────────────────┘
@@ -18,9 +18,9 @@
                   │ ComponentState
                   ▼
 ┌──────────────────────────────────────────┐
-│  変換グラフレイヤー                          │
-│  変換グラフ                                  │  プライベート共有
-│  mapper.yaml                             │  ComponentState → Signal
+│  変換グラフ                              │
+│  mapper.yaml                             │  プライベート共有
+│  ComponentState → Signal                │
 └─────────────────┬────────────────────────┘
                   │ Signal
                   ▼
@@ -32,7 +32,7 @@
                   │ raw events
                   ▼
 ┌──────────────────────────────────────────┐
-│  出力レイヤー                             │
+│  出力ドライバー                           │
 │  Output Driver                           │  raw I/O のみ。意味解釈なし
 │  transport: udp | websocket | midi | ... │
 └──────────────────────────────────────────┘
@@ -63,7 +63,7 @@ GUI
 ├── 変換グラフ Editor                   トランスフォームグラフを組み立てる
 ├── デバイス構成 Editor（出力）   definition / binding / layout を編集
 │     └── Monitor タブ              type=device-state & direction=output をリアルタイム表示
-├── Preferences Editor              デバイス紐付け・送信先を設定する
+├── Preferences Editor              デバイス紐付けを設定する
 ├── イベントログ                全イベント（raw-event / device-state / signal / log）を表示
 └── [ ▶ 実行 ] [ ■ 停止 ]           ブリッジプロセスを起動・終了する
 
@@ -105,7 +105,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       ├── input/
 │       │   ├── mod.*                ← InputDriver インターフェース
 │       │   └── midi.*               ← MIDI ドライバー
-│       ├── device_profile.*         ← デバイス構成（入力・出力共通）
+│       ├── device_config.*          ← デバイス構成（入力・出力共通）
 │       ├── mapper.*                 ← 変換グラフ Runtime
 │       └── output/
 │           ├── mod.*                ← OutputDriver インターフェース
@@ -114,7 +114,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 ├── gui/                             ← GUI アプリ
 │   ├── backend/                     ← ブリッジプロセス起動・ログ中継のみ
 │   └── frontend/                    ← UI
-│       ├── DeviceProfileEditor/     ← 入力・出力で共通コンポーネント
+│       ├── DeviceConfigEditor/      ← 入力・出力で共通コンポーネント
 │       │     ├── DefinitionEditor
 │       │     ├── BindingEditor
 │       │     ├── LayoutEditor
