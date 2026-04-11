@@ -114,6 +114,7 @@ definition:
     - id: upper_expression
       type: slider           # 1D 型
       range: [0, 1]
+      valueType: float
 
     - id: upper_sustain
       type: switch           # 2値型（モーメンタリ）

@@ -83,6 +83,8 @@ MIDI イベントによって note フィールドの有無が異なるため、
 
 ## イベント変数一覧（MIDI ドライバー）
 
+各イベント変数は **対応するイベント type の `from` を持つエントリ内でのみ** 参照できる。対応しないイベント type のエントリで参照した場合はバリデーションエラー（例: `controlChange` エントリ内で `velocity` を参照 → エラー）。
+
 | 変数 | 参照できるイベント | 値域 | 正規化後 |
 |---|---|---|---|
 | `velocity` | NoteOn / NoteOff | 0–127 | `0~1` |
@@ -92,15 +94,17 @@ MIDI イベントによって note フィールドの有無が異なるため、
 
 ### SysEx キャプチャ変数
 
-`from.pattern` に `{name}` で定義したキャプチャ変数は、`set` / `setMap.source` / `set.expr` で参照できる。
+`from.pattern` に `{名前}` で定義したキャプチャ変数は、`set` / `setMap.source` / `set.expr` で参照できる。
+
+**命名**: `{名前}` の識別子は任意（`arg1`、`lo`、`hi` など）。YAML 識別子として有効な文字列であれば何でもよい。
 
 | 参照形式 | 使用箇所 | 説明 |
 |---|---|---|
-| `set: arg1` | `to.set` | キャプチャ変数の値をそのまま target に書き込む |
+| `set: arg1` | `to.set` | キャプチャ変数の値をそのまま target に書き込む（正規化なし） |
 | `source: arg1` | `to.setMap.source` | setMap の入力値として使うキャプチャ変数を指定 |
 | `(hi << 2) \| (lo >> 5)` | `to.set.expr` | 複数キャプチャ変数を式で計算する |
 
-キャプチャ変数の物理型は `uint7`（SysEx の1バイト）。計算可能性は [ドライバー要件](../../layers/01-input-driver/requirements.md) を参照。
+キャプチャ変数の物理型は各バイト `uint7`（SysEx の1バイト = 0–127）。`set.expr` で複数バイトをビット演算により合成することで、14bit 以上の値（例: `(hi << 7) | lo`）を表現できる。計算可能性の詳細は [ドライバー要件](../../layers/01-input-driver/requirements.md) を参照。
 
 ### realtime イベント
 

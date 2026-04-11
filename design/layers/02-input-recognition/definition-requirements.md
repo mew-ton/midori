@@ -117,14 +117,16 @@ keyboard の additionals:   デバイスが対応するものだけ追加
 - id: upper_sustain
   type: switch
 
-# slider: range は component レベルで指定
+# slider: range と valueType は必須
 - id: upper_expression
   type: slider
   range: [0, 1]
+  valueType: float
 
-# 2d-pad: pressed / x / y は primitive。追加 value があれば additionals: で宣言
+# 2d-pad: valueType / x_range / y_range は必須。pressed / x / y は primitive
 - id: touch_pad
   type: 2d-pad
+  valueType: float
   x_range: [-1, 1]
   y_range: [-1, 1]
 ```

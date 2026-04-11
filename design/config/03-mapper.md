@@ -49,14 +49,22 @@ graph:
 
 ### 単純変換ノード（単入力 `in` / 単出力 `out`）
 
-| type | params | 動作 |
-|---|---|---|
-| `scale` | `from: [min, max]` `to: [min, max]` | レンジを線形リマップ |
-| `clamp` | `min` `max` | min/max でクリップ |
-| `invert` | — | `1.0 - value` |
-| `gate` | `threshold` | 閾値以上なら 1.0、未満なら 0.0 |
-| `curve` | `shape: ease-in \| ease-out \| ease-in-out` | イージング関数を適用 |
-| `quantize` | `steps` | N ステップに量子化（float → 0〜steps-1 の整数） |
+| type | in 型 | out 型 | params | 動作 |
+|---|---|---|---|---|
+| `scale` | `float` | `float` | `from: [min, max]` `to: [min, max]` | レンジを線形リマップ |
+| `clamp` | `float` | `float` | `min` `max` | min/max でクリップ |
+| `invert` | `float` | `float` | — | `1.0 - value` |
+| `gate` | `float` | `bool` | `threshold` | 閾値以上なら true、未満なら false |
+| `to_float` | `bool` | `float` | — | false=0.0 / true=1.0 |
+| `curve` | `float` | `float` | `shape: ease-in \| ease-out \| ease-in-out` | イージング関数を適用 |
+| `quantize` | `float` | `int` | `steps` | N ステップに量子化（float → 0〜steps-1 の整数） |
+
+### 配列操作ノード
+
+| type | in 型 | out 型 | params | 動作 |
+|---|---|---|---|---|
+| `flatten` | `float[]` | `out_0`…`out_{n-1}` : `float` | `size`（省略時は入力長から推定） | 配列を個別ポートに展開 |
+| `collect` | `in_0`…`in_{n-1}` : `float` | `float[]` | `size` | 個別ポートを配列にまとめる |
 
 ### 複合ノード（複数入力 / 複数出力・ステートあり）
 

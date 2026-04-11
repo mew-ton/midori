@@ -2,6 +2,15 @@
 
 `binding.input.driver: midi` および `binding.output.driver: midi` の構文定義。
 
+## サポート方向
+
+| 方向 | サポート | 備考 |
+|---|---|---|
+| `input` | ✅ | MIDI 受信（特定デバイスが送信しない場合は `direction: output` で無効化） |
+| `output` | ✅ | MIDI 送信 |
+
+デバイス構成の `direction` フィールドで有効にする方向を制限できる（例: `direction: input` にすると `binding.input` のみ有効）。
+
 ---
 
 ## binding.input
@@ -154,16 +163,21 @@
 
 | type | 追加フィールド |
 |---|---|
-| `noteOn` | `velocity: <値または Signal 指定子>`（省略時は固定値 64） |
-| `noteOff` | `velocity: <値または Signal 指定子>`（省略時は 0） |
+| `noteOn` | `velocity: value \| <0–127>`（省略時は 64） |
+| `noteOff` | `velocity: value \| <0–127>`（省略時は 0） |
 | `controlChange` | `controller: <0–127>` ✅ |
 | `pitchBend` | なし |
 | `channelAftertouch` | なし |
 | `programChange` | なし |
 
+`velocity: value` を指定した場合、`from.target` の値（float 0~1）を MIDI 値域（0–127）へ逆正規化して velocity として送出する。`velocity: 64` のようにリテラルを指定した場合は固定値として送出する。
+
 ### 例
 
+同一チャンネル・同一 note に対して `noteOn` を出力する `from.target` は1エントリのみ有効。複数の `from.target` が同じ note への `noteOn` を出力しようとした場合は validation error。どの Signal 値を noteOn のトリガーとするかはデバイス構成の definition で確定する（pressed か velocity かのどちらかが定義される）。
+
 ```yaml
+# パターン1: pressed → noteOn（velocity は additionals に velocity がない場合）
 binding:
   output:
     driver: midi
@@ -174,7 +188,25 @@ binding:
         to:
           channel: 1
           type: noteOn
+          # velocity 省略 → デフォルト 64
+      - from:
+          target: upper.{note}.pressed
+          condition: "== 0"
+        to:
+          channel: 1
+          type: noteOff
 
+# パターン2: velocity → noteOn（definition に velocity が additionals として定義されている場合）
+binding:
+  output:
+    driver: midi
+    mappings:
+      - from:
+          target: upper.{note}.velocity   # velocity の変化で noteOn を送出
+        to:
+          channel: 1
+          type: noteOn
+          velocity: value   # float 0~1 → MIDI 0~127 に逆正規化
       - from:
           target: upper.{note}.pressed
           condition: "== 0"

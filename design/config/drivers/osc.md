@@ -2,7 +2,12 @@
 
 `binding.output.driver: osc` の構文定義。
 
-初回実装スコープでは出力専用（`binding.input.driver: osc` は将来対応）。
+## サポート方向
+
+| 方向 | サポート | 備考 |
+|---|---|---|
+| `input` | 🔜 将来対応 | OSC 受信。仕様は実装時に追記 |
+| `output` | ✅ | OSC 送信 |
 
 ---
 
