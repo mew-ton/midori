@@ -23,7 +23,7 @@
 | `channelAftertouch` | なし | ❌ | `pressure` | `0x00~0x7f` |
 | `controlChange` | `controller: <0–127>` ✅ | ❌ | `value` | `0x00~0x7f` |
 | `pitchBend` | なし | ❌ | `value` | `-0x2000~0x1fff` |
-| `sysex` | `pattern: <バイト配列>` ✅ | ❌ | なし（`set:` 必須） | — |
+| `sysex` | `pattern: <バイト配列>` ✅ | ❌ | なし（デフォルト値なし。`set` / `setMap` / `set.expr` のいずれかが必須） | — |
 | `programChange` | なし | ❌ | `program` | `0x00~0x7f` |
 | `realtime` | `message: start\|stop\|continue\|clock` ✅ | ❌ | なし（`set: pulse` を使う） | — |
 
