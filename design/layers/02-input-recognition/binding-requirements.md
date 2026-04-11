@@ -146,7 +146,7 @@ binding:
           type: polyAftertouch          # note フィールドあり → {note} 自動解決
         to:
           target: upper.{note}.pressure
-          set: pressure
+          # set: pressure               # 省略可。デフォルト値 pressure が自動的に使われる
 
       # --- note フィールドなし: to.target にリテラルで直接書く ---
       # pitchBend はチャンネル単位イベント。{note} は使えないため note 番号を直接記述する
@@ -166,6 +166,14 @@ binding:
         to:
           target: upper_expression.value
           set: value
+
+      # --- realtime: 値を持たない瞬間トリガー ---
+      - from:
+          type: realtime
+          message: start
+        to:
+          target: rhythm_start.triggered
+          set: pulse
 
       # --- setMap: 入力値の範囲で出力値を切り替える ---
       - from:
@@ -187,17 +195,17 @@ binding:
 ```yaml
 setMap:
   map:
-    - when: "64"        # 完全一致
+    - when: 64          # 完全一致（integer）
       set: 1
-    - when: "< 64"      # N 未満
+    - when: "< 64"      # N 未満（string）
       set: 0
-    - when: "<= 63"     # N 以下
+    - when: "<= 63"     # N 以下（string）
       set: 0
-    - when: "> 63"      # N より大きい
+    - when: "> 63"      # N より大きい（string）
       set: 1
-    - when: ">= 64"     # N 以上
+    - when: ">= 64"     # N 以上（string）
       set: 1
-    - when: "0~63"      # 範囲（inclusive）
+    - when: "0~63"      # 範囲（string）
       set: 0
 ```
 

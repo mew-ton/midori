@@ -49,6 +49,8 @@
 
 #### 2D型
 
+`valueType: int | float` および `x_range` / `y_range` の指定が必須。詳細は [コンポーネント型リファレンス](../../config/00-component-types.md) を参照。
+
 | type | 動作 | primitive value |
 |---|---|---|
 | `2d-slider` | X / Y 軸独立スライダー | `x: int \| float`, `y: int \| float` |
@@ -56,9 +58,9 @@
 
 #### 配列型
 
-| type | 動作 | primitive value |
-|---|---|---|
-| `keyboard` | 鍵盤。`key_range` で音域を定義 | `pressed: bool` |
+| type | 動作 | primitive value | 必須フィールド |
+|---|---|---|---|
+| `keyboard` | 鍵盤。`key_range` で音域を定義 | `pressed: bool` | `key_range: [<音名>, <音名>]` |
 
 ---
 
