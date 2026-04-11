@@ -39,11 +39,13 @@
 
 #### 1D型
 
+`valueType: int | float` の指定が必須。`range` も必須（`number` は任意）。
+
 | type | 動作 | primitive value |
 |---|---|---|
-| `slider` | 線形スライダー | `value: float`（`range` を component レベルで指定） |
-| `knob` | 回転型スライダー | `value: float`（同上） |
-| `number` | 正規化しない数値（テンポ等） | `value: float`（任意の range を指定） |
+| `slider` | 線形スライダー | `value: int \| float`（`range` 必須） |
+| `knob` | 回転型スライダー | `value: int \| float`（`range` 必須） |
+| `number` | 正規化しない数値（テンポ等） | `value: int \| float`（任意 range） |
 
 #### 2D型
 

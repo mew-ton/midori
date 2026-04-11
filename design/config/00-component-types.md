@@ -53,12 +53,28 @@
 
 ## 2D 型
 
-2D 型も `valueType` の指定が必須（X / Y 軸それぞれに適用される）。
+2D 型も `valueType` の指定が必須（X / Y 軸に共通適用される）。軸ごとの range は `x_range` / `y_range` で指定する。
 
 | type | 動作 | primitive value | レイアウト描画 |
 |---|---|---|---|
 | `2d-slider` | X / Y 軸独立スライダー | `x: int \| float`, `y: int \| float` | 未定 |
 | `2d-pad` | タッチパネル式 | `pressed: bool`, `x: int \| float`, `y: int \| float` | 未定 |
+
+### 2D 型のフィールド
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `valueType` | ✅ | `int` または `float`。X / Y 軸に共通 |
+| `x_range` | ✅ | X 軸の値域 `[min, max]` |
+| `y_range` | ✅ | Y 軸の値域 `[min, max]` |
+
+```yaml
+- id: touch_pad
+  type: 2d-pad
+  valueType: float
+  x_range: [-1, 1]
+  y_range: [-1, 1]
+```
 
 ## 配列型
 
