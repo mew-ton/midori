@@ -120,14 +120,14 @@
   to:
     target: tempo.value
     set:
-      expr: "(hi << 1) | ((lo >> 5) & 0x01)"
+      expr: "(hi << 2) | ((lo >> 5) & 0x03)"
 
 # pulse: 値を持たない瞬間トリガー（Real-Time）
 - from:
     type: realtime
     message: start   # 0xFA
   to:
-    target: rhythm_start.pressed
+    target: rhythm_start.triggered
     set: pulse
 
 # pulse: 固定パターン SysEx によるトリガー
@@ -135,7 +135,7 @@
     type: sysex
     pattern: [0xF0, 0x43, 0x70, 0x70, 0x78, 0x00, 0x00, 0xF7]
   to:
-    target: bar_signal.pressed
+    target: bar_signal.triggered
     set: pulse
 ```
 

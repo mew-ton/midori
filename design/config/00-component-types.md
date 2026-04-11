@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `switch` | モーメンタリ。押している間だけ `pressed = true` | `pressed: bool` | `button`（pressed で点灯） |
 | `toggle` | ラッチ式。押すたびに on/off が切り替わる | `state: bool` | `button`（state で点灯） |
-| `pulse` | 一瞬だけトリガー。状態を持たない | `triggered: bool` | `button`（triggered で瞬間点灯） |
+| `pulser` | 一瞬だけトリガー。状態を持たない | `triggered: pulse` | `button`（triggered で瞬間点灯） |
 
 ## 1D 型
 

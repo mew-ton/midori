@@ -140,17 +140,17 @@ definition:
     # MIDI Real-Time: Start (0xFA) / Stop (0xFC)
 
     - id: rhythm_start
-      type: pulse
+      type: pulser
 
     - id: rhythm_stop
-      type: pulse
+      type: pulser
 
     # ===== 小節信号 =====
     # リズム再生中、各小節の先頭で送信される SysEx
     # F0 43 70 70 78 SC NC F7  (ELS: SC=00固定, NC=00固定)
 
     - id: bar_signal
-      type: pulse
+      type: pulser
 
     # ===== テンポ =====
     # EL Controller SysEx（2バイトエンコード）

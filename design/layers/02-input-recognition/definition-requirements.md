@@ -35,7 +35,7 @@
 |---|---|---|
 | `toggle` | ラッチ式。押すたびに on/off が切り替わる | `state: bool` |
 | `switch` | モーメンタリ式。押している間だけ反転 | `pressed: bool` |
-| `pulse` | 一瞬だけトリガー。状態を持たない | `triggered: bool` |
+| `pulser` | 一瞬だけトリガー。状態を持たない | `triggered: pulse` |
 
 #### 1D型
 
@@ -139,28 +139,4 @@ keyboard の additionals:   デバイスが対応するものだけ追加
 
 note と key（音名）が矛盾する場合は note 番号を正とする。
 
-## オクターブ基準と octave_offset
-
-### システム固定基準
-
-内部では **C4 = note 60** を唯一の基準とする。
-
-### octave_offset
-
-デバイスやユーザーのオクターブ表記がシステム基準と異なる場合、definition の `octave_offset` で補正する。
-
-| デバイス規格 | octave_offset | 記述例 | 解釈される note |
-|---|---|---|---|
-| ISO / 一般 DAW（デフォルト） | `0` | `c4` | 60 |
-| Yamaha | `-1` | `c3` | 60 |
-
-```yaml
-definition:
-  octave_offset: -1   # Yamaha 規格: C3 = note 60
-  components:
-    - id: upper
-      type: keyboard
-      key_range: [c0, c7]   # 内部では note 12〜96 に変換される
-```
-
-`octave_offset` を省略した場合は `0`（C4 = note 60）として扱う。
+`octave_offset` の仕様（システム基準・補正テーブル）は [デバイス構成](../../config/02-device-config.md#octave_offset) を参照。
