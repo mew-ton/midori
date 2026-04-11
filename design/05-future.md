@@ -31,7 +31,7 @@ definition:
       type: pulse
     - id: expression
       type: slider
-      range: 0~1
+      range: [0, 1]
 
 binding:
   input:

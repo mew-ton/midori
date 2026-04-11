@@ -49,8 +49,8 @@
 
 | type | 動作 | primitive value |
 |---|---|---|
-| `2d-slider` | X / Y 軸独立スライダー | `x: float`, `y: float` |
-| `2d-pad` | タッチパネル式 | `pressed: bool`, `x: float`, `y: float` |
+| `2d-slider` | X / Y 軸独立スライダー | `x: int \| float`, `y: int \| float` |
+| `2d-pad` | タッチパネル式 | `pressed: bool`, `x: int \| float`, `y: int \| float` |
 
 #### 配列型
 
@@ -88,7 +88,7 @@ keyboard の additionals:   デバイスが対応するものだけ追加
   additionals:
     - name: velocity
       type: float
-      range: 0~1
+      range: [0, 1]
 
 # エレクトーン（velocity + pressure + lateral を追加）
 - id: upper
@@ -97,13 +97,13 @@ keyboard の additionals:   デバイスが対応するものだけ追加
   additionals:
     - name: velocity
       type: float
-      range: 0~1
+      range: [0, 1]
     - name: pressure
       type: float
-      range: 0~1
+      range: [0, 1]
     - name: lateral
       type: float
-      range: -1~1
+      range: [-1, 1]
 ```
 
 ### サンプル：他の type
@@ -116,13 +116,13 @@ keyboard の additionals:   デバイスが対応するものだけ追加
 # slider: range は component レベルで指定
 - id: upper_expression
   type: slider
-  range: 0~1
+  range: [0, 1]
 
 # 2d-pad: pressed / x / y は primitive。追加 value があれば additionals: で宣言
 - id: touch_pad
   type: 2d-pad
-  x_range: -1~1
-  y_range: -1~1
+  x_range: [-1, 1]
+  y_range: [-1, 1]
 ```
 
 ---

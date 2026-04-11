@@ -35,14 +35,14 @@ definition の構成から決まるパス文字列。component id・note（keybo
 
 ## 例
 
-| Signal 指定子 | 意味 |
-|---|---|
-| `upper.{note}.pressed` | upper keyboard の各キーの pressed |
-| `upper.{note}.velocity` | upper keyboard の各キーの velocity |
-| `upper.60.lateral` | upper keyboard の note 60 のみの lateral |
-| `upper.*.pressed` | upper keyboard 全キーの pressed（bool[]） |
-| `upper_expression.value` | upper_expression slider の value |
-| `upper_sustain.pressed` | upper_sustain switch の pressed |
+| Signal 指定子 | 意味 | 種別 |
+|---|---|---|
+| `upper.{note}.pressed` | upper keyboard の各キーの pressed | primitive |
+| `upper.{note}.velocity` | upper keyboard の各キーの velocity | primitive |
+| `upper.{note}.pressure` | upper keyboard の各キーの pressure（PolyAT） | additionals 宣言が必要 |
+| `upper.*.pressed` | upper keyboard 全キーの pressed（bool[]） | gather（変換グラフ専用） |
+| `upper_expression.value` | upper_expression slider の value | primitive |
+| `upper_sustain.pressed` | upper_sustain switch の pressed | primitive |
 
 ---
 

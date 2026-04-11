@@ -1,0 +1,720 @@
+# YAMAHA STAGEA ELS-03 シリーズ 入力デバイス構成
+# 対応モデル: ELS-03G / ELS-03X / ELS-03XR / ELS-03XF
+# MIDI モード: Electone-EL Mode
+#
+# 送信チャンネル（EL モード）:
+#   ch 1 : 上鍵盤 (UK)
+#   ch 2 : 下鍵盤 (LK)
+#   ch 3 : ペダル鍵盤 (PK)
+#   ch 15: キーボードパーカッション (KBP) — 未対応
+#   ch 16: コントロール（Expression CC#11, Program Change 等）
+#
+# SysEx フォーマット:
+#   EL Controller  : F0 43 70 70 40 <cc> <dd> F7  (Volume型: 00–7F / Switch型: 00=OFF, 7F=ON)
+#   Panel Switch   : F0 43 70 78 41 <cc> <dd> F7  (Switch型: 00=OFF, 01=ON)
+#
+# 注: ELS-03 は Note Off を Note On velocity=0（9nH, v=0）で送信する。
+#     MIDI ドライバーが 9nH,v=0 を noteOff として正規化することを前提とする。
+
+direction: input
+
+definition:
+  octave_offset: -1   # Yamaha 規格: C3 = note 60（標準 C4 = note 60）
+
+  components:
+
+    # ===== 鍵盤 =====
+
+    - id: upper
+      type: keyboard
+      key_range: [c2, c6]   # note 48–96（上鍵盤 / 全モデル共通）
+      additionals:           # pressed は宣言不要（primitive）
+        - name: pressure     # Polyphonic Aftertouch（キー単位の押し込み）
+          type: float
+          range: [0, 1]
+
+    - id: lower
+      type: keyboard
+      key_range: [c1, c6]   # note 36–96（下鍵盤 / 全モデル共通）
+      additionals:
+        - name: pressure     # Polyphonic Aftertouch（キー単位の押し込み）
+          type: float
+          range: [0, 1]
+
+    - id: pedal
+      type: keyboard
+      key_range: [c1, c3]   # note 36–60（ELS-03XF の範囲。XF は上位互換のためこの範囲で全モデルに対応可）
+                             # 非 XF（G/X/XR）では note 56–60 は送信されないが、設定として保持する
+
+    # ===== 横タッチ（Pitch Bend / Horizontal Touch） =====
+    # Pitch Bend はチャンネル全体（鍵盤単位）の値。キー単位ではない。
+    # 上鍵盤: UK Horizontal Touch → Pitch Bend ch 1
+    # 下鍵盤: LK Horizontal Touch → Pitch Bend ch 2
+    # ペダル鍵盤: Pitch Bend 非送信
+
+    - id: upper_horizontal
+      type: slider
+      range: [-1, 1]
+      valueType: float
+
+    - id: lower_horizontal
+      type: slider
+      range: [-1, 1]
+      valueType: float
+
+    # ===== チャンネルアフタータッチ（鍵盤単位） =====
+    # Polyphonic AT（キー単位）は keyboard の pressure additionals に含まれる。
+    # Channel AT（鍵盤全体）は別コンポーネントとしてモデル化。
+
+    - id: upper_aftertouch
+      type: slider
+      range: [0, 1]
+      valueType: float   # Channel Aftertouch ch 1
+
+    - id: lower_aftertouch
+      type: slider
+      range: [0, 1]
+      valueType: float   # Channel Aftertouch ch 2
+
+    - id: pedal_aftertouch
+      type: slider
+      range: [0, 1]
+      valueType: float   # Channel Aftertouch ch 3
+
+    # ===== エクスプレッションペダル =====
+    # 送信方法はパネル設定に依存:
+    #   Expression 機能割り当て時 → CC#11 on ch 16
+    #   Volume 機能割り当て時    → EL Controller SysEx cc=0x5A
+
+    - id: expression
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    # セカンドエクスプレッションペダル
+    #   2nd Expression 機能割り当て時 → CC#4 on ch 16
+    #   Volume 機能割り当て時         → EL Controller SysEx cc=0x5B
+
+    - id: expression_2
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    # ===== サステイン =====
+    # Panel Switch Event（F0 43 70 78 41 cc dd F7）で送信
+    # cc=0x50: 上鍵盤サステイン / 0x51: 下鍵盤サステイン / 0x52: ペダルサステイン
+    # dd: 00=OFF, 01=ON
+
+    - id: upper_sustain
+      type: switch
+
+    - id: lower_sustain
+      type: switch
+
+    - id: pedal_sustain
+      type: switch
+
+    # ===== フット / ニースイッチ =====
+    # EL Controller SysEx（F0 43 70 70 40 cc dd F7）で送信
+    # cc=0x45: 左フットスイッチ / 0x46: 右フットスイッチ / 0x47: ニーレバー
+    # dd: 00=OFF, 7F=ON
+
+    - id: foot_switch_left
+      type: switch
+
+    - id: foot_switch_right
+      type: switch
+
+    - id: knee_lever
+      type: switch
+
+    # ===== レジストレーション =====
+    # Program Change on ch 16: 0x00–0x0F = Reg 1–16
+
+    - id: registration
+      type: slider
+      range: [1, 16]
+      valueType: int
+
+    # ===== リズムスタート / ストップ =====
+    # MIDI Real-Time: Start (0xFA) / Stop (0xFC)
+
+    - id: rhythm_start
+      type: pulse
+
+    - id: rhythm_stop
+      type: pulse
+
+    # ===== 小節信号 =====
+    # リズム再生中、各小節の先頭で送信される SysEx
+    # F0 43 70 70 78 SC NC F7  (ELS: SC=00固定, NC=00固定)
+
+    - id: bar_signal
+      type: pulse
+
+    # ===== テンポ =====
+    # EL Controller SysEx（2バイトエンコード）
+    # F0 43 70 70 40 50 TL TH F7
+    # TL: Tempo下位2bit (bits5-6) / TH: Tempo上位7bit (bits0-6)  (range: 40–280)
+
+    - id: tempo
+      type: slider
+      range: [40, 280]
+      valueType: int
+
+    # ===== リズムシーケンス =====
+    # Panel Switch Event（F0 43 70 78 41 cc dd F7）cc=0x61–0x64  dd: 00=OFF, 01=ON
+
+    - id: rhythm_sequence_1
+      type: switch
+
+    - id: rhythm_sequence_2
+      type: switch
+
+    - id: rhythm_sequence_3
+      type: switch
+
+    - id: rhythm_sequence_4
+      type: switch
+
+    # ===== ロータリースピーカー =====
+    # Panel Switch Event（F0 43 70 78 41 cc dd F7）で送信
+    # cc=0x60  dd: 00=OFF, 01=ON
+
+    - id: rotary_speaker
+      type: switch
+
+    # ===== スライダー（スライダー 1–9） =====
+    # EL Controller SysEx cc=0x51–0x59（Volume型 00–7F）
+
+    - id: slider_1
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_2
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_3
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_4
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_5
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_6
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_7
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_8
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    - id: slider_9
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+binding:
+  input:
+    driver: midi
+    mappings:
+
+      # =============================================
+      # 上鍵盤（ch 1）
+      # =============================================
+
+      - from:
+          channel: 1
+          type: noteOn
+        to:
+          target: upper.{note}.pressed
+          set: 1
+
+      - from:
+          channel: 1
+          type: noteOff
+        to:
+          target: upper.{note}.pressed
+          set: 0
+
+      - from:
+          channel: 1
+          type: polyAftertouch
+        to:
+          target: upper.{note}.pressure
+
+      - from:
+          channel: 1
+          type: pitchBend
+        to:
+          target: upper_horizontal.value
+
+      - from:
+          channel: 1
+          type: channelAftertouch
+        to:
+          target: upper_aftertouch.value
+
+      # =============================================
+      # 下鍵盤（ch 2）
+      # =============================================
+
+      - from:
+          channel: 2
+          type: noteOn
+        to:
+          target: lower.{note}.pressed
+          set: 1
+
+      - from:
+          channel: 2
+          type: noteOff
+        to:
+          target: lower.{note}.pressed
+          set: 0
+
+      - from:
+          channel: 2
+          type: polyAftertouch
+        to:
+          target: lower.{note}.pressure
+
+      - from:
+          channel: 2
+          type: pitchBend
+        to:
+          target: lower_horizontal.value
+
+      - from:
+          channel: 2
+          type: channelAftertouch
+        to:
+          target: lower_aftertouch.value
+
+      # =============================================
+      # ペダル鍵盤（ch 3）
+      # =============================================
+
+      - from:
+          channel: 3
+          type: noteOn
+        to:
+          target: pedal.{note}.pressed
+          set: 1
+
+      - from:
+          channel: 3
+          type: noteOff
+        to:
+          target: pedal.{note}.pressed
+          set: 0
+
+      - from:
+          channel: 3
+          type: channelAftertouch
+        to:
+          target: pedal_aftertouch.value
+
+      # =============================================
+      # レジストレーション（Program Change on ch 16）
+      # 0x00–0x0F → Reg 1–16
+      # =============================================
+
+      - from:
+          channel: 16
+          type: programChange
+        to:
+          target: registration.value
+          setMap:
+            linear:
+              when: [0x00, 0x0F]
+              set:  [1, 16]
+
+      # =============================================
+      # エクスプレッションペダル
+      # CC#11 on ch 16（Expression Pedal に Expression 機能割り当て時）
+      # =============================================
+
+      - from:
+          channel: 16
+          type: controlChange
+          controller: 11
+        to:
+          target: expression.value
+
+      # EL Controller SysEx（Expression Pedal Volume 機能割り当て時）
+      # F0 43 70 70 40 5A <dd> F7  (dd: 00–7F)
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x5A, {arg1}, 0xF7]
+        to:
+          target: expression.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      # =============================================
+      # セカンドエクスプレッションペダル
+      # =============================================
+
+      # 2nd Expression 機能割り当て時: CC#4 on ch 16
+      - from:
+          channel: 16
+          type: controlChange
+          controller: 4
+        to:
+          target: expression_2.value
+          setMap:
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      # Volume 機能割り当て時: EL Controller SysEx cc=0x5B
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x5B, {arg1}, 0xF7]
+        to:
+          target: expression_2.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      # =============================================
+      # サステイン（Panel Switch SysEx）
+      # F0 43 70 78 41 <cc> <dd> F7  (dd: 00=OFF, 01=ON)
+      # =============================================
+
+      # Upper Sustain  cc=0x50
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x50, {arg1}, 0xF7]
+        to:
+          target: upper_sustain.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      # Lower Sustain  cc=0x51
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x51, {arg1}, 0xF7]
+        to:
+          target: lower_sustain.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      # Pedal Sustain  cc=0x52
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x52, {arg1}, 0xF7]
+        to:
+          target: pedal_sustain.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      # =============================================
+      # フット / ニースイッチ（EL Controller SysEx）
+      # F0 43 70 70 40 <cc> <dd> F7  (dd: 00=OFF, 7F=ON)
+      # cc=0x45: 左フット / 0x46: 右フット / 0x47: ニーレバー
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x45, {arg1}, 0xF7]
+        to:
+          target: foot_switch_left.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 127
+                set: 1
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x46, {arg1}, 0xF7]
+        to:
+          target: foot_switch_right.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 127
+                set: 1
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x47, {arg1}, 0xF7]
+        to:
+          target: knee_lever.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 127
+                set: 1
+
+      # =============================================
+      # テンポ（EL Controller SysEx）
+      # F0 43 70 70 40 50 TL TH F7
+      # TL: Tempo下位2bit (bits5-6) / TH: Tempo上位7bit (bits0-6)  (range: 40–280)
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x50, {lo}, {hi}, 0xF7]
+        to:
+          target: tempo.value
+          set:
+            expr: "(hi << 2) | ((lo >> 5) & 0x03)"
+
+      # =============================================
+      # リズムシーケンス（Panel Switch SysEx）
+      # F0 43 70 78 41 <cc> <dd> F7  (dd: 00=OFF, 01=ON)
+      # cc=0x61: SEQ 1 / 0x62: SEQ 2 / 0x63: SEQ 3 / 0x64: SEQ 4
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x61, {arg1}, 0xF7]
+        to:
+          target: rhythm_sequence_1.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x62, {arg1}, 0xF7]
+        to:
+          target: rhythm_sequence_2.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x63, {arg1}, 0xF7]
+        to:
+          target: rhythm_sequence_3.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x64, {arg1}, 0xF7]
+        to:
+          target: rhythm_sequence_4.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      # =============================================
+      # ロータリースピーカー（Panel Switch SysEx）
+      # F0 43 70 78 41 60 <dd> F7  (dd: 00=OFF, 01=ON)
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x78, 0x41, 0x60, {arg1}, 0xF7]
+        to:
+          target: rotary_speaker.pressed
+          setMap:
+            source: arg1
+            map:
+              - when: 0
+                set: 0
+              - when: 1
+                set: 1
+
+      # =============================================
+      # リズムスタート / ストップ（MIDI Real-Time）
+      # Start: 0xFA / Stop: 0xFC
+      # =============================================
+
+      - from:
+          type: realtime
+          message: start   # 0xFA
+        to:
+          target: rhythm_start.triggered
+          set: pulse
+
+      - from:
+          type: realtime
+          message: stop    # 0xFC
+        to:
+          target: rhythm_stop.triggered
+          set: pulse
+
+      # =============================================
+      # 小節信号（Bar Signal SysEx）
+      # F0 43 70 70 78 SC NC F7
+      # ELS シリーズは SC=00（Beat Number）, NC=00（Bar Number）固定
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x78, 0x00, 0x00, 0xF7]
+        to:
+          target: bar_signal.triggered
+          set: pulse
+
+      # =============================================
+      # スライダー 1–9（EL Controller SysEx）
+      # F0 43 70 70 40 <cc> <dd> F7  (cc=0x51–0x59, dd: 00–7F)
+      # =============================================
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x51, {arg1}, 0xF7]
+        to:
+          target: slider_1.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x52, {arg1}, 0xF7]
+        to:
+          target: slider_2.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x53, {arg1}, 0xF7]
+        to:
+          target: slider_3.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x54, {arg1}, 0xF7]
+        to:
+          target: slider_4.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x55, {arg1}, 0xF7]
+        to:
+          target: slider_5.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x56, {arg1}, 0xF7]
+        to:
+          target: slider_6.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x57, {arg1}, 0xF7]
+        to:
+          target: slider_7.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x58, {arg1}, 0xF7]
+        to:
+          target: slider_8.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]
+
+      - from:
+          type: sysex
+          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x59, {arg1}, 0xF7]
+        to:
+          target: slider_9.value
+          setMap:
+            source: arg1
+            linear:
+              when: [0x00, 0x7f]
+              set:  [0, 1]

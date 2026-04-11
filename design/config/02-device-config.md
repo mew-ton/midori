@@ -54,36 +54,22 @@ definition:
     - id: upper
       type: keyboard
       key_range: [c2, c7]   # Yamaha 表記。octave_offset: -1 により内部では note 36〜96
-      additionals:
-        - name: velocity
-          type: float
-          range: 0~1
+      additionals:           # pressed は宣言不要（primitive）
         - name: pressure
           type: float
-          range: 0~1        # 押し込み（PolyAftertouch）
-        - name: lateral
-          type: float
-          range: -1~1       # 左右傾き
+          range: [0, 1]        # 押し込み（PolyAftertouch）
 
     - id: lower
       type: keyboard
       key_range: [c2, c7]
-      additionals:
-        - name: velocity
-          type: float
-          range: 0~1
 
     - id: pedal
       type: keyboard
       key_range: [c1, c3]
-      additionals:
-        - name: velocity
-          type: float
-          range: 0~1
 
     - id: upper_expression
       type: slider
-      range: 0~1
+      range: [0, 1]
 
     - id: upper_sustain
       type: switch
@@ -162,88 +148,88 @@ binding:
 
 keyboard の `{note}` はイベントに note フィールドがある場合のみ使用できる。ない場合は note 番号をリテラルで直接書く。
 
-### MIDI ドライバーの例
+ドライバーごとの `from` フィールド詳細 → [config/drivers/](./drivers/)
 
-```yaml
-binding:
-  input:
-    driver: midi
-    mappings:
-      # noteOn: note フィールドあり → {note} 自動展開
-      - from:
-          channel: 1
-          type: noteOn
-        to:
-          target: upper.{note}.pressed
-          set: 1
+### to フィールドの仕様
 
-      - from:
-          channel: 1
-          type: noteOff
-        to:
-          target: upper.{note}.pressed
-          set: 0
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `target` | ✅ | 書き込み先の Signal 指定子 |
+| `set` | ❌ | 書き込む値。省略時はドライバーのデフォルト値（各ドライバー仕様を参照） |
+| `setMap` | ❌ | 値変換の定義。`set` と排他 |
 
-      - from:
-          channel: 1
-          type: noteOn
-        to:
-          target: upper.{note}.velocity
-          set: velocity             # 0–127 → 0~1 に自動正規化
+`set` / `setMap` の使い分け：
 
-      - from:
-          channel: 1
-          type: polyAftertouch      # note フィールドあり → {note} 自動展開
-        to:
-          target: upper.{note}.pressure
-          set: pressure
-
-      # pitchBend: note フィールドなし → note 番号をリテラルで直接書く
-      # 実機確認待ち: ELS-03 の横傾きが MPE / SysEx のいずれかによって構成が変わる
-      - from:
-          channel: 1
-          type: pitchBend
-        to:
-          target: upper.60.lateral  # note 番号を直接記述
-          set: value
-
-      # keyboard 以外: {note} 不要
-      - from:
-          channel: 1
-          type: controlChange
-          controller: 11
-        to:
-          target: upper_expression.value
-          set: value
-
-      # setMap: 入力値の範囲で出力値を切り替える
-      - from:
-          channel: 1
-          type: controlChange
-          controller: 64
-        to:
-          target: upper_sustain.pressed
-          setMap:
-            source: value
-            map:
-              - when: "0~63"
-                set: 0
-              - when: ">= 64"
-                set: 1
-```
-
-### set の値域
-
-| 値 | 意味 |
+| ケース | 使うフィールド |
 |---|---|
-| `0` / `1` 等 | リテラル値 |
-| `velocity` | NoteOn/Off の velocity（0–127 → `0~1` に自動正規化） |
-| `pressure` | PolyAftertouch / ChannelAftertouch の pressure |
-| `value` | CC の value / PitchBend の value（target の range に応じて自動正規化） |
+| リテラル値を書き込む（`noteOn` → `pressed = 1`） | `set: 1` |
+| 連続値をレンジマッピングする（`0~127` → `0~1`） | `setMap.linear` |
+| 入力値の条件によって出力値を切り替える（`0~63` → `0`、`64~127` → `1`） | `setMap.map` |
+| sysex キャプチャ値をレンジマッピング | `set: arg1` + `setMap.linear` |
+
+### set の仕様
+
+`set:` は省略可能。省略した場合、ドライバーが定めるイベント種別ごとのデフォルト値が使われる（各ドライバー仕様を参照）。
+
+リテラル値（`0` / `1` 等）やキャプチャ名（`arg1` 等）を明示する場合に使う。
 
 ### setMap の仕様
 
-`set`（無条件代入）の代替。入力値を条件に値を切り替える。1エントリに `set` か `setMap` のどちらか一方のみ有効。
+`set` と排他。`linear` と `map` のどちらか一方を持つ。
+
+#### setMap.linear — 線形マッピング
+
+入力値の両端と出力値の両端を宣言し、その間を線形補間する。
+
+```yaml
+setMap:
+  linear:
+    when: ["0x00", "0x7f"]   # 入力値の両端
+    set:  [0, 1]             # 対応する出力値の両端
+```
+
+```yaml
+# CC value (0x00–0x7f) → slider range (0~1) へ線形マッピング
+- from:
+    channel: 1
+    type: controlChange
+    controller: 11
+  to:
+    target: upper_expression.value
+    setMap:
+      linear:
+        when: ["0x00", "0x7f"]
+        set:  [0, 1]
+
+# sysex キャプチャ値をレンジマッピング
+- from:
+    type: sysex
+    pattern: "f0 43 70 70 40 5a { arg1 } f7"
+  to:
+    target: expression.value
+    set: arg1
+    setMap:
+      linear:
+        when: ["0x00", "0x7f"]
+        set:  [0, 1]
+
+# pitchBend（符号付き範囲）→ pan (-1~1) へ線形マッピング
+- from:
+    channel: 1
+    type: pitchBend
+  to:
+    target: upper_horizontal.value
+    setMap:
+      linear:
+        when: ["-0x2000", "0x1fff"]
+        set:  [-1, 1]
+```
+
+`setMap.linear` を省略した場合、`set:` に指定した値がそのまま target に書き込まれる（正規化なし）。
+
+#### setMap.map — 条件分岐
+
+入力値の完全一致・条件による出力値の切り替え。連続値のレンジマッピングには使わない。
 
 ```yaml
 setMap:
@@ -259,39 +245,6 @@ setMap:
 
 マッチは上から順に評価し、最初にヒットしたものを使う。
 
-### 将来のドライバー binding.input イメージ
-
-```yaml
-# 心拍センサー
-binding:
-  input:
-    driver: ble-heart-rate
-    mappings:
-      - from:
-          type: heartRate
-        to:
-          target: heart_rate.bpm
-          set: bpm
-
-# キーボードホットキー
-binding:
-  input:
-    driver: keyboard
-    mappings:
-      - from:
-          key: "ctrl+1"
-          on: press
-        to:
-          target: scene.trigger
-          set: 1
-      - from:
-          key: "ctrl+1"
-          on: release
-        to:
-          target: scene.trigger
-          set: 0
-```
-
 ---
 
 ## binding.output — ComponentState → raw events
@@ -301,105 +254,57 @@ binding:
 - `from.target` の有効パスは `definition` の構成が確定する
 - `to` のフィールドは `driver` が確定する
 
-### OSC ドライバーの例（VRChat アバターパラメーター）
+ドライバーごとの `to` フィールド詳細 → [config/drivers/](./drivers/)
+
+### from.condition
+
+出力条件を絞り込む際に使う。省略時は値が変化するたびに送出。
+
+| 記法 | 意味 |
+|---|---|
+| `"== 値"` | 完全一致 |
+| `"!= 値"` | 不一致 |
+| `"> 値"` / `"< 値"` | 比較 |
+
+### mirror — input mapping の逆写像
+
+`mirror: <target>` を mapping エントリとして記述すると、`binding.input.mappings` の中で同じ `to.target` を持つ全エントリの逆写像を自動生成する。
+
+- `binding.input` と同じ `driver` が使われる前提
+- 逆写像が一意に定まらない場合（`setMap.map` の非全単射など）はエラー
 
 ```yaml
 binding:
-  output:
-    driver: osc
+  input:
+    driver: midi
     mappings:
-      - from:
+      - from: { channel: 1, type: noteOn }
+        to:
           target: upper.{note}.pressed
+          set: 1
+      - from: { channel: 1, type: noteOff }
         to:
-          address: /avatar/parameters/upper_key_{note}
-          type: bool
-
-      - from:
-          target: upper.{note}.velocity
+          target: upper.{note}.pressed
+          set: 0
+      - from: { channel: 1, type: controlChange, controller: 11 }
         to:
-          address: /avatar/parameters/upper_key_{note}_velocity
-          type: float
+          target: expression.value
+          setMap:
+            linear:
+              when: ["0x00", "0x7f"]
+              set:  [0, 1]
 
-      - from:
-          target: upper.{note}.pressure
-        to:
-          address: /avatar/parameters/upper_key_{note}_pressure
-          type: float
-
-      - from:
-          target: upper.{note}.lateral
-        to:
-          address: /avatar/parameters/upper_key_{note}_lateral
-          type: float
-
-      - from:
-          target: pedal.{note}.pressed
-        to:
-          address: /avatar/parameters/pedal_{note}
-          type: bool
-
-      - from:
-          target: upper_expression.value
-        to:
-          address: /avatar/parameters/UpperExpression
-          type: float
-
-      - from:
-          target: upper_sustain.pressed
-        to:
-          address: /avatar/parameters/UpperSustain
-          type: bool
-```
-
-### OSC ドライバーの `to` フィールド仕様
-
-| フィールド | 必須 | 意味 |
-|---|---|---|
-| `address` | ✅ | OSC アドレス。`{note}` 等のテンプレート変数を使える |
-| `type` | ✅ | OSC の値型。`float` / `int` / `bool` |
-
-### OSC 型の値域
-
-| type | OSC 型 | 値域 |
-|---|---|---|
-| `float` | `f` | 0.0–1.0 または -1.0–1.0 |
-| `int` | `i` | 整数 |
-| `bool` | `b` | true / false |
-
-### MIDI ドライバーの例（MIDI 出力デバイス）
-
-```yaml
-binding:
   output:
     driver: midi
     mappings:
-      - from:
-          target: upper.{note}.pressed
-          condition: "== 1"
-        to:
-          channel: 1
-          type: noteOn
-
-      - from:
-          target: upper.{note}.pressed
-          condition: "== 0"
-        to:
-          channel: 1
-          type: noteOff
-
-      - from:
-          target: upper_expression.value
+      - mirror: upper.{note}.pressed   # noteOn / noteOff の2エントリ分を逆写像
+      - from:                          # 非対称なものは明示
+          target: expression.value
         to:
           channel: 1
           type: controlChange
           controller: 11
 ```
-
-`from.condition` は出力条件を絞り込む際に使う（省略時は値が変化するたびに送出）。
-
-| フィールド | 記法 | 例 |
-|---|---|---|
-| `condition` | `"== 値"` / `"!= 値"` / `"> 値"` / `"< 値"` | `"== 1"` / `"== 0"` |
 
 ---
 

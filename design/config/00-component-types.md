@@ -14,18 +14,51 @@
 
 ## 1D 型
 
+1D 型は `valueType` の指定が必須。
+
 | type | 動作 | primitive value | レイアウト描画 |
 |---|---|---|---|
-| `slider` | 線形スライダー | `value: float`（`range` 必須） | `slider` |
-| `knob` | 回転型スライダー | `value: float`（`range` 必須） | `knob` |
-| `number` | 正規化しない数値（テンポ等） | `value: float`（任意 range） | なし（数値表示） |
+| `slider` | 線形スライダー | `value: int \| float`（`range` 必須） | `slider` |
+| `knob` | 回転型スライダー | `value: int \| float`（`range` 必須） | `knob` |
+| `number` | 正規化しない数値（テンポ等） | `value: int \| float`（任意 range） | なし（数値表示） |
+
+### valueType
+
+| valueType | 意味 | step のデフォルト |
+|---|---|---|
+| `int` | 離散整数値 | `1` |
+| `float` | 連続実数値 | `0.1` |
+
+`step` は任意指定。省略時は上記デフォルト値が適用される。
+
+```yaml
+- id: tempo
+  type: knob
+  range: [40, 280]
+  valueType: int     # 41段階の離散値
+  # step: 1         # 省略可（デフォルト）
+
+- id: expression
+  type: slider
+  range: [0, 1]
+  valueType: float
+  # step: 0.1       # 省略可（デフォルト）
+
+- id: expression_fine
+  type: slider
+  range: [0, 1]
+  valueType: float
+  step: 0.01         # 任意指定
+```
 
 ## 2D 型
 
+2D 型も `valueType` の指定が必須（X / Y 軸それぞれに適用される）。
+
 | type | 動作 | primitive value | レイアウト描画 |
 |---|---|---|---|
-| `2d-slider` | X / Y 軸独立スライダー | `x: float`, `y: float` | 未定 |
-| `2d-pad` | タッチパネル式 | `pressed: bool`, `x: float`, `y: float` | 未定 |
+| `2d-slider` | X / Y 軸独立スライダー | `x: int \| float`, `y: int \| float` | 未定 |
+| `2d-pad` | タッチパネル式 | `pressed: bool`, `x: int \| float`, `y: int \| float` | 未定 |
 
 ## 配列型
 
@@ -57,14 +90,14 @@ definition:
     - id: upper
       type: keyboard         # 配列型
       key_range: [c2, c7]
-      additionals:
-        - name: velocity
+      additionals:           # pressed は宣言不要（primitive）
+        - name: pressure
           type: float
-          range: 0~1
+          range: [0, 1]
 
     - id: upper_expression
       type: slider           # 1D 型
-      range: 0~1
+      range: [0, 1]
 
     - id: upper_sustain
       type: switch           # 2値型（モーメンタリ）
