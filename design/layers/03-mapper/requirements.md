@@ -41,39 +41,15 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 
 接続線の Web Component（`<node-wire>`）は `from` / `to` 属性に接続元・先のポート要素を受け取り、`ResizeObserver` でノード位置の変化を監視して SVG ベジエを自動再描画する。Svelte 側はノードを動かすだけでよく、線の描画を関知しない。
 
-```html
-<!-- Svelte がノードを配置・管理 -->
-<div id="vel_pack"    class="node">...</div>
-<div id="vel_flatten" class="node">...</div>
-
-<!-- Web Component が接続線を担う。位置は自分で解決する -->
-<node-wire from="vel_pack.out" to="vel_flatten.in" type="float"></node-wire>
-```
-
 ---
 
 ## ポート型システム
 
 各ポートは型を持つ。**型が一致するポートにしか接続できない**。型不一致の接続はバリデーションエラーとする。
 
-### スカラー型
+スカラー型（`bool` / `float` / `int` / `pulse`）の定義 → [config/value-types.md](../../config/value-types.md)
 
-| 型 | 意味 |
-|---|---|
-| `bool` | true / false |
-| `float` | 正規化済み実数（0~1 または -1~1） |
-| `int` | 整数 |
-| `pulse` | 瞬間トリガー（値を持たない） |
-
-### 配列型
-
-| 型 | 意味 |
-|---|---|
-| `bool[]` | bool の配列 |
-| `float[]` | float の配列 |
-| `int[]` | int の配列 |
-
-配列型は `*` ワイルドカード接続（gather）で生成される。スカラーポートに接続するには `flatten` ノードで展開する必要がある。
+配列型（`bool[]` / `float[]` / `int[]`）は `*` ワイルドカード接続（gather）で生成される。スカラーポートに接続するには `flatten` ノードで展開する必要がある。
 
 ### 型変換ルール
 
@@ -87,52 +63,7 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 | `float[]` → 個別 `float` | `flatten` |
 | 個別 `float` → `float[]` | `collect` |
 
----
-
-## ノード一覧
-
-### Input Block / Output Block（特殊ノード・常に1つ存在）
-
-| ノード | ポート | 補足 |
-|---|---|---|
-| Input Block | `<Signal 指定子>` | 入力デバイス構成の definition の全 value が出力ポートとして並ぶ |
-| Output Block | `<Signal 指定子>` | 出力デバイス構成の definition の Signal 指定子でポートを命名する。接続されたポートが Signal として出力される |
-
-### 計算ノード
-
-ノードの入力ポートは1つとは限らない。複数の入力を受け取るノードは各ポートに名前を持つ。
-
-入力ポートへの接続は2種類：
-- **動的**：他のノードの出力ポートや Input Block のポートから接続する
-- **静的（literal）**：設計時に定数値を直接渡す（`params` として記述）
-
-#### 単純変換ノード（単入力 / 単出力）
-
-| type | in 型 | out 型 | 動作 | params |
-|---|---|---|---|---|
-| `scale` | `float` | `float` | レンジを線形リマップ | `from: [min, max]` `to: [min, max]` |
-| `clamp` | `float` | `float` | min/max でクリップ | `min` `max` |
-| `invert` | `float` | `float` | `1.0 - value` | — |
-| `gate` | `float` | `bool` | 閾値以上なら true、未満なら false | `threshold` |
-| `to_float` | `bool` | `float` | false=0.0 / true=1.0 | — |
-| `curve` | `float` | `float` | イージング関数を適用 | `shape: ease-in \| ease-out \| ease-in-out` |
-| `quantize` | `float` | `int` | N ステップに量子化 | `steps` |
-
-#### 配列操作ノード
-
-| type | in 型 | out 型 | 動作 | params |
-|---|---|---|---|---|
-| `flatten` | `float[]` | `out_0`…`out_{n-1}` : `float` | 配列を個別ポートに展開 | `size`（省略時は入力長から推定） |
-| `collect` | `in_0`…`in_{n-1}` : `float` | `float[]` | 個別ポートを配列にまとめる | `size` |
-| `to_bits` | `float` | `bit_0`…`bit_{n-1}` : `bool` | float → 量子化 → N ビットに分解 | `bits` |
-
-#### 複合ノード（複数入力 / 複数出力・ステートあり）
-
-| type | 入力ポート（型） | 出力ポート（型） | params | 動作 |
-|---|---|---|---|---|
-| `if` | `condition: bool`, `then: float`, `else: float` | `out: float` | — | condition が true なら then、false なら else を出力 |
-| `pack` | `active: bool[]`, `value: float[]` | `out: float[]` | `slots` | active=true の value を左詰めで slots 個に格納 |
-| `metronome` | `tempo: float`, `beat: pulse`, `beats_per_measure: int` | `beat_{n}: pulse` | — | 拍 pulse を各拍の pulse に展開 |
+ノード一覧・接続記法（`{note}` / `*`）・設定 YAML 仕様 → [config/03-mapper.md](../../config/03-mapper.md)
 
 ---
 
@@ -154,30 +85,6 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 | 12 | 個人ファイルとしての受け渡しを前提とすること（プライベート共有） | アバター・演奏スタイルに依存 |
 
 ---
-
-## keyboard のテンプレート展開
-
-keyboard は配列型のため、1本の接続定義が全キーに展開される。
-
-```
-Input Block                        Output Block
-upper.{note}.pressed  ──────────▶  upper.{note}.pressed
-upper.{note}.velocity ──[scale]──▶  upper.{note}.velocity
-upper.{note}.pressure ──[quantize]▶  upper.{note}.pressure
-```
-
-`{note}` は実行時に各キーの note 番号（0–127）に展開される。
-
----
-
-## 接続の記法：ワイルドカード（`*`）
-
-`pack` のように「全キーのデータをまとめて受け取る」ノードへの接続は、`{note}` テンプレートではなく `*` ワイルドカードで表現する。
-
-```
-{note}  → 各キーに独立したノードインスタンスを展開する（per-key）
-*       → 全キーのデータをまとめて1つのノードに渡す（gather）
-```
 
 ## 現時点で対応しないこと（将来拡張ポイント）
 

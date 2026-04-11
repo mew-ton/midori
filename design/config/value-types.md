@@ -37,19 +37,14 @@ ON/OFF、押された/離された など、二値の状態を表す。明示的
 
 ### pulse
 
-`bool` のサブタイプ。`true` になった次の tick に自動的に `false` へ戻る。状態を保持しない瞬間トリガーを表現する。
+`bool` のサブタイプ。発火した tick のみ `true` になり、次の tick に自動的に `false` へ戻る。状態を保持しない瞬間トリガーを表現する。
 
 `bool` を受け付ける入力には `pulse` を接続できる（サブタイプであるため）。
 
-```
-tick 0:  false
-tick 1:  true   ← pulse 発火
-tick 2:  false  ← 自動リセット
-tick 3:  false
-```
-
 - 例: bar_signal（小節先頭）、rhythm_start / rhythm_stop
 - バインディングでは `set: pulse` で指定する
+
+tick 内での評価順序・リセットタイミング → [timing.md](../timing.md)
 
 ### int
 
