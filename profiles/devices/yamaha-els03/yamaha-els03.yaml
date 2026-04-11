@@ -82,18 +82,15 @@ definition:
       valueType: float   # Channel Aftertouch ch 3
 
     # ===== エクスプレッションペダル =====
-    # 送信方法はパネル設定に依存:
-    #   Expression 機能割り当て時 → CC#11 on ch 16
-    #   Volume 機能割り当て時    → EL Controller SysEx cc=0x5A
+    # CC#11 on ch 16
 
     - id: expression
       type: slider
       range: [0, 1]
       valueType: float
 
-    # セカンドエクスプレッションペダル
-    #   2nd Expression 機能割り当て時 → CC#4 on ch 16
-    #   Volume 機能割り当て時         → EL Controller SysEx cc=0x5B
+    # ===== セカンドエクスプレッションペダル =====
+    # CC#4 on ch 16
 
     - id: expression_2
       type: slider
@@ -349,8 +346,7 @@ binding:
               set:  [1, 16]
 
       # =============================================
-      # エクスプレッションペダル
-      # CC#11 on ch 16（Expression Pedal に Expression 機能割り当て時）
+      # エクスプレッションペダル（CC#11 on ch 16）
       # =============================================
 
       - from:
@@ -360,46 +356,16 @@ binding:
         to:
           target: expression.value
 
-      # EL Controller SysEx（Expression Pedal Volume 機能割り当て時）
-      # F0 43 70 70 40 5A <dd> F7  (dd: 00–7F)
-      - from:
-          type: sysex
-          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x5A, {arg1}, 0xF7]
-        to:
-          target: expression.value
-          setMap:
-            source: arg1
-            linear:
-              when: [0x00, 0x7f]
-              set:  [0, 1]
-
       # =============================================
-      # セカンドエクスプレッションペダル
+      # セカンドエクスプレッションペダル（CC#4 on ch 16）
       # =============================================
 
-      # 2nd Expression 機能割り当て時: CC#4 on ch 16
       - from:
           channel: 16
           type: controlChange
           controller: 4
         to:
           target: expression_2.value
-          setMap:
-            linear:
-              when: [0x00, 0x7f]
-              set:  [0, 1]
-
-      # Volume 機能割り当て時: EL Controller SysEx cc=0x5B
-      - from:
-          type: sysex
-          pattern: [0xF0, 0x43, 0x70, 0x70, 0x40, 0x5B, {arg1}, 0xF7]
-        to:
-          target: expression_2.value
-          setMap:
-            source: arg1
-            linear:
-              when: [0x00, 0x7f]
-              set:  [0, 1]
 
       # =============================================
       # サステイン（Panel Switch SysEx）
