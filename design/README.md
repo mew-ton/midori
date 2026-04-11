@@ -15,7 +15,7 @@
 | [05-future.md](./05-future.md) | 未解決事項・将来の拡張ポイント・参考リンク |
 | [06-error-handling.md](./06-error-handling.md) | エラー分類・クリティカル／ランタイムエラーの挙動・GUI 可視化 |
 | [07-ui-ux.md](./07-ui-ux.md) | 画面構成・遷移・各画面の UI 要件 |
-| [timing.md](./timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
+| [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
 | [config/02-device-config.md](./config/02-device-config.md) | デバイス構成 設定仕様（direction / definition / binding / layout） |
