@@ -40,7 +40,7 @@
 
 `set: pulse` を指定した場合、値の書き込みは行わず target を瞬間トリガーする。状態を持たないイベント（Real-Time メッセージ、Bar Signal など）に使用する。
 
-複数のキャプチャ変数を用いた計算が必要な場合は `set.expr` を使用する。MIDI の物理型のうち `uint7` / `uint14` / `nibble` が計算可能。詳細は [式言語仕様](../expr.md) を参照。
+複数のキャプチャ変数を用いた計算が必要な場合は `set.expr` を使用する。MIDI の物理型のうち `uint7` / `uint14` / `nibble` が計算可能。詳細は [式言語仕様](../syntax/01-expr.md) を参照。
 
 ### setMap.source の要否
 

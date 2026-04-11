@@ -171,5 +171,5 @@ Clock 間隔 = 1 ÷ (2.0 × 24) = 約 20.8ms
 
 ## 関連
 
-- [値型リファレンス](../config/value-types.md) — `pulse` 型の定義
+- [値型リファレンス](../config/syntax/02-value-types.md) — `pulse` 型の定義
 - [Layer 1 — 入力ドライバー要件](../layers/01-input-driver/requirements.md) — イベントストリームモデル

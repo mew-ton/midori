@@ -21,8 +21,8 @@
 | [config/02-device-config.md](./config/02-device-config.md) | デバイス構成 設定仕様（direction / definition / binding / layout） |
 | [config/03-mapper.md](./config/03-mapper.md) | 変換グラフ 設定仕様（ノードグラフ・Signal 定義） |
 | [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（デバイスマッチング・変換グラフ割り当て） |
-| [config/value-types.md](./config/value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
-| [config/expr.md](./config/expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
+| [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
+| [config/syntax/01-expr.md](./config/syntax/01-expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
 | [config/drivers/midi.md](./config/drivers/midi.md) | ドライバー仕様: MIDI（binding.input / binding.output） |
 | [config/drivers/osc.md](./config/drivers/osc.md) | ドライバー仕様: OSC（binding.output） |
 | [layers/01-input-driver/requirements.md](./layers/01-input-driver/requirements.md) | Layer 1 入力ドライバー 要件 |

@@ -47,7 +47,7 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 
 各ポートは型を持つ。**型が一致するポートにしか接続できない**。型不一致の接続はバリデーションエラーとする。
 
-スカラー型（`bool` / `float` / `int` / `pulse`）の定義 → [config/value-types.md](../../config/value-types.md)
+スカラー型（`bool` / `float` / `int` / `pulse`）の定義 → [config/syntax/02-value-types.md](../../config/syntax/02-value-types.md)
 
 配列型（`bool[]` / `float[]` / `int[]`）は `*` ワイルドカード接続（gather）で生成される。スカラーポートに接続するには `flatten` ノードで展開する必要がある。
 

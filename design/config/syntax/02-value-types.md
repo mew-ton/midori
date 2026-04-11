@@ -6,7 +6,7 @@
 
 ---
 
-> tick の定義・評価順序・レイテンシについては [timing.md](../timing.md) を参照。
+> tick の定義・評価順序・レイテンシについては [timing.md](../../timing.md) を参照。
 
 ---
 
@@ -44,7 +44,7 @@ ON/OFF、押された/離された など、二値の状態を表す。明示的
 - 例: bar_signal（小節先頭）、rhythm_start / rhythm_stop
 - バインディングでは `set: pulse` で指定する
 
-tick 内での評価順序・リセットタイミング → [timing.md](../timing.md)
+tick 内での評価順序・リセットタイミング → [timing.md](../../timing.md)
 
 ### int
 
