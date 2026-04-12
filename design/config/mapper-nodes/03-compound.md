@@ -38,6 +38,53 @@ connections:
 
 ---
 
+## `filter`
+
+`condition` が `true` なら `in` をそのまま出力し、`false` なら `null` を出力する。
+
+- **入力**:
+  - `in: T`
+  - `condition: bool`
+- **出力**: `out: T | null`
+
+両入力とも non-null 必須。
+
+### 用途: 出力のバタつきを防ぐ
+
+変化時のみ発火する信号（expression ペダル等）に `defaults` を組み合わせると、信号がない tick に補填された値が出力に届いてしまう。`filter` で元の発火条件を使ってゲートすることで、信号がない tick の出力を null（＝送信しない）に抑制できる。
+
+```
+# defaults だけでは "0.0 → 実値 → 0.0 → 実値" と出力がバタつく
+expression(変化時のみ発火) → defaults(0.0) → output
+                                      ↓ filter を挟む
+expression → defaults(0.0) ─┐
+                              ├─▶ filter ─▶ output（信号がない tick は送信しない）
+pressed(継続発火)    ────────┘
+```
+
+```yaml
+nodes:
+  - id: expr_default
+    type: defaults
+    params:
+      value: 0.0
+
+  - id: expr_filter
+    type: filter
+
+connections:
+  - from: input.expression.value
+    to:   expr_default.in
+  - from: expr_default.out
+    to:   expr_filter.in
+  - from: input.expression.pressed   # 信号が来ている tick だけ true
+    to:   expr_filter.condition
+  - from: expr_filter.out
+    to:   output.expression.value
+```
+
+---
+
 ## `if`
 
 `condition` が `true` なら `then`、`false` なら `else` を出力する。
