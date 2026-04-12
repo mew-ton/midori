@@ -13,6 +13,7 @@
 ## プリミティブ値型
 
 ```
+null
 bool
 ├── pulse          （bool のサブタイプ）
 int
@@ -23,6 +24,7 @@ dynamic_array<T>   （長さがランタイムで変わる）
 
 | 型 | 説明 | 値域 |
 |---|---|---|
+| `null` | 値が存在しないことを表す型 | `null` のみ |
 | `bool` | 二値状態 | `false` または `true` |
 | `pulse` | `bool` のサブタイプ。1 tick だけ `true` になり自動的に `false` へ戻る | `false` または `true` |
 | `int` | 整数値 | `range` で指定（例: `1~16`） |
@@ -30,9 +32,20 @@ dynamic_array<T>   （長さがランタイムで変わる）
 | `static_array<T>` | 長さが設定ロード時に確定している配列。`*` gather の出力など | 要素型 `T` に依存 |
 | `dynamic_array<T>` | 長さがランタイムで変わる配列。`compact` の出力など | 要素型 `T` に依存 |
 
+### null と nullable 型
+
+`null` は「その tick に信号が存在しない」ことを表す型。`T | null` のようにユニオン型として他の型と組み合わせることで nullable を表現する。
+
+```
+float | null    # 値があるか、信号なしか
+bool | null     # true / false / 信号なし（3値）
+```
+
+`pulse` は null を取り得ないため、`pulse | null` は有効だが意味をなさない。
+
 ### bool
 
-ON/OFF、押された/離された など、二値の状態を表す。Signal としては `true` / `false` / null（信号なし）の **3値** を取り得る。
+ON/OFF、押された/離された など、二値の状態を表す。Signal としては `bool | null`（`true` / `false` / 信号なし）として扱われる。
 
 - コンポーネントの `pressed`、`state` がこの型
 - `false` / `true` で統一
