@@ -17,11 +17,25 @@ definition:
   components:
 
     # ===== 上鍵盤 =====
-    # アバターパラメーター: upper_key_{note}（bool）/ upper_key_{note}_velocity（float）
-    # key_range c2–c7 = note 48–96（49 鍵）
+    # アバターパラメーター: upper_key_{note}（bool）
+    # key_range c2–c7 = note 36–96（標準記法）
     - id: upper_key
       type: keyboard
       key_range: [c2, c7]
+
+    # ===== 下鍵盤 =====
+    # アバターパラメーター: lower_key_{note}（bool）
+    # key_range c2–c7 = note 36–96（標準記法）
+    - id: lower_key
+      type: keyboard
+      key_range: [c2, c7]
+
+    # ===== ペダル鍵盤 =====
+    # アバターパラメーター: pedal_key_{note}（bool）
+    # key_range c2–c4 = note 36–60（標準記法）
+    - id: pedal_key
+      type: keyboard
+      key_range: [c2, c4]
 
     # ===== エクスプレッション =====
     # アバターパラメーター: UpperExpression（float 0.0–1.0）
@@ -30,10 +44,12 @@ definition:
       range: [0, 1]
       valueType: float
 
-    # ===== サスティン =====
-    # アバターパラメーター: UpperSustain（bool）
-    - id: sustain
-      type: switch
+    # ===== セカンドエクスプレッション =====
+    # アバターパラメーター: LowerExpression（float 0.0–1.0）
+    - id: expression_2
+      type: slider
+      range: [0, 1]
+      valueType: float
 
     # ===== シーン番号（VRChat → ブリッジ 受信専用） =====
     # アバターパラメーター: SceneIndex（int）
@@ -59,13 +75,28 @@ binding:
     driver: osc
     mappings:
 
-      # 押鍵状態（per-key）
-      # {note}: アドレス中の数字列をキャプチャしてノート番号に変換
+      # 上鍵盤 押鍵状態（per-key）
       - from:
           target: /avatar/parameters/upper_key_{note}
           type: bool
         to:
           target: upper_key.{note}.pressed
+          set: value
+
+      # 下鍵盤 押鍵状態（per-key）
+      - from:
+          target: /avatar/parameters/lower_key_{note}
+          type: bool
+        to:
+          target: lower_key.{note}.pressed
+          set: value
+
+      # ペダル鍵盤 押鍵状態（per-key）
+      - from:
+          target: /avatar/parameters/pedal_key_{note}
+          type: bool
+        to:
+          target: pedal_key.{note}.pressed
           set: value
 
       # エクスプレッション
@@ -74,6 +105,14 @@ binding:
           type: float
         to:
           target: expression.value
+          set: value
+
+      # セカンドエクスプレッション
+      - from:
+          target: /avatar/parameters/LowerExpression
+          type: float
+        to:
+          target: expression_2.value
           set: value
 
       # シーン番号
@@ -88,20 +127,10 @@ binding:
               when: [0, 255]
               set:  [0, 15]
 
-      # サスティン
-      - from:
-          target: /avatar/parameters/UpperSustain
-          type: bool
-        to:
-          target: sustain.pressed
-          set: value
-
   # ------------------------------------------------------------
   # output: ブリッジ → VRChat（OSC 送信、ポート 9000）
   #
-  # pressed / expression / sustain は input と対称なので mirror を使用。
-  # mirror は input entry の from.target（アドレス）と from.type を
-  # output の to.address / to.type として引き継ぐ。
+  # input と対称なエントリは mirror を使用。
   # → config/drivers/osc.md mirror の逆写像導出 参照
   # ------------------------------------------------------------
   output:
@@ -109,7 +138,9 @@ binding:
     mappings:
 
       - mirror: upper_key.{note}.pressed
+      - mirror: lower_key.{note}.pressed
+      - mirror: pedal_key.{note}.pressed
       - mirror: expression.value
-      - mirror: sustain.pressed
+      - mirror: expression_2.value
 
       # scene_index は受信専用のため output に含めない
