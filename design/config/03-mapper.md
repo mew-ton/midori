@@ -140,6 +140,8 @@ null がいつ発生するかはデバイス（Input Driver）が定義する。
 | スカラー多入力ノードに null が入力された | 設定エラー。手前に `defaults` ノードを挟んで対処する |
 | Output Block のポートに null が届いた | 何も出力しない |
 
+`pulse` は常に `true` か `false` を発火するため null にならない。多入力ノードの `pulse` 入力ポートに `defaults` は不要。
+
 ### 配列ポートの null
 
 `static_array<T>` / `dynamic_array<T>` ポートはポート自体が null にはならない。配列入力を持つノードはポートの null を考慮しなくてよい。ただし要素が `T | null` の場合は要素レベルで null が発生し得る。
