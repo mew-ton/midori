@@ -34,7 +34,7 @@
 
 ### pulse 型について
 
-`pulse` は変換グラフの内部値であり、出力デバイスの `binding.output.from.target` に `pulse` 値が来ることはない。`pulse` を OSC で送信したい場合は変換グラフ内で `bool` に変換してから出力する。
+`pulse` は `bool` のサブタイプであるため、`from.target` が `pulse` 型の場合も `type: bool` として受け取れる。`pulse` を OSC で送信する場合は `type: bool` を指定し、発火した 1 tick だけ `true` が送出される。
 
 ### 例（VRChat アバターパラメーター）
 

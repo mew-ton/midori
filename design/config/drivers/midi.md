@@ -74,9 +74,9 @@
       source: arg1
       map:
         - when: 0
-          set: 0
+          set: false
         - when: 1
-          set: 1
+          set: true
 ```
 
 > Note: ELS-03 は Note Off を `9nH, v=0`（NoteOn velocity=0）で送信する。ドライバーが `noteOff` に正規化する。
@@ -118,9 +118,9 @@
       source: arg1
       map:
         - when: 0
-          set: 0
+          set: false
         - when: 1
-          set: 1
+          set: true
 
 # 複数バイトのキャプチャ + 式計算
 - from:
@@ -184,14 +184,14 @@ binding:
     mappings:
       - from:
           target: upper.{note}.pressed
-          condition: "== 1"
+          condition: "== true"
         to:
           channel: 1
           type: noteOn
           # velocity 省略 → デフォルト 64
       - from:
           target: upper.{note}.pressed
-          condition: "== 0"
+          condition: "== false"
         to:
           channel: 1
           type: noteOff
@@ -209,7 +209,7 @@ binding:
           velocity: value   # float 0~1 → MIDI 0~127 に逆正規化
       - from:
           target: upper.{note}.pressed
-          condition: "== 0"
+          condition: "== false"
         to:
           channel: 1
           type: noteOff

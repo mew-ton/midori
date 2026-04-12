@@ -105,7 +105,7 @@ definition:
   components:
     - id: upper
       type: keyboard         # 配列型
-      key_range: [c2, c7]
+      key_range: [c1, c6]   # Yamaha 表記（octave_offset: -1 により内部では note 36〜96）
       additionals:           # pressed は宣言不要（primitive）
         - name: pressure
           type: float

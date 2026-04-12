@@ -11,7 +11,7 @@ input:
   device: devices/yamaha-els03.yaml   # 入力デバイス構成ファイル
   connection:
     type: midi
-    device_name: "ELS-03 Series"      # preferences の device_bindings と照合
+    device_name: "ELS-03 Series"      # 実機と部分一致でバインドされる
 
 transform: mappers/my-avatar.yaml     # 変換グラフファイル
 
@@ -43,3 +43,7 @@ output:
 | `osc` | `host`, `port` | 送受信先のホスト・ポート |
 | `osc-vrchat` | `host`, `port`, `avatar_params` | `avatar_params` は VRChat が自動生成するアバターパラメーター JSON のパス（任意） |
 | `http` | `port` | 待ち受けポート番号 |
+
+## 接続のバリデーション
+
+プロファイル読み込み時、`device_name` 等で指定された該当ポート・デバイスが OS 上に存在しない場合はロードエラーとなる。動的な ID 解決などの複雑な抽象化は持たず、プロファイルが実環境の接続情報を直接宣言するシンプルな方式をとる。

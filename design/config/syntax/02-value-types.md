@@ -117,7 +117,7 @@ additionals:
 ```yaml
 to:
   target: upper_sustain.pressed
-  set: 1           # bool
+  set: true
 ```
 
 ```yaml
@@ -146,9 +146,9 @@ setMap:
   source: arg1
   map:
     - when: "0"
-      set: 0   # bool
+      set: false
     - when: "1"
-      set: 1   # bool
+      set: true
 ```
 
 ---

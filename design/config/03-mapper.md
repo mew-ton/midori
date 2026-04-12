@@ -71,7 +71,7 @@ graph:
 | type | 入力ポート | 出力ポート | params | 動作 |
 |---|---|---|---|---|
 | `metronome` | `tempo`, `beat`, `beats_per_measure` | `beat_{n}`（n = 0〜beats-1） | — | 拍 pulse を各拍の pulse に展開する |
-| `to_bits` | `in` | `bit_0` … `bit_{n-1}` | `bits` | float → 量子化 → N ビットの boolean 配列に分解 |
+| `to_bits` | `in: float / int` | `bit_0` … `bit_{n-1}` | `bits`, `threshold` | 数値を下位から N ビットの boolean に分解する。`int` はビット単位で分解、`float` は `[0, 2^bits − 1]` に量子化してから分解。`threshold`（デフォルト: `0.5`）は float 量子化時の端数切り上げ境界 |
 | `if` | `condition`, `then`, `else` | `out` | — | condition が true なら then、false なら else を出力 |
 | `pack` | `active_{n}`, `value_{n}` | `slot_0` … `slot_{m-1}` | `slots` | active=true の value を左詰めで slot に格納 |
 
@@ -107,13 +107,6 @@ output_devices:
 
 graph:
   nodes:
-    # velocity を 0.2~1.0 にスケール
-    - id: scale_vel
-      type: scale
-      params:
-        from: [0.0, 1.0]
-        to:   [0.2, 1.0]
-
     # pressure を 3bit（0~7）に量子化
     - id: quantize_pressure
       type: quantize
@@ -130,11 +123,6 @@ graph:
     # keyboard: {note} が各キーに展開される
     - from: input.upper.{note}.pressed
       to:   output.upper.{note}.pressed
-
-    - from: input.upper.{note}.velocity
-      to:   scale_vel.in
-    - from: scale_vel.out
-      to:   output.upper.{note}.velocity
 
     - from: input.upper.{note}.pressure
       to:   quantize_pressure.in
@@ -161,41 +149,41 @@ graph:
 
 ---
 
-### velocity を 3bit に変換する例
+### pressure を 3bit に分解する例
 
 ```yaml
 nodes:
-  # キーごとに velocity を 3ビット（0~7）に分解する
-  - id: vel_bits_{note}       # {note} により per-key でインスタンス化される
+  # キーごとに pressure を 3ビットに分解する（float のまま渡せる）
+  - id: pressure_bits_{note}  # {note} により per-key でインスタンス化される
     type: to_bits
     params:
       bits: 3                 # bit_0, bit_1, bit_2 の3ポートが出力される
 
 connections:
-  - from: input.upper.{note}.velocity
-    to:   vel_bits_{note}.in
-  - from: vel_bits_{note}.bit_0
-    to:   output.upper.{note}.vel_b0
-  - from: vel_bits_{note}.bit_1
-    to:   output.upper.{note}.vel_b1
-  - from: vel_bits_{note}.bit_2
-    to:   output.upper.{note}.vel_b2
+  - from: input.upper.{note}.pressure
+    to:   pressure_bits_{note}.in
+  - from: pressure_bits_{note}.bit_0
+    to:   output.upper.{note}.pressure_b0
+  - from: pressure_bits_{note}.bit_1
+    to:   output.upper.{note}.pressure_b1
+  - from: pressure_bits_{note}.bit_2
+    to:   output.upper.{note}.pressure_b2
 ```
 
-### 押鍵中のキーの強度を左詰めで伝送する例
+### 押鍵中のキーの pressure を左詰めで伝送する例
 
-VRChat のパラメーター上限に対応するため、押鍵中のキーの velocity を左詰めで固定スロット数に詰める。
+VRChat のパラメーター上限に対応するため、押鍵中のキーの pressure を左詰めで固定スロット数に詰める。
 
 ```
-input.upper.*.pressed  (bool[]) ─┐
-                                  ├─▶ pack (float[]) ─▶ flatten ─▶ to_bits × 4 ─▶ output
-input.upper.*.velocity (float[]) ─┘
+input.upper.*.pressed   (bool[]) ─┐
+                                   ├─▶ pack (float[]) ─▶ flatten ─▶ to_bits × 4 ─▶ output
+input.upper.*.pressure  (float[]) ─┘
 ```
 
 ```yaml
 nodes:
   # * gather → bool[] / float[] → pack → float[]（4スロット）
-  - id: vel_pack
+  - id: pressure_pack
     type: pack
     params:
       slots: 4              # VRChat パラメーター数に合わせた上限
@@ -203,12 +191,12 @@ nodes:
     # out: float[]
 
   # float[] → 個別 float に展開
-  - id: vel_flatten
+  - id: pressure_flatten
     type: flatten
     params:
       size: 4
 
-  # 各スロットを 3bit に分解（float → bool × 3）
+  # 各スロットを 3bit に分解（float のまま渡せる）
   - id: slot_bits_0
     type: to_bits
     params:
@@ -229,31 +217,31 @@ nodes:
 connections:
   # * で全キーの bool[] / float[] を gather して pack へ
   - from: input.upper.*.pressed   # bool[]
-    to:   vel_pack.active
-  - from: input.upper.*.velocity  # float[]
-    to:   vel_pack.value
+    to:   pressure_pack.active
+  - from: input.upper.*.pressure  # float[]
+    to:   pressure_pack.value
 
   # pack の出力（float[]）を flatten で個別ポートに展開
-  - from: vel_pack.out            # float[]
-    to:   vel_flatten.in
+  - from: pressure_pack.out       # float[]
+    to:   pressure_flatten.in
 
   # 個別 float → to_bits
-  - from: vel_flatten.out_0
+  - from: pressure_flatten.out_0
     to:   slot_bits_0.in
-  - from: vel_flatten.out_1
+  - from: pressure_flatten.out_1
     to:   slot_bits_1.in
-  - from: vel_flatten.out_2
+  - from: pressure_flatten.out_2
     to:   slot_bits_2.in
-  - from: vel_flatten.out_3
+  - from: pressure_flatten.out_3
     to:   slot_bits_3.in
 
   # bool を output へ
   - from: slot_bits_0.bit_0
-    to:   output.vel_slot_0.b0
+    to:   output.pressure_slot_0.b0
   - from: slot_bits_0.bit_1
-    to:   output.vel_slot_0.b1
+    to:   output.pressure_slot_0.b1
   - from: slot_bits_0.bit_2
-    to:   output.vel_slot_0.b2
+    to:   output.pressure_slot_0.b2
   # slot_1 ~ slot_3 も同様 ...
 ```
 
@@ -261,20 +249,20 @@ connections:
 
 ```yaml
 nodes:
-  # 押鍵中のみ velocity を通し、離鍵時は 0 を出力する
-  - id: gate_vel_{note}
+  # 押鍵中のみ pressure を通し、離鍵時は 0 を出力する
+  - id: gate_pressure_{note}
     type: if
-    # condition=pressed, then=velocity, else=0.0
+    # condition=pressed, then=pressure, else=0.0
 
 connections:
   - from: input.upper.{note}.pressed
-    to:   gate_vel_{note}.condition
-  - from: input.upper.{note}.velocity
-    to:   gate_vel_{note}.then
+    to:   gate_pressure_{note}.condition
+  - from: input.upper.{note}.pressure
+    to:   gate_pressure_{note}.then
   - value: 0.0
-    to:   gate_vel_{note}.else
-  - from: gate_vel_{note}.out
-    to:   output.upper.{note}.velocity
+    to:   gate_pressure_{note}.else
+  - from: gate_pressure_{note}.out
+    to:   output.upper.{note}.pressure
 ```
 
 ### metronome の使用例
@@ -312,4 +300,6 @@ connections:
 
 ## Signal の定義
 
-Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.upper.{note}.pressed`）。Signal は正規化済みの値（`float` または `bool`）を持つ。出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
+Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.upper.{note}.pressed`）。
+Signal のデータ型には `int` / `float` / `bool` / `pulse` / `array<primitive>` がある。
+出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
