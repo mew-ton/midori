@@ -68,9 +68,10 @@
 
 ## `delay`
 
-入力を `ticks` tick 遅らせて出力する。遅延期間中は null を出力する。
+入力を指定した時間だけ遅らせて出力する。遅延期間中は null を出力する。
 
 - **入力**: `in: T`
 - **出力**: `out: T | null`
-- **params**:
+- **params**（いずれか一方を指定）:
   - `ticks: int` — 遅延 tick 数
+  - `ms: float` — 遅延ミリ秒数（tick に変換して使用）
