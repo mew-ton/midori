@@ -122,7 +122,7 @@ graph:
 ## Signal の定義
 
 Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.upper.{note}.pressed`）。
-Signal のデータ型には `int` / `float` / `bool` / `pulse` / `array<primitive>` がある。
+Signal のデータ型には `int` / `float` / `bool` / `pulse` / `static_array<T>` / `dynamic_array<T>` がある。
 出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
 
 ---
@@ -142,4 +142,4 @@ null がいつ発生するかはデバイス（Input Driver）が定義する。
 
 ### 配列ポートの null
 
-`array<T>` ポートは `*`（gather）接続によって常に配列が生成されるため、null にはならない。配列入力を持つノードは null を考慮しなくてよい。
+`static_array<T>` / `dynamic_array<T>` ポートはポート自体が null にはならない。配列入力を持つノードはポートの null を考慮しなくてよい。ただし要素が `T | null` の場合は要素レベルで null が発生し得る。
