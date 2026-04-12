@@ -48,7 +48,7 @@
 
 `increment` を受け取るたびにカウントを増やす。`reset` で 0 に戻る。
 
-- **入力**: `increment: pulse`, `reset: pulse`
+- **入力**: `increment: pulse`, `reset: pulse = false`
 - **出力**: `count: int`
 - **params**:
   - `max` — 最大値。達したら 0 に折り返す（省略時は上限なし）
