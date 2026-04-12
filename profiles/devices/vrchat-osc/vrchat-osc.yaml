@@ -22,10 +22,6 @@ definition:
     - id: upper_key
       type: keyboard
       key_range: [c2, c7]
-      additionals:
-        - name: velocity
-          type: float
-          range: [0, 1]   # VRChat float 値域 0.0–1.0 に合わせる
 
     # ===== エクスプレッション =====
     # アバターパラメーター: UpperExpression（float 0.0–1.0）
@@ -115,13 +111,5 @@ binding:
       - mirror: upper_key.{note}.pressed
       - mirror: expression.value
       - mirror: sustain.pressed
-
-      # velocity: VRChat → ブリッジ 方向では送信されないため input 対応なし
-      # mirror 不可のため明示的に記述
-      - from:
-          target: upper_key.{note}.velocity
-        to:
-          address: /avatar/parameters/upper_key_{note}_velocity
-          type: float
 
       # scene_index は受信専用のため output に含めない
