@@ -51,6 +51,24 @@
   step: 0.01         # 任意指定
 ```
 
+### out_of_range
+
+`range` を持つすべての type（`slider`・`knob`・`number`・`2d-slider`・`2d-pad`）に設定できる。受信値が `range` を超えたときの挙動を制御する。省略時は `ignore`。
+
+| 値 | 挙動 |
+|---|---|
+| `ignore` | 値域外の入力を無視し、ComponentState を更新しない |
+| `clamp` | `range` の min / max に丸めてから ComponentState に書き込む |
+| `error` | 入力を無視し、エラーとして記録する |
+
+```yaml
+- id: scene_index
+  type: number
+  valueType: int
+  range: [0, 15]
+  out_of_range: clamp   # 省略時は ignore
+```
+
 ## 2D 型
 
 2D 型も `valueType` の指定が必須（X / Y 軸に共通適用される）。軸ごとの range は `x_range` / `y_range` で指定する。

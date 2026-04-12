@@ -1,0 +1,127 @@
+# VRChat OSC デバイス構成（双方向）
+#
+# VRChat はアバターパラメーターを OSC で送受信できる。
+#   送信（ブリッジ → VRChat）: host 127.0.0.1, port 9000
+#   受信（VRChat → ブリッジ）: host 127.0.0.1, port 9001
+#
+# VRChat OSC アドレス形式: /avatar/parameters/<ParameterName>
+#
+# VRChat アバターパラメーター型域:
+#   bool  : true / false
+#   int   : 0–255（byte サイズ）
+#   float : 0.0–1.0
+
+direction: any
+
+definition:
+  components:
+
+    # ===== 上鍵盤 =====
+    # アバターパラメーター: upper_key_{note}（bool）/ upper_key_{note}_velocity（float）
+    # key_range c2–c7 = note 48–96（49 鍵）
+    - id: upper_key
+      type: keyboard
+      key_range: [c2, c7]
+      additionals:
+        - name: velocity
+          type: float
+          range: [0, 1]   # VRChat float 値域 0.0–1.0 に合わせる
+
+    # ===== エクスプレッション =====
+    # アバターパラメーター: UpperExpression（float 0.0–1.0）
+    - id: expression
+      type: slider
+      range: [0, 1]
+      valueType: float
+
+    # ===== サスティン =====
+    # アバターパラメーター: UpperSustain（bool）
+    - id: sustain
+      type: switch
+
+    # ===== シーン番号（VRChat → ブリッジ 受信専用） =====
+    # アバターパラメーター: SceneIndex（int）
+    # VRChat int は 0–255 だが、このアバターでの実用範囲は 0–15。
+    # 範囲外（16–255）が到来したときの挙動は out_of_range で制御できる。
+    - id: scene_index
+      type: number
+      valueType: int
+      range: [0, 15]
+      out_of_range: ignore   # ignore（デフォルト） | clamp | error
+
+binding:
+
+  # ------------------------------------------------------------
+  # input: VRChat → ブリッジ（OSC 受信、ポート 9001）
+  #
+  # from.target: 受信アドレスのパターン。{note} は数字列のキャプチャ。
+  # set: value は OSC 第1引数を target に直接代入する（正規化なし）。
+  # OSC input では set または setMap が必須。
+  # → config/drivers/osc.md binding.input 参照
+  # ------------------------------------------------------------
+  input:
+    driver: osc
+    mappings:
+
+      # 押鍵状態（per-key）
+      # {note}: アドレス中の数字列をキャプチャしてノート番号に変換
+      - from:
+          target: /avatar/parameters/upper_key_{note}
+          type: bool
+        to:
+          target: upper_key.{note}.pressed
+          set: value
+
+      # エクスプレッション
+      - from:
+          target: /avatar/parameters/UpperExpression
+          type: float
+        to:
+          target: expression.value
+          set: value
+
+      # シーン番号
+      # VRChat int 全値域（0–255）→ scene_index の range（0–15）に縮小マッピング
+      - from:
+          target: /avatar/parameters/SceneIndex
+          type: int
+        to:
+          target: scene_index.value
+          setMap:
+            linear:
+              when: [0, 255]
+              set:  [0, 15]
+
+      # サスティン
+      - from:
+          target: /avatar/parameters/UpperSustain
+          type: bool
+        to:
+          target: sustain.pressed
+          set: value
+
+  # ------------------------------------------------------------
+  # output: ブリッジ → VRChat（OSC 送信、ポート 9000）
+  #
+  # pressed / expression / sustain は input と対称なので mirror を使用。
+  # mirror は input entry の from.target（アドレス）と from.type を
+  # output の to.address / to.type として引き継ぐ。
+  # → config/drivers/osc.md mirror の逆写像導出 参照
+  # ------------------------------------------------------------
+  output:
+    driver: osc
+    mappings:
+
+      - mirror: upper_key.{note}.pressed
+      - mirror: expression.value
+      - mirror: sustain.pressed
+
+      # velocity: VRChat → ブリッジ 方向では送信されないため input 対応なし
+      # mirror 不可のため明示的に記述
+      - from:
+          target: upper_key.{note}.velocity
+        to:
+          address: /avatar/parameters/upper_key_{note}_velocity
+          type: float
+
+      # scene_index は受信専用のため output に含めない
