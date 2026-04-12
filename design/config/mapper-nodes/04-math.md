@@ -6,19 +6,19 @@
 
 ## `add`
 
-`a + b` を返す。
+`a + b` を返す。両入力は同じ型でなければならない。
 
-- **入力**: `a: float | int`, `b: float | int`
-- **出力**: `out: float | int`
+- **入力**: `a: T`, `b: T`（`T` は `int` または `float`）
+- **出力**: `out: T`
 
 ---
 
 ## `multiply`
 
-`a × b` を返す。
+`a × b` を返す。両入力は同じ型でなければならない。
 
-- **入力**: `a: float | int`, `b: float | int`
-- **出力**: `out: float | int`
+- **入力**: `a: T`, `b: T`（`T` は `int` または `float`）
+- **出力**: `out: T`
 
 ---
 
@@ -26,8 +26,8 @@
 
 絶対値を返す。
 
-- **入力**: `in: float | int`
-- **出力**: `out: float | int`
+- **入力**: `in: T`（`T` は `int` または `float`）
+- **出力**: `out: T`
 
 ---
 
