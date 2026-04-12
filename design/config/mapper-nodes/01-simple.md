@@ -96,6 +96,15 @@ N ステップに量子化する（`float` → `0〜steps-1` の整数）。
 
 ---
 
+## `present`
+
+信号の有無を `bool` に変換する。入力が非 null なら `true`、null なら `false` を出力する。
+
+- **in**: `T | null`
+- **out**: `bool`
+
+---
+
 ## `defaults`
 
 入力が null のときにデフォルト値を出力する。null でなければ入力をそのまま通す。
