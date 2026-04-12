@@ -1,7 +1,10 @@
 # ELS-03 → VRChat シンプル演奏 変換グラフ
 #
-# 上鍵盤・下鍵盤・ペダル鍵盤・エクスプレッション×2 を
-# VRChat アバターパラメーターへ直結する。変換ノードなし。
+# 上鍵盤・下鍵盤・ペダル鍵盤・エクスプレッション×2・スライダー×9 を
+# VRChat アバターパラメーターへ接続する。
+#
+# スライダーは float [0, 1] → to_bits（bits: 3）で 0–7 の 8段階に量子化し、
+# 3 本の bool パラメーターとして送信する。
 
 input_devices:
   - devices/yamaha-els03/yamaha-els03.yaml
@@ -10,6 +13,46 @@ output_devices:
   - devices/vrchat-osc/vrchat-osc.yaml
 
 graph:
+  nodes:
+
+    # スライダー 1–9: float → 3bit 量子化
+    # to_bits は float を [0, 2^bits - 1] = [0, 7] に量子化してからビット分解する
+    - id: slider_1_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_2_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_3_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_4_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_5_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_6_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_7_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_8_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    - id: slider_9_bits
+      type: to_bits
+      params: { bits: 3 }
+
   connections:
 
     # 上鍵盤 押鍵状態（per-key 直結）
@@ -34,3 +77,85 @@ graph:
     # セカンドエクスプレッションペダル（直結）
     - from: input.expression_2.value
       to:   output.expression_2.value
+
+    # スライダー 1–9（float → 3bit）
+    - from: input.slider_1.value
+      to:   slider_1_bits.in
+    - from: slider_1_bits.bit_0
+      to:   output.slider_1_b0.pressed
+    - from: slider_1_bits.bit_1
+      to:   output.slider_1_b1.pressed
+    - from: slider_1_bits.bit_2
+      to:   output.slider_1_b2.pressed
+
+    - from: input.slider_2.value
+      to:   slider_2_bits.in
+    - from: slider_2_bits.bit_0
+      to:   output.slider_2_b0.pressed
+    - from: slider_2_bits.bit_1
+      to:   output.slider_2_b1.pressed
+    - from: slider_2_bits.bit_2
+      to:   output.slider_2_b2.pressed
+
+    - from: input.slider_3.value
+      to:   slider_3_bits.in
+    - from: slider_3_bits.bit_0
+      to:   output.slider_3_b0.pressed
+    - from: slider_3_bits.bit_1
+      to:   output.slider_3_b1.pressed
+    - from: slider_3_bits.bit_2
+      to:   output.slider_3_b2.pressed
+
+    - from: input.slider_4.value
+      to:   slider_4_bits.in
+    - from: slider_4_bits.bit_0
+      to:   output.slider_4_b0.pressed
+    - from: slider_4_bits.bit_1
+      to:   output.slider_4_b1.pressed
+    - from: slider_4_bits.bit_2
+      to:   output.slider_4_b2.pressed
+
+    - from: input.slider_5.value
+      to:   slider_5_bits.in
+    - from: slider_5_bits.bit_0
+      to:   output.slider_5_b0.pressed
+    - from: slider_5_bits.bit_1
+      to:   output.slider_5_b1.pressed
+    - from: slider_5_bits.bit_2
+      to:   output.slider_5_b2.pressed
+
+    - from: input.slider_6.value
+      to:   slider_6_bits.in
+    - from: slider_6_bits.bit_0
+      to:   output.slider_6_b0.pressed
+    - from: slider_6_bits.bit_1
+      to:   output.slider_6_b1.pressed
+    - from: slider_6_bits.bit_2
+      to:   output.slider_6_b2.pressed
+
+    - from: input.slider_7.value
+      to:   slider_7_bits.in
+    - from: slider_7_bits.bit_0
+      to:   output.slider_7_b0.pressed
+    - from: slider_7_bits.bit_1
+      to:   output.slider_7_b1.pressed
+    - from: slider_7_bits.bit_2
+      to:   output.slider_7_b2.pressed
+
+    - from: input.slider_8.value
+      to:   slider_8_bits.in
+    - from: slider_8_bits.bit_0
+      to:   output.slider_8_b0.pressed
+    - from: slider_8_bits.bit_1
+      to:   output.slider_8_b1.pressed
+    - from: slider_8_bits.bit_2
+      to:   output.slider_8_b2.pressed
+
+    - from: input.slider_9.value
+      to:   slider_9_bits.in
+    - from: slider_9_bits.bit_0
+      to:   output.slider_9_b0.pressed
+    - from: slider_9_bits.bit_1
+      to:   output.slider_9_b1.pressed
+    - from: slider_9_bits.bit_2
+      to:   output.slider_9_b2.pressed

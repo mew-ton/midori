@@ -51,6 +51,73 @@ definition:
       range: [0, 1]
       valueType: float
 
+    # ===== スライダー 1–9（各 3bit、出力専用） =====
+    # スライダー 1本 = bool × 3（Slider{N}B0〜B2）で 0–7 の 8段階を表現。
+    # ブリッジ → VRChat 方向のみ。VRChat からの受信は行わない。
+
+    - id: slider_1_b0
+      type: switch
+    - id: slider_1_b1
+      type: switch
+    - id: slider_1_b2
+      type: switch
+
+    - id: slider_2_b0
+      type: switch
+    - id: slider_2_b1
+      type: switch
+    - id: slider_2_b2
+      type: switch
+
+    - id: slider_3_b0
+      type: switch
+    - id: slider_3_b1
+      type: switch
+    - id: slider_3_b2
+      type: switch
+
+    - id: slider_4_b0
+      type: switch
+    - id: slider_4_b1
+      type: switch
+    - id: slider_4_b2
+      type: switch
+
+    - id: slider_5_b0
+      type: switch
+    - id: slider_5_b1
+      type: switch
+    - id: slider_5_b2
+      type: switch
+
+    - id: slider_6_b0
+      type: switch
+    - id: slider_6_b1
+      type: switch
+    - id: slider_6_b2
+      type: switch
+
+    - id: slider_7_b0
+      type: switch
+    - id: slider_7_b1
+      type: switch
+    - id: slider_7_b2
+      type: switch
+
+    - id: slider_8_b0
+      type: switch
+    - id: slider_8_b1
+      type: switch
+    - id: slider_8_b2
+      type: switch
+
+    - id: slider_9_b0
+      type: switch
+    - id: slider_9_b1
+      type: switch
+    - id: slider_9_b2
+      type: switch
+
     # ===== シーン番号（VRChat → ブリッジ 受信専用） =====
     # アバターパラメーター: SceneIndex（int）
     # VRChat int は 0–255 だが、このアバターでの実用範囲は 0–15。
@@ -127,10 +194,13 @@ binding:
               when: [0, 255]
               set:  [0, 15]
 
+      # スライダービットは受信しない（input なし）
+
   # ------------------------------------------------------------
   # output: ブリッジ → VRChat（OSC 送信、ポート 9000）
   #
-  # input と対称なエントリは mirror を使用。
+  # 鍵盤・エクスプレッションは input と対称なので mirror を使用。
+  # スライダービットは output 専用のため明示的に記述。
   # → config/drivers/osc.md mirror の逆写像導出 参照
   # ------------------------------------------------------------
   output:
@@ -142,5 +212,69 @@ binding:
       - mirror: pedal_key.{note}.pressed
       - mirror: expression.value
       - mirror: expression_2.value
+
+      # スライダー 1–9（各 3bit）
+      - from: { target: slider_1_b0.pressed }
+        to:   { address: /avatar/parameters/Slider1B0, type: bool }
+      - from: { target: slider_1_b1.pressed }
+        to:   { address: /avatar/parameters/Slider1B1, type: bool }
+      - from: { target: slider_1_b2.pressed }
+        to:   { address: /avatar/parameters/Slider1B2, type: bool }
+
+      - from: { target: slider_2_b0.pressed }
+        to:   { address: /avatar/parameters/Slider2B0, type: bool }
+      - from: { target: slider_2_b1.pressed }
+        to:   { address: /avatar/parameters/Slider2B1, type: bool }
+      - from: { target: slider_2_b2.pressed }
+        to:   { address: /avatar/parameters/Slider2B2, type: bool }
+
+      - from: { target: slider_3_b0.pressed }
+        to:   { address: /avatar/parameters/Slider3B0, type: bool }
+      - from: { target: slider_3_b1.pressed }
+        to:   { address: /avatar/parameters/Slider3B1, type: bool }
+      - from: { target: slider_3_b2.pressed }
+        to:   { address: /avatar/parameters/Slider3B2, type: bool }
+
+      - from: { target: slider_4_b0.pressed }
+        to:   { address: /avatar/parameters/Slider4B0, type: bool }
+      - from: { target: slider_4_b1.pressed }
+        to:   { address: /avatar/parameters/Slider4B1, type: bool }
+      - from: { target: slider_4_b2.pressed }
+        to:   { address: /avatar/parameters/Slider4B2, type: bool }
+
+      - from: { target: slider_5_b0.pressed }
+        to:   { address: /avatar/parameters/Slider5B0, type: bool }
+      - from: { target: slider_5_b1.pressed }
+        to:   { address: /avatar/parameters/Slider5B1, type: bool }
+      - from: { target: slider_5_b2.pressed }
+        to:   { address: /avatar/parameters/Slider5B2, type: bool }
+
+      - from: { target: slider_6_b0.pressed }
+        to:   { address: /avatar/parameters/Slider6B0, type: bool }
+      - from: { target: slider_6_b1.pressed }
+        to:   { address: /avatar/parameters/Slider6B1, type: bool }
+      - from: { target: slider_6_b2.pressed }
+        to:   { address: /avatar/parameters/Slider6B2, type: bool }
+
+      - from: { target: slider_7_b0.pressed }
+        to:   { address: /avatar/parameters/Slider7B0, type: bool }
+      - from: { target: slider_7_b1.pressed }
+        to:   { address: /avatar/parameters/Slider7B1, type: bool }
+      - from: { target: slider_7_b2.pressed }
+        to:   { address: /avatar/parameters/Slider7B2, type: bool }
+
+      - from: { target: slider_8_b0.pressed }
+        to:   { address: /avatar/parameters/Slider8B0, type: bool }
+      - from: { target: slider_8_b1.pressed }
+        to:   { address: /avatar/parameters/Slider8B1, type: bool }
+      - from: { target: slider_8_b2.pressed }
+        to:   { address: /avatar/parameters/Slider8B2, type: bool }
+
+      - from: { target: slider_9_b0.pressed }
+        to:   { address: /avatar/parameters/Slider9B0, type: bool }
+      - from: { target: slider_9_b1.pressed }
+        to:   { address: /avatar/parameters/Slider9B1, type: bool }
+      - from: { target: slider_9_b2.pressed }
+        to:   { address: /avatar/parameters/Slider9B2, type: bool }
 
       # scene_index は受信専用のため output に含めない
