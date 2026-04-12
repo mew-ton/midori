@@ -1,0 +1,29 @@
+# ELS-03 → VRChat シンプル演奏 変換グラフ
+#
+# 上鍵盤・エクスプレッション・サスティンを VRChat アバターパラメーターへ直結する。
+# 変換ノードなし。ELS-03 の velocity は定義上キャプチャしていないため送信しない。
+
+input_devices:
+  - devices/yamaha-els03/yamaha-els03.yaml
+
+output_devices:
+  - devices/vrchat-osc/vrchat-osc.yaml
+
+graph:
+  connections:
+
+    # 上鍵盤 押鍵状態（per-key 直結）
+    # ELS-03 upper: note 48–96（Yamaha C2–C6）
+    # VRChat upper_key: note 36–96 のうち 48–96 が使われる
+    - from: input.upper.{note}.pressed
+      to:   output.upper_key.{note}.pressed
+
+    # エクスプレッションペダル（直結）
+    # ELS-03 expression: CC#11 ch16 → [0, 1]
+    # VRChat expression: float [0, 1]
+    - from: input.expression.value
+      to:   output.expression.value
+
+    # サスティン（直結）
+    - from: input.upper_sustain.pressed
+      to:   output.sustain.pressed

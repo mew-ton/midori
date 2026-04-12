@@ -1,0 +1,20 @@
+# ELS-03 → VRChat シンプル演奏プロファイル
+#
+# 上鍵盤の押鍵・エクスプレッション・サスティンを VRChat に送信する。
+
+name: ELS-03 → VRChat シンプル演奏
+
+input:
+  device: devices/yamaha-els03/yamaha-els03.yaml
+  connection:
+    type: midi
+    device_name: "ELS-03"   # OS のデバイス名と部分一致でバインドされる
+
+transform: mappers/els03-vrchat-simple.yaml
+
+output:
+  device: devices/vrchat-osc/vrchat-osc.yaml
+  connection:
+    type: osc-vrchat
+    host: 127.0.0.1
+    port: 9000              # VRChat 受信ポート（送信側）
