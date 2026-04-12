@@ -1,10 +1,16 @@
 # ELS-03 → VRChat シンプル演奏 変換グラフ
 #
-# 上鍵盤・下鍵盤・ペダル鍵盤・エクスプレッション×2・スライダー×9 を
-# VRChat アバターパラメーターへ接続する。
+# 上鍵盤・下鍵盤・ペダル鍵盤・エクスプレッション×2・スライダー×9・
+# ポリアフタータッチ（10スロット）を VRChat アバターパラメーターへ接続する。
 #
-# スライダーは float [0, 1] → to_bits（bits: 3）で 0–7 の 8段階に量子化し、
-# 3 本の bool パラメーターとして送信する。
+# ポリアフタータッチの設計:
+#   array_merge で lower / upper をノート番号順に結合したうえで pack に渡す。
+#   同一ノートが両鍵盤で押されている場合: active = OR、pressure = max。
+#   pack が全鍵から左（低音）順に最大 10 キーをピックアップして左詰めする。
+#   VRChat 側では slot 0 → 9 の順に左から値を当てる。
+#
+# スライダーの設計:
+#   to_bits（bits: 3）で float [0,1] を 0–7 の 8段階に量子化してビット分解。
 
 input_devices:
   - devices/yamaha-els03/yamaha-els03.yaml
@@ -15,70 +21,231 @@ output_devices:
 graph:
   nodes:
 
+    # ----------------------------------------------------------
+    # ポリアフタータッチ: lower + upper をノート順にマージして左詰めパック
+    # ----------------------------------------------------------
+
+    # lower / upper をノート番号順に結合（同一ノート: active=OR, pressure=max）
+    - id: pressure_merge
+      type: array_merge
+
+    # マージ済み配列から左（低音）順に最大 10 キーを左詰め
+    - id: pressure_pack
+      type: pack
+      params: { slots: 10 }
+
+    # ----------------------------------------------------------
+    # ポリアフタータッチ: スロットごとに 3bit 量子化（10スロット）
+    # ----------------------------------------------------------
+
+    - id: pressure_0_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_1_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_2_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_3_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_4_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_5_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_6_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_7_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_8_bits
+      type: to_bits
+      params: { bits: 3 }
+    - id: pressure_9_bits
+      type: to_bits
+      params: { bits: 3 }
+
+    # ----------------------------------------------------------
     # スライダー 1–9: float → 3bit 量子化
-    # to_bits は float を [0, 2^bits - 1] = [0, 7] に量子化してからビット分解する
+    # ----------------------------------------------------------
+
     - id: slider_1_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_2_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_3_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_4_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_5_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_6_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_7_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_8_bits
       type: to_bits
       params: { bits: 3 }
-
     - id: slider_9_bits
       type: to_bits
       params: { bits: 3 }
 
   connections:
 
-    # 上鍵盤 押鍵状態（per-key 直結）
-    # ELS-03 upper: note 48–96（Yamaha C2–C6）
+    # ----------------------------------------------------------
+    # 鍵盤 押鍵状態（per-key 直結）
+    # ----------------------------------------------------------
+
+    # 上鍵盤: ELS-03 note 48–96（Yamaha C2–C6）
     - from: input.upper.{note}.pressed
       to:   output.upper_key.{note}.pressed
 
-    # 下鍵盤 押鍵状態（per-key 直結）
-    # ELS-03 lower: note 36–96（Yamaha C1–C6）
+    # 下鍵盤: ELS-03 note 36–96（Yamaha C1–C6）
     - from: input.lower.{note}.pressed
       to:   output.lower_key.{note}.pressed
 
-    # ペダル鍵盤 押鍵状態（per-key 直結）
-    # ELS-03 pedal: note 36–60（Yamaha C1–C3）
+    # ペダル鍵盤: ELS-03 note 36–60（Yamaha C1–C3）
     - from: input.pedal.{note}.pressed
       to:   output.pedal_key.{note}.pressed
 
+    # ----------------------------------------------------------
     # エクスプレッションペダル（直結）
+    # ----------------------------------------------------------
+
     - from: input.expression.value
       to:   output.expression.value
 
-    # セカンドエクスプレッションペダル（直結）
     - from: input.expression_2.value
       to:   output.expression_2.value
 
+    # ----------------------------------------------------------
+    # ポリアフタータッチ: array_merge → pack → to_bits → output
+    # ----------------------------------------------------------
+
+    # lower + upper をノート順にマージ
+    - from: input.lower.*.pressed
+      to:   pressure_merge.active_0
+    - from: input.lower.*.pressure
+      to:   pressure_merge.value_0
+    - from: input.upper.*.pressed
+      to:   pressure_merge.active_1
+    - from: input.upper.*.pressure
+      to:   pressure_merge.value_1
+
+    # マージ済み配列 → pack（左詰め 10スロット）
+    - from: pressure_merge.active
+      to:   pressure_pack.active
+    - from: pressure_merge.value
+      to:   pressure_pack.value
+
+    # pack → to_bits（slot 0–9）
+    - from: pressure_pack.slot_0
+      to:   pressure_0_bits.in
+    - from: pressure_pack.slot_1
+      to:   pressure_1_bits.in
+    - from: pressure_pack.slot_2
+      to:   pressure_2_bits.in
+    - from: pressure_pack.slot_3
+      to:   pressure_3_bits.in
+    - from: pressure_pack.slot_4
+      to:   pressure_4_bits.in
+    - from: pressure_pack.slot_5
+      to:   pressure_5_bits.in
+    - from: pressure_pack.slot_6
+      to:   pressure_6_bits.in
+    - from: pressure_pack.slot_7
+      to:   pressure_7_bits.in
+    - from: pressure_pack.slot_8
+      to:   pressure_8_bits.in
+    - from: pressure_pack.slot_9
+      to:   pressure_9_bits.in
+
+    # to_bits → output（slot 0–9）
+    - from: pressure_0_bits.bit_0
+      to:   output.pressure_0_b0.pressed
+    - from: pressure_0_bits.bit_1
+      to:   output.pressure_0_b1.pressed
+    - from: pressure_0_bits.bit_2
+      to:   output.pressure_0_b2.pressed
+
+    - from: pressure_1_bits.bit_0
+      to:   output.pressure_1_b0.pressed
+    - from: pressure_1_bits.bit_1
+      to:   output.pressure_1_b1.pressed
+    - from: pressure_1_bits.bit_2
+      to:   output.pressure_1_b2.pressed
+
+    - from: pressure_2_bits.bit_0
+      to:   output.pressure_2_b0.pressed
+    - from: pressure_2_bits.bit_1
+      to:   output.pressure_2_b1.pressed
+    - from: pressure_2_bits.bit_2
+      to:   output.pressure_2_b2.pressed
+
+    - from: pressure_3_bits.bit_0
+      to:   output.pressure_3_b0.pressed
+    - from: pressure_3_bits.bit_1
+      to:   output.pressure_3_b1.pressed
+    - from: pressure_3_bits.bit_2
+      to:   output.pressure_3_b2.pressed
+
+    - from: pressure_4_bits.bit_0
+      to:   output.pressure_4_b0.pressed
+    - from: pressure_4_bits.bit_1
+      to:   output.pressure_4_b1.pressed
+    - from: pressure_4_bits.bit_2
+      to:   output.pressure_4_b2.pressed
+
+    - from: pressure_5_bits.bit_0
+      to:   output.pressure_5_b0.pressed
+    - from: pressure_5_bits.bit_1
+      to:   output.pressure_5_b1.pressed
+    - from: pressure_5_bits.bit_2
+      to:   output.pressure_5_b2.pressed
+
+    - from: pressure_6_bits.bit_0
+      to:   output.pressure_6_b0.pressed
+    - from: pressure_6_bits.bit_1
+      to:   output.pressure_6_b1.pressed
+    - from: pressure_6_bits.bit_2
+      to:   output.pressure_6_b2.pressed
+
+    - from: pressure_7_bits.bit_0
+      to:   output.pressure_7_b0.pressed
+    - from: pressure_7_bits.bit_1
+      to:   output.pressure_7_b1.pressed
+    - from: pressure_7_bits.bit_2
+      to:   output.pressure_7_b2.pressed
+
+    - from: pressure_8_bits.bit_0
+      to:   output.pressure_8_b0.pressed
+    - from: pressure_8_bits.bit_1
+      to:   output.pressure_8_b1.pressed
+    - from: pressure_8_bits.bit_2
+      to:   output.pressure_8_b2.pressed
+
+    - from: pressure_9_bits.bit_0
+      to:   output.pressure_9_b0.pressed
+    - from: pressure_9_bits.bit_1
+      to:   output.pressure_9_b1.pressed
+    - from: pressure_9_bits.bit_2
+      to:   output.pressure_9_b2.pressed
+
+    # ----------------------------------------------------------
     # スライダー 1–9（float → 3bit）
+    # ----------------------------------------------------------
+
     - from: input.slider_1.value
       to:   slider_1_bits.in
     - from: slider_1_bits.bit_0

@@ -53,7 +53,6 @@ definition:
 
     # ===== スライダー 1–9（各 3bit、出力専用） =====
     # スライダー 1本 = bool × 3（Slider{N}B0〜B2）で 0–7 の 8段階を表現。
-    # ブリッジ → VRChat 方向のみ。VRChat からの受信は行わない。
 
     - id: slider_1_b0
       type: switch
@@ -118,31 +117,106 @@ definition:
     - id: slider_9_b2
       type: switch
 
+    # ===== ポリアフタータッチ 10スロット（各 3bit、出力専用） =====
+    # 押鍵中の鍵から左（低音）順に最大 10 キーをピックアップし、
+    # 圧力値 float → 3bit（0–7）に圧縮して送信する。
+    #
+    # スロット割り当て:
+    #   slot 0–4 : lower 鍵盤の左詰め 5 キー
+    #   slot 5–9 : upper 鍵盤の左詰め 5 キー
+    #
+    # VRChat 側でのコンポジット: slot 0 → 9 の順に左から反映することで
+    # lower（低音）優先の左詰めとなる。
+
+    - id: pressure_0_b0
+      type: switch
+    - id: pressure_0_b1
+      type: switch
+    - id: pressure_0_b2
+      type: switch
+
+    - id: pressure_1_b0
+      type: switch
+    - id: pressure_1_b1
+      type: switch
+    - id: pressure_1_b2
+      type: switch
+
+    - id: pressure_2_b0
+      type: switch
+    - id: pressure_2_b1
+      type: switch
+    - id: pressure_2_b2
+      type: switch
+
+    - id: pressure_3_b0
+      type: switch
+    - id: pressure_3_b1
+      type: switch
+    - id: pressure_3_b2
+      type: switch
+
+    - id: pressure_4_b0
+      type: switch
+    - id: pressure_4_b1
+      type: switch
+    - id: pressure_4_b2
+      type: switch
+
+    - id: pressure_5_b0
+      type: switch
+    - id: pressure_5_b1
+      type: switch
+    - id: pressure_5_b2
+      type: switch
+
+    - id: pressure_6_b0
+      type: switch
+    - id: pressure_6_b1
+      type: switch
+    - id: pressure_6_b2
+      type: switch
+
+    - id: pressure_7_b0
+      type: switch
+    - id: pressure_7_b1
+      type: switch
+    - id: pressure_7_b2
+      type: switch
+
+    - id: pressure_8_b0
+      type: switch
+    - id: pressure_8_b1
+      type: switch
+    - id: pressure_8_b2
+      type: switch
+
+    - id: pressure_9_b0
+      type: switch
+    - id: pressure_9_b1
+      type: switch
+    - id: pressure_9_b2
+      type: switch
+
     # ===== シーン番号（VRChat → ブリッジ 受信専用） =====
     # アバターパラメーター: SceneIndex（int）
     # VRChat int は 0–255 だが、このアバターでの実用範囲は 0–15。
-    # 範囲外（16–255）が到来したときの挙動は out_of_range で制御できる。
     - id: scene_index
       type: number
       valueType: int
       range: [0, 15]
-      out_of_range: ignore   # ignore（デフォルト） | clamp | error
+      out_of_range: ignore
 
 binding:
 
   # ------------------------------------------------------------
   # input: VRChat → ブリッジ（OSC 受信、ポート 9001）
-  #
-  # from.target: 受信アドレスのパターン。{note} は数字列のキャプチャ。
-  # set: value は OSC 第1引数を target に直接代入する（正規化なし）。
-  # OSC input では set または setMap が必須。
   # → config/drivers/osc.md binding.input 参照
   # ------------------------------------------------------------
   input:
     driver: osc
     mappings:
 
-      # 上鍵盤 押鍵状態（per-key）
       - from:
           target: /avatar/parameters/upper_key_{note}
           type: bool
@@ -150,7 +224,6 @@ binding:
           target: upper_key.{note}.pressed
           set: value
 
-      # 下鍵盤 押鍵状態（per-key）
       - from:
           target: /avatar/parameters/lower_key_{note}
           type: bool
@@ -158,7 +231,6 @@ binding:
           target: lower_key.{note}.pressed
           set: value
 
-      # ペダル鍵盤 押鍵状態（per-key）
       - from:
           target: /avatar/parameters/pedal_key_{note}
           type: bool
@@ -166,7 +238,6 @@ binding:
           target: pedal_key.{note}.pressed
           set: value
 
-      # エクスプレッション
       - from:
           target: /avatar/parameters/UpperExpression
           type: float
@@ -174,7 +245,6 @@ binding:
           target: expression.value
           set: value
 
-      # セカンドエクスプレッション
       - from:
           target: /avatar/parameters/LowerExpression
           type: float
@@ -182,8 +252,6 @@ binding:
           target: expression_2.value
           set: value
 
-      # シーン番号
-      # VRChat int 全値域（0–255）→ scene_index の range（0–15）に縮小マッピング
       - from:
           target: /avatar/parameters/SceneIndex
           type: int
@@ -194,13 +262,8 @@ binding:
               when: [0, 255]
               set:  [0, 15]
 
-      # スライダービットは受信しない（input なし）
-
   # ------------------------------------------------------------
   # output: ブリッジ → VRChat（OSC 送信、ポート 9000）
-  #
-  # 鍵盤・エクスプレッションは input と対称なので mirror を使用。
-  # スライダービットは output 専用のため明示的に記述。
   # → config/drivers/osc.md mirror の逆写像導出 参照
   # ------------------------------------------------------------
   output:
@@ -276,5 +339,76 @@ binding:
         to:   { address: /avatar/parameters/Slider9B1, type: bool }
       - from: { target: slider_9_b2.pressed }
         to:   { address: /avatar/parameters/Slider9B2, type: bool }
+
+      # ポリアフタータッチ 10スロット（各 3bit）
+      - from: { target: pressure_0_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure0B0, type: bool }
+      - from: { target: pressure_0_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure0B1, type: bool }
+      - from: { target: pressure_0_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure0B2, type: bool }
+
+      - from: { target: pressure_1_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure1B0, type: bool }
+      - from: { target: pressure_1_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure1B1, type: bool }
+      - from: { target: pressure_1_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure1B2, type: bool }
+
+      - from: { target: pressure_2_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure2B0, type: bool }
+      - from: { target: pressure_2_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure2B1, type: bool }
+      - from: { target: pressure_2_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure2B2, type: bool }
+
+      - from: { target: pressure_3_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure3B0, type: bool }
+      - from: { target: pressure_3_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure3B1, type: bool }
+      - from: { target: pressure_3_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure3B2, type: bool }
+
+      - from: { target: pressure_4_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure4B0, type: bool }
+      - from: { target: pressure_4_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure4B1, type: bool }
+      - from: { target: pressure_4_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure4B2, type: bool }
+
+      - from: { target: pressure_5_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure5B0, type: bool }
+      - from: { target: pressure_5_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure5B1, type: bool }
+      - from: { target: pressure_5_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure5B2, type: bool }
+
+      - from: { target: pressure_6_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure6B0, type: bool }
+      - from: { target: pressure_6_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure6B1, type: bool }
+      - from: { target: pressure_6_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure6B2, type: bool }
+
+      - from: { target: pressure_7_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure7B0, type: bool }
+      - from: { target: pressure_7_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure7B1, type: bool }
+      - from: { target: pressure_7_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure7B2, type: bool }
+
+      - from: { target: pressure_8_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure8B0, type: bool }
+      - from: { target: pressure_8_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure8B1, type: bool }
+      - from: { target: pressure_8_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure8B2, type: bool }
+
+      - from: { target: pressure_9_b0.pressed }
+        to:   { address: /avatar/parameters/Pressure9B0, type: bool }
+      - from: { target: pressure_9_b1.pressed }
+        to:   { address: /avatar/parameters/Pressure9B1, type: bool }
+      - from: { target: pressure_9_b2.pressed }
+        to:   { address: /avatar/parameters/Pressure9B2, type: bool }
 
       # scene_index は受信専用のため output に含めない

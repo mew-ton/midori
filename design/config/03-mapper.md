@@ -73,7 +73,8 @@ graph:
 | `metronome` | `tempo`, `beat`, `beats_per_measure` | `beat_{n}`（n = 0〜beats-1） | — | 拍 pulse を各拍の pulse に展開する |
 | `to_bits` | `in: float / int` | `bit_0` … `bit_{n-1}` | `bits`, `threshold` | 数値を下位から N ビットの boolean に分解する。`int` はビット単位で分解、`float` は `[0, 2^bits − 1]` に量子化してから分解。`threshold`（デフォルト: `0.5`）は float 量子化時の端数切り上げ境界 |
 | `if` | `condition`, `then`, `else` | `out` | — | condition が true なら then、false なら else を出力 |
-| `pack` | `active_{n}`, `value_{n}` | `slot_0` … `slot_{m-1}` | `slots` | active=true の value を左詰めで slot に格納 |
+| `pack` | `active: array<bool>`, `value: array<float>` | `slot_0` … `slot_{m-1}` | `slots` | active=true の value を左詰めで slot に格納 |
+| `array_merge` | `active_0: array<bool>`, `value_0: array<float>`, `active_1: array<bool>`, `value_1: array<float>` | `active: array<bool>`, `value: array<float>` | — | 2つのキーボード由来の配列をノート番号順にマージする。同一ノートが両方で active の場合: active = OR、value = max。入力配列のノート範囲はデバイス定義から自動解決。 |
 
 `params` として記述した値は静的な定数として扱われる（接続不要）。動的に変化させたい場合は接続で渡す。
 
