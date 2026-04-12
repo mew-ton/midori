@@ -46,7 +46,7 @@ min/max でクリップする。
 
 ---
 
-## `gate`
+## `threshold`
 
 閾値以上なら `true`、未満なら `false` を返す。
 

@@ -38,7 +38,7 @@ connections:
 
 ---
 
-## `filter`
+## `gate`
 
 `condition` が `true` なら `in` をそのまま出力し、`false` なら `null` を出力する。
 
@@ -51,14 +51,14 @@ connections:
 
 ### 用途: 出力のバタつきを防ぐ
 
-変化時のみ発火する信号（expression ペダル等）に `defaults` を組み合わせると、信号がない tick に補填された値が出力に届いてしまう。`filter` で元の発火条件を使ってゲートすることで、信号がない tick の出力を null（＝送信しない）に抑制できる。
+変化時のみ発火する信号（expression ペダル等）に `defaults` を組み合わせると、信号がない tick に補填された値が出力に届いてしまう。`gate` で元の発火条件を使ってゲートすることで、信号がない tick の出力を null（＝送信しない）に抑制できる。
 
 ```
 # defaults だけでは "0.0 → 実値 → 0.0 → 実値" と出力がバタつく
 expression(変化時のみ発火) → defaults(0.0) → output
-                                      ↓ filter を挟む
+                                      ↓ gate を挟む
 expression → defaults(0.0) ─┐
-                              ├─▶ filter ─▶ output（信号がない tick は送信しない）
+                              ├─▶ gate ─▶ output（信号がない tick は送信しない）
 pressed(継続発火)    ────────┘
 ```
 
@@ -69,17 +69,17 @@ nodes:
     params:
       value: 0.0
 
-  - id: expr_filter
-    type: filter
+  - id: expr_gate
+    type: gate
 
 connections:
   - from: input.expression.value
     to:   expr_default.in
   - from: expr_default.out
-    to:   expr_filter.in
+    to:   expr_gate.in
   - from: input.expression.pressed   # 信号が来ている tick だけ true
-    to:   expr_filter.condition
-  - from: expr_filter.out
+    to:   expr_gate.condition
+  - from: expr_gate.out
     to:   output.expression.value
 ```
 
