@@ -72,6 +72,6 @@
 
 - **入力**: `in: T`
 - **出力**: `out: T | null`
-- **params**（いずれか一方を指定）:
-  - `ticks: int` — 遅延 tick 数
-  - `ms: float` — 遅延ミリ秒数（tick に変換して使用）
+- **params**:
+  - `delayTime: float` — 遅延時間
+  - `unit: ticks | ms` — `delayTime` の単位（`ms` 指定時は tick に変換して使用）
