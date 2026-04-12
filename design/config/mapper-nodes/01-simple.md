@@ -93,3 +93,30 @@ N ステップに量子化する（`float` → `0〜steps-1` の整数）。
 - **out**: `int`
 - **params**:
   - `steps`
+
+---
+
+## `defaults`
+
+入力が null のときにデフォルト値を出力する。null でなければ入力をそのまま通す。
+
+スカラー多入力ノード（`if` など）に null が渡らないよう、手前に挟んで使う。
+
+- **in**: `T | null`
+- **out**: `T`
+- **params**:
+  - `value: T` — `in` が null のときに使う値
+
+```yaml
+nodes:
+  - id: pressure_default
+    type: defaults
+    params:
+      value: 0.0
+
+connections:
+  - from: input.upper.{note}.pressure
+    to:   pressure_default.in
+  - from: pressure_default.out
+    to:   gate_pressure.then
+```

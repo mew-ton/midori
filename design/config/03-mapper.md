@@ -124,3 +124,22 @@ graph:
 Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.upper.{note}.pressed`）。
 Signal のデータ型には `int` / `float` / `bool` / `pulse` / `array<primitive>` がある。
 出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
+
+---
+
+## null の扱い
+
+Signal は null になり得る。null は「その tick に信号が発生していない」ことを表す。
+null がいつ発生するかはデバイス（Input Driver）が定義する。
+
+### スカラーポートの null
+
+| 状況 | 挙動 |
+|---|---|
+| スカラー単入力ノードに null が入力された | 出力も null（処理しない） |
+| スカラー多入力ノードに null が入力された | 設定エラー。手前に `defaults` ノードを挟んで対処する |
+| Output Block のポートに null が届いた | 何も出力しない |
+
+### 配列ポートの null
+
+`array<T>` ポートは `*`（gather）接続によって常に配列が生成されるため、null にはならない。配列入力を持つノードは null を考慮しなくてよい。
