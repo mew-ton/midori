@@ -73,5 +73,5 @@
 - **入力**: `in: T`
 - **出力**: `out: T | null`
 - **params**:
-  - `delayTime: float` — 遅延時間
+  - `delayTime: int | float` — 遅延時間。`unit: ticks` のとき小数値はシンタックスエラー
   - `unit: ticks | ms` — `delayTime` の単位（`ms` 指定時は tick に変換して使用）
