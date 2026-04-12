@@ -4,9 +4,10 @@
 # ポリアフタータッチ（10スロット）を VRChat アバターパラメーターへ接続する。
 #
 # ポリアフタータッチの設計:
-#   pressed / pressure それぞれを array_merge で lower + upper に結合して pack に渡す。
-#   pack が全鍵から左（低音）順に最大 10 キーをピックアップして左詰めする。
-#   pack 出力（array<float>）を flatten で個別ポートに展開し、to_bits へ渡す。
+#   array_merge で lower + upper の pressure 配列を結合する。
+#   pressure は押鍵中のみ非 null なので compact で null をオミットし、
+#   take で先頭 10 要素に切り詰めてから flatten で個別ポートに展開する。
+#   空きスロットは null → defaults(0.0) → to_bits で 0 を送信（VRChat リセット）。
 #   VRChat 側では slot 0 → 9 の順に左から値を当てる。
 #
 # スライダーの設計:
@@ -22,26 +23,60 @@ graph:
   nodes:
 
     # ----------------------------------------------------------
-    # ポリアフタータッチ: lower + upper をノート順にマージして左詰めパック
+    # ポリアフタータッチ: lower + upper をマージして左詰め
     # ----------------------------------------------------------
 
-    # lower の pressed / upper の pressed を結合
-    - id: pressure_merge_active
+    # lower / upper の pressure を結合（pressure は押鍵中のみ非 null）
+    - id: pressure_merge
       type: array_merge
 
-    # lower の pressure / upper の pressure を結合
-    - id: pressure_merge_value
-      type: array_merge
+    # null をオミット
+    - id: pressure_compact
+      type: compact
 
-    # マージ済み配列から左（低音）順に最大 10 キーを左詰め
-    - id: pressure_pack
-      type: pack
-      params: { slots: 10 }
+    # 先頭 10 要素に切り詰め
+    - id: pressure_take
+      type: take
+      params: { n: 10 }
 
-    # pack 出力（array<float>）を個別ポートに展開
+    # 個別ポートに展開（要素数が 10 未満の場合、余りポートは null）
     - id: pressure_flatten
       type: flatten
-      params: { size: 10 }
+
+    # ----------------------------------------------------------
+    # ポリアフタータッチ: 空きスロットのデフォルト値（VRChat リセット用）
+    # ----------------------------------------------------------
+
+    - id: pressure_default_0
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_1
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_2
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_3
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_4
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_5
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_6
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_7
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_8
+      type: defaults
+      params: { value: 0.0 }
+    - id: pressure_default_9
+      type: defaults
+      params: { value: 0.0 }
 
     # ----------------------------------------------------------
     # ポリアフタータッチ: スロットごとに 3bit 量子化（10スロット）
@@ -139,49 +174,72 @@ graph:
       to:   output.expression_2.value
 
     # ----------------------------------------------------------
-    # ポリアフタータッチ: array_merge → pack → to_bits → output
+    # ポリアフタータッチ: array_merge → compact → take → flatten → defaults → to_bits
     # ----------------------------------------------------------
 
-    # lower / upper の pressed を結合 → pack.active
-    - from: input.lower.*.pressed
-      to:   pressure_merge_active.in_0
-    - from: input.upper.*.pressed
-      to:   pressure_merge_active.in_1
-    - from: pressure_merge_active.out
-      to:   pressure_pack.active
-
-    # lower / upper の pressure を結合 → pack.value
+    # lower / upper の pressure を結合
     - from: input.lower.*.pressure
-      to:   pressure_merge_value.in_0
+      to:   pressure_merge.in_0
     - from: input.upper.*.pressure
-      to:   pressure_merge_value.in_1
-    - from: pressure_merge_value.out
-      to:   pressure_pack.value
+      to:   pressure_merge.in_1
 
-    # pack（array<float>）→ flatten（個別ポート）
-    - from: pressure_pack.out
+    # null をオミット → 先頭 10 要素 → 個別ポートに展開
+    - from: pressure_merge.out
+      to:   pressure_compact.in
+    - from: pressure_compact.out
+      to:   pressure_take.in
+    - from: pressure_take.out
       to:   pressure_flatten.in
 
-    # flatten → to_bits（slot 0–9）
+    # flatten → defaults → to_bits（slot 0–9）
     - from: pressure_flatten.out_0
+      to:   pressure_default_0.in
+    - from: pressure_default_0.out
       to:   pressure_0_bits.in
+
     - from: pressure_flatten.out_1
+      to:   pressure_default_1.in
+    - from: pressure_default_1.out
       to:   pressure_1_bits.in
+
     - from: pressure_flatten.out_2
+      to:   pressure_default_2.in
+    - from: pressure_default_2.out
       to:   pressure_2_bits.in
+
     - from: pressure_flatten.out_3
+      to:   pressure_default_3.in
+    - from: pressure_default_3.out
       to:   pressure_3_bits.in
+
     - from: pressure_flatten.out_4
+      to:   pressure_default_4.in
+    - from: pressure_default_4.out
       to:   pressure_4_bits.in
+
     - from: pressure_flatten.out_5
+      to:   pressure_default_5.in
+    - from: pressure_default_5.out
       to:   pressure_5_bits.in
+
     - from: pressure_flatten.out_6
+      to:   pressure_default_6.in
+    - from: pressure_default_6.out
       to:   pressure_6_bits.in
+
     - from: pressure_flatten.out_7
+      to:   pressure_default_7.in
+    - from: pressure_default_7.out
       to:   pressure_7_bits.in
+
     - from: pressure_flatten.out_8
+      to:   pressure_default_8.in
+    - from: pressure_default_8.out
       to:   pressure_8_bits.in
+
     - from: pressure_flatten.out_9
+      to:   pressure_default_9.in
+    - from: pressure_default_9.out
       to:   pressure_9_bits.in
 
     # to_bits → output（slot 0–9）

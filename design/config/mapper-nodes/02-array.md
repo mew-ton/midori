@@ -6,52 +6,39 @@
 
 ## `flatten`
 
-配列を個別ポートに展開する。
+配列を個別ポートに展開する。ポート数は接続から推定される。配列の要素数がポート数に満たない場合、余りポートは null を出力する。
 
 - **入力**: `in: array<T>`
-- **出力**: `out_0`…`out_{n-1}`: `T`
-- **params**:
-  - `size` — 省略時は入力長から推定
+- **出力**: `out_0`…`out_{n-1}`: `T | null`
 
 ---
 
 ## `collect`
 
-個別ポートを配列にまとめる。
+個別ポートを配列にまとめる。ポート数は接続から推定される。
 
 - **入力**: `in_0`…`in_{n-1}`: `T`
 - **出力**: `out: array<T>`
-- **params**:
-  - `size`
 
 ---
 
-## `pack`
+## `compact`
 
-`active=true` の value を左詰めで `slots` 長の配列に格納する。
+配列から null 要素をオミットして返す。
 
-- **入力**:
-  - `active: array<bool>`
-  - `value: array<T>`
+- **入力**: `in: array<T | null>`
+- **出力**: `out: array<T>`
+
+---
+
+## `take`
+
+配列を先頭 N 要素に切り詰める。
+
+- **入力**: `in: array<T>`
 - **出力**: `out: array<T>`
 - **params**:
-  - `slots` — 出力配列の長さ
-
-```yaml
-nodes:
-  - id: pressure_pack
-    type: pack
-    params:
-      slots: 4
-
-connections:
-  - from: input.upper.*.pressed
-    to:   pressure_pack.active
-  - from: input.upper.*.pressure
-    to:   pressure_pack.value
-  - from: pressure_pack.out
-    to:   pressure_flatten.in
-```
+  - `n` — 取り出す要素数
 
 ---
 
@@ -64,27 +51,28 @@ connections:
   - `in_1: array<T>`
 - **出力**: `out: array<T>`
 
-複数キーボードの配列を結合して `pack` に渡す例:
+複数キーボードの pressure 配列を結合して左詰めパックする例:
 
 ```yaml
 nodes:
-  - id: merge_active
+  - id: pressure_merge
     type: array_merge
-  - id: merge_value
-    type: array_merge
+  - id: pressure_compact
+    type: compact
+  - id: pressure_take
+    type: take
+    params: { n: 10 }
 
 connections:
-  - from: input.lower.*.pressed
-    to:   merge_active.in_0
-  - from: input.upper.*.pressed
-    to:   merge_active.in_1
-  - from: merge_active.out
-    to:   pressure_pack.active
-
+  # pressure は押鍵中のみ非 null → array<float | null>
   - from: input.lower.*.pressure
-    to:   merge_value.in_0
+    to:   pressure_merge.in_0
   - from: input.upper.*.pressure
-    to:   merge_value.in_1
-  - from: merge_value.out
-    to:   pressure_pack.value
+    to:   pressure_merge.in_1
+
+  # null をオミット → 先頭 10 要素に切り詰め
+  - from: pressure_merge.out
+    to:   pressure_compact.in
+  - from: pressure_compact.out
+    to:   pressure_take.in
 ```
