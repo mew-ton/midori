@@ -1,8 +1,56 @@
 # デバイス構成
 
-デバイス1種 = YAML 1枚。`direction` / `definition` / `binding` / `layout` で構成。
+デバイス1種 = YAML 1枚。`metadata` / `direction` / `definition` / `binding` / `layout` で構成。
 
 デバイス名のマッチングは持たない（プロファイルが担う）。
+
+---
+
+## metadata セクション
+
+デバイス構成の人間向け説明と AI コンテキストを保持する。Runtime は参照しない（View と AI エージェントが使用）。
+
+```yaml
+metadata:
+  name: Yamaha ELS-03          # 表示名（必須）
+  manufacturer: Yamaha         # メーカー名
+  model: ELS-03                # 型番
+  category: electone           # 機器カテゴリ（任意）
+  spec_source: https://jp.yamaha.com/files/download/other_assets/9/.../ELS-03_midi.pdf  # 公式マニュアル URL（任意）
+  spec: |
+    3段鍵盤（upper/lower/pedal）とフットペダルを持つエレクトーン。
+    MIDI チャンネル割り当て: upper=ch1, lower=ch2, pedal=ch3
+    エクスプレッション: CC#11（0x00–0x7F）
+    上鍵盤横揺れ: SysEx F0 43 70 70 40 5A [val] F7（0x00–0x7F）
+    テンポ: SysEx F0 43 ... [lo][hi] F7、値 = (hi<<2)|((lo>>5)&0x03)
+    octave_offset: -1（Yamaha 表記: C3 = note 60）
+```
+
+| フィールド | 必須 | 内容 |
+|---|---|---|
+| `name` | ✅ | GUI での表示名 |
+| `manufacturer` | ❌ | メーカー名 |
+| `model` | ❌ | 型番 |
+| `category` | ❌ | 機器の種別（任意の文字列） |
+| `spec_source` | ❌ | 元の仕様書の **URL**（公式メーカーサイト・サービスマニュアル公開ページ等）。ローカルファイルパスは不可。省略時は `spec` のみで運用する |
+| `spec` | ❌ | 楽器の MIDI 仕様を AI が参照できる形式でまとめた自由テキスト。AI がデバイス構成を生成した際に自動で書き込む |
+
+`spec_source` を URL に限定する理由：デバイス構成はコミュニティで配布されるファイルであるため、ローカルパスを記録すると受け取った側で参照が壊れる。公式公開 URL であれば誰でも同一の仕様書にアクセスできる。
+
+### spec フィールドの役割
+
+`spec` は AI エージェントがデバイスの意味を把握するためのコンテキストとして機能する。`direction` によって記述の性質が異なる。
+
+| direction | spec に書くべき内容 | 情報源 |
+|---|---|---|
+| `input`（楽器等） | 物理構造・操作方法・各操作で発生する MIDI 信号の対応 | メーカー公式マニュアル（`spec_source` URL）または口頭説明 |
+| `output`（アバター等） | 各パラメーターの視覚的効果・命名規則・ビット圧縮等の設計意図 | アバター制作者の仕様・自己記述 |
+
+- **デバイス構成を AI が生成した場合**: AI が仕様書・会話内容を解析した結果を自動で書き込む
+- **手動で作成した場合**: 空欄でも動作するが、AI に後から「このデバイス構成に合うマッパーを作って」と依頼する際の精度が向上する
+- **コミュニティ共有時**: spec が埋め込まれているため、受け取ったユーザーが AI に追加作業を依頼できる
+
+---
 
 ## direction フィールド
 

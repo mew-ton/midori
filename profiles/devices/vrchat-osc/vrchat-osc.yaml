@@ -1,15 +1,42 @@
-# VRChat OSC デバイス構成（双方向）
-#
-# VRChat はアバターパラメーターを OSC で送受信できる。
-#   送信（ブリッジ → VRChat）: host 127.0.0.1, port 9000
-#   受信（VRChat → ブリッジ）: host 127.0.0.1, port 9001
-#
-# VRChat OSC アドレス形式: /avatar/parameters/<ParameterName>
-#
-# VRChat アバターパラメーター型域:
-#   bool  : true / false
-#   int   : 0–255（byte サイズ）
-#   float : 0.0–1.0
+metadata:
+  name: VRChat エレクトーンアバター（汎用）
+  category: vrchat-avatar
+  spec: |
+    エレクトーン演奏を VRChat アバターに同期するための OSC パラメーター構成。
+    このデバイス構成に対応するアバターは、以下のパラメーター命名規則に従って制作されている前提。
+
+    ## 鍵盤パラメーター
+    upper_key_{note} / lower_key_{note} / pedal_key_{note}（bool）
+    打鍵状態を 1鍵ごとに bool で送信する。note は MIDI ノート番号（標準 C4=60）。
+    アバター側では対応する鍵盤キーのアニメーション（押下・復帰）に使用する。
+    - upper_key: 上鍵盤, note 36–96
+    - lower_key: 下鍵盤, note 36–96
+    - pedal_key: ペダル鍵盤, note 36–60
+
+    ## エクスプレッションパラメーター
+    UpperExpression / LowerExpression（float, 0.0–1.0）
+    右・左エクスプレッションペダルの踏み込み量。
+    アバター側では鍵盤アニメーションの勢い表現や、エフェクト（発光・揺れ等）の強度に使用する。
+    - UpperExpression: 右ペダル（エクスプレッション, CC#11）
+    - LowerExpression: 左ペダル（セカンドエクスプレッション, CC#4）
+
+    ## スライダーパラメーター（3bit ビット圧縮）
+    Slider{N}B0 / Slider{N}B1 / Slider{N}B2（bool × 3, N=1–9）
+    パネルスライダー 1本の位置（0–1 float）を 3bit（0–7 の 8段階）に量子化し、
+    B0（LSB）/ B1 / B2（MSB）の bool 3本で転送する。
+    アバター側で 3bit を復号して 8段階のアニメーション（フェーダーの位置等）に使用する。
+
+    ## 圧力パラメーター（3bit ビット圧縮 × 10スロット）
+    Pressure{N}B0 / Pressure{N}B1 / Pressure{N}B2（bool × 3, N=0–9）
+    押鍵中の鍵の圧力（ポリアフタータッチ）を、低音順に最大 10 キー分スロット割り当てして転送する。
+    各スロットの圧力 float を 3bit（0–7）に量子化し、B0(LSB)/B1/B2(MSB) の bool 3本で送信。
+    スロット割り当て: slot 0–4 = 下鍵盤の低音側 5鍵 / slot 5–9 = 上鍵盤の低音側 5鍵。
+    アバター側では指ごとの押し込み深さアニメーション等に使用する。
+
+    ## シーンインデックス（受信専用）
+    SceneIndex（int, 0–15）
+    VRChat 側のシーン切り替え（照明・背景等）状態をブリッジが受信するためのパラメーター。
+    アバター内の Animator Controller から送信される。ブリッジから VRChat への送信は行わない。
 
 direction: any
 

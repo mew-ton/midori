@@ -1,20 +1,101 @@
-# YAMAHA STAGEA ELS-03 シリーズ 入力デバイス構成
-# 対応モデル: ELS-03G / ELS-03X / ELS-03XR / ELS-03XF
-# MIDI モード: Electone-EL Mode
-#
-# 送信チャンネル（EL モード）:
-#   ch 1 : 上鍵盤 (UK)
-#   ch 2 : 下鍵盤 (LK)
-#   ch 3 : ペダル鍵盤 (PK)
-#   ch 15: キーボードパーカッション (KBP) — 未対応
-#   ch 16: コントロール（Expression CC#11, Program Change 等）
-#
-# SysEx フォーマット:
-#   EL Controller  : F0 43 70 70 40 <cc> <dd> F7  (Volume型: 00–7F / Switch型: 00=OFF, 7F=ON)
-#   Panel Switch   : F0 43 70 78 41 <cc> <dd> F7  (Switch型: 00=OFF, 01=ON)
-#
-# 注: ELS-03 は Note Off を Note On velocity=0（9nH, v=0）で送信する。
-#     MIDI ドライバーが 9nH,v=0 を noteOff として正規化することを前提とする。
+metadata:
+  name: Yamaha STAGEA ELS-03 シリーズ
+  manufacturer: Yamaha
+  model: ELS-03
+  category: electone
+  spec: |
+    Yamaha STAGEA ELS-03 シリーズ（ELS-03G / ELS-03X / ELS-03XR / ELS-03XF）の入力デバイス構成。
+    MIDI モード: Electone-EL Mode。octave_offset: -1（Yamaha 表記: C3 = note 60）。
+
+    ## 物理構造と操作
+
+    ### 鍵盤（3段）
+    上鍵盤（UK）と下鍵盤（LK）は手で演奏する通常の鍵盤。ペダル鍵盤（PK）は足で踏む鍵盤で、
+    床に配置されている。いずれもアコースティックピアノと同じく「押す＝Note On、離す＝Note Off」。
+    ELS-03 は Note Off を Note On velocity=0（9nH, v=0）で送信する。
+    MIDI ドライバーが 9nH,v=0 を noteOff として正規化することを前提とする。
+    - 上鍵盤: ch 1, note 48–96（C2–C6 Yamaha 表記）
+    - 下鍵盤: ch 2, note 36–96（C1–C6 Yamaha 表記）
+    - ペダル鍵盤: ch 3, note 36–60（C1–C3 Yamaha 表記）。非XFモデルは上限 note 55
+
+    ### 横タッチ（Horizontal Touch）
+    上・下鍵盤の各キーは水平方向（左右）に押し込むことができる。この入力で Pitch Bend が発生する。
+    これは鍵盤単位ではなく鍵盤全体（チャンネル単位）の値として送信される。
+    中央=0、左押し込み=負値、右押し込み=正値。ペダル鍵盤には横タッチ機構がない。
+    - 上鍵盤横タッチ: Pitch Bend ch 1（-8192–8191 → -1–1 に正規化）
+    - 下鍵盤横タッチ: Pitch Bend ch 2（同上）
+
+    ### アフタータッチ（押し込み）
+    鍵盤を押した後にさらに強く押し込む操作で連続値を送信する。
+    Channel Aftertouch（鍵盤全体の押し込み強度）と Polyphonic Aftertouch（キー単位の押し込み強度）の
+    2種類があり、エレクトーン側の設定でどちらを使うか選択できる。ただしこの選択設定自体は MIDI に
+    反映されない。送信される MIDI メッセージは両方か Channel のみかを、システムレベルで設定する。
+    - Polyphonic Aftertouch: 各鍵盤チャンネル（キー単位）
+    - Channel Aftertouch: 各鍵盤チャンネル（鍵盤全体）
+
+    ### エクスプレッションペダル
+    足元に2本並んでいるペダル。どちらもボリュームやエフェクトの調整に使う連続値ペダル。
+    物理構造の違い：右ペダルは離しても踏み込んだ位置を維持する（値を保持）。
+    左ペダルは離すと常に中央位置に戻る（バネで自動復帰）。
+    左ペダル = セカンドエクスプレッション。
+    - エクスプレッション（右）: CC#11 on ch 16（0x00–0x7F → 0–1 に正規化）
+    - セカンドエクスプレッション（左）: CC#4 on ch 16（同上）
+
+    ### フット/ニースイッチ
+    足や膝で操作する ON/OFF スイッチ。踏む/当てる=ON、離す=OFF。
+    - 左フットスイッチ: EL Controller SysEx cc=0x45（dd: 0x00=OFF, 0x7F=ON）
+    - 右フットスイッチ: EL Controller SysEx cc=0x46（同上）
+    - ニーレバー: EL Controller SysEx cc=0x47（同上）
+      右膝付近に設置されたレバー。3つの状態を持つ：
+        1. 常時 ON（ロック）: レバーを左に倒してロックすると、右膝に干渉しない位置に固定され常時 ON になる
+        2. OFF（待機）: レバーを立てた状態。右膝の右側に位置し、膝が触れていない = OFF
+        3. ON（演奏中）: 右膝を右に倒してレバーを押し込む = ON
+      サスティンのリアルタイム ON/OFF に使われることが多い。
+
+    ### サステイン
+    鍵盤を離しても音を伸ばし続ける設定。パネル上のボタンで ON/OFF する。
+    ピアノのダンパーペダルに相当する機能だが、ELS-03 ではパネル操作であり演奏中に頻繁に切り替える
+    性質のものではない。
+    - 上鍵盤サステイン: Panel Switch SysEx cc=0x50（dd: 0x00=OFF, 0x01=ON）
+    - 下鍵盤サステイン: Panel Switch SysEx cc=0x51（同上）
+    - ペダルサステイン: Panel Switch SysEx cc=0x52（同上）
+
+    ### レジストレーション
+    音色・音量・エフェクトなどの設定セット（レジスト）を瞬時に切り替えるボタン群。
+    1–16 番まであり、演奏中に曲の場面に応じて手動で切り替える。
+    エレクトーンにはシーケンス設定によるレジストの自動切り替え機能があるが、この自動切り替えは
+    MIDI に反映されない。MIDI に送信されるのは手動操作による切り替えのみ。
+    - Program Change on ch 16（0x00–0x0F → Reg 1–16）
+
+    ### テンポ
+    内蔵リズムの BPM を示す。リズム再生中にテンポを変更すると送信される。
+    - EL Controller SysEx（2バイトエンコード）: F0 43 70 70 40 0x50 TL TH F7（40–280 BPM）
+    - デコード: tempo = (TH << 2) | ((TL >> 5) & 0x03)
+
+    ### リズムスタート/ストップ・小節信号
+    内蔵リズムパターンの再生制御。スタートボタン押下でリズムが始まり、各小節頭に信号が来る。
+    - リズムスタート: MIDI Real-Time 0xFA（pulser）
+    - リズムストップ: MIDI Real-Time 0xFC（pulser）
+    - 小節信号: SysEx F0 43 70 70 78 0x00 0x00 0xF7（各小節の先頭で送信、pulser）
+
+    ### リズムシーケンス
+    リズムパターンの変奏（バリエーション）を切り替えるボタン。曲中の盛り上がりや場面転換に使う。
+    - SEQ 1–4: Panel Switch SysEx cc=0x61–0x64（dd: 0x00=OFF, 0x01=ON）
+
+    ### ロータリースピーカー
+    スピーカーが回転するエフェクトの ON/OFF。オルガンの「レスリースピーカー」に相当。
+    - Panel Switch SysEx cc=0x60（dd: 0x00=OFF, 0x01=ON）
+
+    ### スライダー
+    パネル上の縦型フェーダー（スライダー）×9本。各パートの音量や他のパラメーターにアサインして使う。
+    上に動かすほど値が大きくなる。
+    - スライダー 1–9: EL Controller SysEx cc=0x51–0x59（dd: 0x00–0x7F → 0–1 に正規化）
+
+    ## SysEx フォーマット概要
+    EL Controller: F0 43 70 70 40 <cc> <dd> F7
+      Volume型 dd = 0x00–0x7F / Switch型 dd = 0x00(OFF), 0x7F(ON)
+    Panel Switch: F0 43 70 78 41 <cc> <dd> F7
+      Switch型 dd = 0x00(OFF), 0x01(ON)
 
 direction: input
 
