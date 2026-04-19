@@ -115,46 +115,7 @@ inputs:
 
 ## GUI
 
-### プラグイン管理画面
-
-ダッシュボードまたは設定画面からアクセスできる。
-
-```
-┌────────────────────────────────────────────────────────┐
-│ プラグイン                              [ + 追加 ]     │
-│                                                        │
-│ ┌──────────────────────────────────────────────────┐  │
-│ │ Yamaha STAGEA ELS-03        v1.0.0  @yamaha-els03 │  │
-│ │ devices: yamaha-els03.yaml                        │  │
-│ │                           [ 更新 ]  [ 削除 ]      │  │
-│ └──────────────────────────────────────────────────┘  │
-│                                                        │
-│ ┌──────────────────────────────────────────────────┐  │
-│ │ VRChat Generic Avatar       v0.3.0  @vrchat-generic│ │
-│ │ devices: vrchat-generic.yaml                      │  │
-│ │                           [ 更新 ]  [ 削除 ]      │  │
-│ └──────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────┘
-```
-
-### プラグイン追加フロー
-
-```
-[ + 追加 ] 押下
-  ↓
-URL 入力ダイアログ
-  [ https://github.com/someone/midori-yamaha-els03 ]
-  [ キャンセル ]  [ 次へ ]
-  ↓
-プレビュー（マニフェスト取得後）
-  名前: Yamaha STAGEA ELS-03
-  提供するデバイス構成:
-    - devices/yamaha-els03.yaml
-  [ キャンセル ]  [ インストール ]
-  ↓
-インストール完了
-  → デバイス構成セレクターにプラグイン由来のファイルが表示される
-```
+プラグイン管理は **Preferences 設定画面のプラグインタブ** に統合されている。UI 仕様の詳細は [`07-ui-ux.md`](../design/07-ui-ux.md) の Preferences 設定画面セクションを参照。
 
 ### デバイス構成セレクターでの表示
 
@@ -165,7 +126,7 @@ URL 入力ダイアログ
   ▼ マイデバイス
       my-custom.yaml
   ▼ yamaha-els03 プラグイン
-      yamaha-els03.yaml
+      @yamaha-els03/devices/yamaha-els03.yaml
   ▼ vrchat-generic プラグイン
-      vrchat-generic.yaml
+      @vrchat-generic/devices/vrchat-generic.yaml
 ```
