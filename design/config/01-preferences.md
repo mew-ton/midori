@@ -22,6 +22,12 @@ recent:
   devices: []             # 最近編集したデバイス構成のパス一覧（最大 10 件）
   mappers: []             # 最近編集した変換グラフのパス一覧（最大 10 件）
 
+device_preview:           # デバイス構成編集画面のプレビュータブ用テスト接続キャッシュ
+  # "devices/yamaha-els03.yaml":
+  #   connection:
+  #     type: midi
+  #     device_name: "ELS-03 Series"
+
 ai:
   provider: claude        # claude | openai | ollama（デフォルト: claude）
   model: claude-opus-4-6  # 省略時はプロバイダーのデフォルト
@@ -65,6 +71,7 @@ ai:
 | `recent.profiles` | ❌ | `[]` | 最近使用したプロファイルのパス。GUI が自動更新する |
 | `recent.devices` | ❌ | `[]` | 最近編集したデバイス構成のパス。GUI が自動更新する |
 | `recent.mappers` | ❌ | `[]` | 最近編集した変換グラフのパス。GUI が自動更新する |
+| `device_preview` | ❌ | `{}` | デバイス構成ファイルパスをキーとしたテスト接続設定のキャッシュ。プレビュータブで使用 |
 | `ai.provider` | ❌ | `claude` | AI プロバイダー |
 | `ai.model` | ❌ | プロバイダーデフォルト | 使用するモデル名 |
 | `ai.*.api_key_env` | ❌ | — | API キーを保持する環境変数名。値そのものは保存しない |

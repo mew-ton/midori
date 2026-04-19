@@ -492,13 +492,20 @@ keyboard（ref: upper）
 
 ### Preview / Monitor のデータフロー
 
+layout は2箇所で使用される。
+
+| 使用箇所 | タブ | 内容 |
+|---|---|---|
+| デバイス構成編集画面 | プレビュータブ | デバッグ用。テスト接続設定でブリッジを起動してリアルタイム確認 |
+| プロファイル詳細画面 | プレビュータブ | プロファイル実行中の全入力デバイスを一覧表示 |
+
 ```
 Runtime（stdout）
-└── {"type":"device-state","direction":"input","component":"upper","note":60,"value_name":"pressed","value":true}
-      │ IPC
+└── {"type":"device-state","direction":"input","device":"yamaha-els03","component":"upper","note":60,"value_name":"pressed","value":true}
+      │ SSE
       ▼
-Electron レンダラー > デバイス構成 Editor > Preview / Monitor タブ
-└── direction でフィルタ → component + note + value_name でコンポーネントを特定して状態を更新
+Electron レンダラー
+└── device + direction でフィルタ → component + note + value_name でコンポーネントを特定して状態を更新
 ```
 
 Runtime 停止中はレイアウトの静的確認のみ。リアルタイム応答は Runtime 起動後。

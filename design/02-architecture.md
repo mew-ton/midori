@@ -83,13 +83,11 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 
 | 層 | 初回実装 | 将来の拡張例 |
 |---|---|---|
-| 入力ドライバー | `midi` | `osc`, `ble-heart-rate`, `keyboard` |
-| デバイス構成（入力） | MIDI binding 構文 | ドライバーごとに追加 |
+| 入力ドライバー | `midi`, `osc`, `osc-vrchat` | `ble-heart-rate`, `keyboard` 等 |
+| デバイス構成（入力） | MIDI / OSC / osc-vrchat binding 構文 | ドライバーごとに追加 |
 | 変換グラフ | 宣言的トランスフォームグラフ | — |
-| デバイス構成（出力） | OSC binding 構文 | MIDI 出力等 |
-| 出力ドライバー | `udp`（OSC） | `websocket`, `serial`, `midi` |
-
-`driver` / `transport` フィールドを最初から持たせ、初回は `midi` / `udp` だけ実装する。
+| デバイス構成（出力） | MIDI / OSC / osc-vrchat binding 構文 | 追加ドライバーごとに追加 |
+| 出力ドライバー | `udp`（OSC）, `midi` | `websocket`, `serial` 等 |
 
 ---
 
