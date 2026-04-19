@@ -18,6 +18,9 @@
 | binding の `to.target` が definition に存在しないパスを参照している | Layer 2 / Layer 4 |
 | 変換グラフ の接続ポートの型が不一致 | Layer 3 |
 | 変換グラフ が参照する `input_devices` / `output_devices` のファイルが存在しない | Layer 3 |
+| 変換グラフにサイクル（循環接続）が存在する | Layer 3 |
+| 変換グラフの `input_devices` / `output_devices` のキーがプロファイルの `inputs[].id` / `outputs[].id` と一致しない | Layer 3 |
+| プロファイルの `inputs[].id` / `outputs[].id` に重複がある | プロファイル読み込み |
 | `direction: output` のデバイス構成をプロファイルの入力側に設定している | Layer 2 |
 | `direction: input` のデバイス構成をプロファイルの出力側に設定している | Layer 4 |
 
@@ -25,6 +28,22 @@
 
 ```json
 {"type":"log","level":"error","layer":"device-profile/input","message":"unknown target path: upper.999.pressed"}
+```
+
+---
+
+## 起動時警告
+
+パイプラインは起動するが、設定の意図と実際の構成が食い違っている可能性をログに出力する。
+
+| 例 | 検出層 |
+|---|---|
+| 変換グラフの `input_devices` / `output_devices` がプロファイルの実デバイスファイルと一致しない（互換コンポーネント ID が存在すれば動作は続行） | Layer 3 |
+
+ログ出力例：
+
+```json
+{"type":"log","level":"warn","layer":"mapper","message":"mapper was authored for devices/yamaha-els03.yaml but profile uses devices/generic-midi.yaml"}
 ```
 
 ---
@@ -65,7 +84,7 @@
 ランタイムエラーは通常の `log` イベントに加え、経路の可視化用に `error-path` イベントを出力する。
 
 ```json
-{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":["upper.60.velocity"],"components":[{"direction":"output","component":"upper","note":60,"value_name":"velocity"}]}
+{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":["upper.60.velocity"],"components":[{"direction":"output","device":"vrchat-default","component":"upper","note":60,"value_name":"velocity"}]}
 ```
 
 GUI はこのイベントを受け取り、該当する要素に `data-error="1"` を付与する。

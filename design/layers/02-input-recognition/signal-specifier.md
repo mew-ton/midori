@@ -50,6 +50,7 @@ definition の構成から決まるパス文字列。component id・note（keybo
 
 | チェック | エラー |
 |---|---|
+| `device_id` が mapper の `input_devices` / `output_devices` に存在しない | エラー |
 | `component_id` が definition に存在しない | エラー |
 | `value_name` が当該 component の primitive / additionals に存在しない | エラー |
 | keyboard 以外のコンポーネントに note セグメントを使った | エラー |
@@ -61,51 +62,22 @@ definition の構成から決まるパス文字列。component id・note（keybo
 
 ## 変換グラフにおけるポート記法
 
-変換グラフでは、どのデバイスの Signal 指定子かを示すために `input.` / `output.` プレフィックスを付ける。
+変換グラフでは、どのデバイスの Signal 指定子かを示すために `input.<device_id>.` / `output.<device_id>.` プレフィックスを付ける。`<device_id>` は mapper の `input_devices` / `output_devices` のキー（= プロファイルの `inputs[].id` / `outputs[].id`）。
 
 ```
-input.<Signal 指定子>    # 入力デバイス構成の ComponentState ポート
-output.<Signal 指定子>   # 出力デバイス構成の Signal ポート
+input.<device_id>.<Signal 指定子>    # 入力デバイス構成の ComponentState ポート
+output.<device_id>.<Signal 指定子>  # 出力デバイス構成の Signal ポート
 ```
 
 ```yaml
 # 例
-- from: input.upper.{note}.pressed      # 入力デバイスの upper.{note}.pressed
-  to:   output.upper.{note}.pressed     # 出力デバイスの upper.{note}.pressed
+- from: input.yamaha-els03.upper.{note}.pressed
+  to:   output.vrchat-default.upper.{note}.pressed
 
-- from: input.upper.*.velocity          # 入力デバイスの全キー velocity（float[]）
+- from: input.yamaha-els03.upper.*.velocity   # 全キー velocity（float[]）
   to:   vel_pack.value
 ```
 
 ---
 
-## binding における使用
-
-### binding.input（`to.target`）
-
-```yaml
-binding:
-  input:
-    driver: midi
-    mappings:
-      - from:
-          channel: 1
-          type: noteOn
-        to:
-          target: upper.{note}.pressed   # ← Signal 指定子
-          set: 1
-```
-
-### binding.output（`from.target`）
-
-```yaml
-binding:
-  output:
-    driver: osc
-    mappings:
-      - from:
-          target: upper.{note}.pressed   # ← Signal 指定子（変換グラフの Output Block ポートと一致）
-        to:
-          address: /avatar/parameters/upper_key_{note}
-          type: bool
-```
+binding での使用例（`to.target` / `from.target`）→ [config/02-device-config.md#binding-セクション](../../config/02-device-config.md#binding-セクション)

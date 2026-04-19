@@ -38,6 +38,8 @@
 
 **`9nH velocity=0` の正規化**: MIDI 仕様では Note On メッセージ（`9nH`）の velocity が 0 の場合は Note Off として扱う。MIDI ドライバーはこれを `noteOff` として正規化して上位層に渡す。binding では `type: noteOff` として記述すればよい。
 
+**`key_range` 外ノートの扱い**: `noteOn` / `noteOff` / `polyAftertouch` を受信した際、マッチした binding の `to.target` が参照する keyboard コンポーネントの `key_range` に含まれない note 番号はシステム内部でスキップする。エラーにも警告にもならない。
+
 `set` を省略した場合、デフォルト値が自動的に使われる。`setMap.linear` も省略した場合は上記デフォルトの値域で target の range へ線形マッピングされる。
 
 `set: pulse` を指定した場合、値の書き込みは行わず target を瞬間トリガーする。状態を持たないイベント（Real-Time メッセージ、Bar Signal など）に使用する。

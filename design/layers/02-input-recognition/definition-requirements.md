@@ -27,16 +27,4 @@ component type の一覧・primitive value・additionals の仕様 → [config/0
 
 ---
 
-## key_range 音名記法
-
-```
-フォーマット: <音名><オクターブ>
-音名: c / c# / db / d / d# / eb / e / f / f# / gb / g / g# / ab / a / a# / bb / b
-オクターブ: -1 〜 9
-
-例: c4（Middle C）, a4（A440）, f#3, bb2
-```
-
-note と key（音名）が矛盾する場合は note 番号を正とする。
-
-`octave_offset` の仕様（システム基準・補正テーブル）は [デバイス構成](../../config/02-device-config.md#octave_offset) を参照。
+`key_range` 音名記法・`octave_offset` 仕様 → [config/02-device-config.md#definition-セクション](../../config/02-device-config.md#definition-セクション)

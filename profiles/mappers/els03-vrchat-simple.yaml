@@ -14,10 +14,10 @@
 #   to_bits（bits: 3）で float [0,1] を 0–7 の 8段階に量子化してビット分解。
 
 input_devices:
-  - devices/yamaha-els03/yamaha-els03.yaml
+  yamaha-els03: devices/yamaha-els03/yamaha-els03.yaml
 
 output_devices:
-  - devices/vrchat-osc/vrchat-osc.yaml
+  vrchat-osc: devices/vrchat-osc/vrchat-osc.yaml
 
 graph:
   nodes:
@@ -152,35 +152,35 @@ graph:
     # ----------------------------------------------------------
 
     # 上鍵盤: ELS-03 note 48–96（Yamaha C2–C6）
-    - from: input.upper.{note}.pressed
-      to:   output.upper_key.{note}.pressed
+    - from: input.yamaha-els03.upper.{note}.pressed
+      to:   output.vrchat-osc.upper_key.{note}.pressed
 
     # 下鍵盤: ELS-03 note 36–96（Yamaha C1–C6）
-    - from: input.lower.{note}.pressed
-      to:   output.lower_key.{note}.pressed
+    - from: input.yamaha-els03.lower.{note}.pressed
+      to:   output.vrchat-osc.lower_key.{note}.pressed
 
     # ペダル鍵盤: ELS-03 note 36–60（Yamaha C1–C3）
-    - from: input.pedal.{note}.pressed
-      to:   output.pedal_key.{note}.pressed
+    - from: input.yamaha-els03.pedal.{note}.pressed
+      to:   output.vrchat-osc.pedal_key.{note}.pressed
 
     # ----------------------------------------------------------
     # エクスプレッションペダル（直結）
     # ----------------------------------------------------------
 
-    - from: input.expression.value
-      to:   output.expression.value
+    - from: input.yamaha-els03.expression.value
+      to:   output.vrchat-osc.expression.value
 
-    - from: input.expression_2.value
-      to:   output.expression_2.value
+    - from: input.yamaha-els03.expression_2.value
+      to:   output.vrchat-osc.expression_2.value
 
     # ----------------------------------------------------------
     # ポリアフタータッチ: array_merge → compact → take → flatten → defaults → to_bits
     # ----------------------------------------------------------
 
     # lower / upper の pressure を結合
-    - from: input.lower.*.pressure
+    - from: input.yamaha-els03.lower.*.pressure
       to:   pressure_merge.in_0
-    - from: input.upper.*.pressure
+    - from: input.yamaha-els03.upper.*.pressure
       to:   pressure_merge.in_1
 
     # null をオミット → 先頭 10 要素 → 個別ポートに展開
@@ -244,156 +244,156 @@ graph:
 
     # to_bits → output（slot 0–9）
     - from: pressure_0_bits.bit_0
-      to:   output.pressure_0_b0.pressed
+      to:   output.vrchat-osc.pressure_0_b0.pressed
     - from: pressure_0_bits.bit_1
-      to:   output.pressure_0_b1.pressed
+      to:   output.vrchat-osc.pressure_0_b1.pressed
     - from: pressure_0_bits.bit_2
-      to:   output.pressure_0_b2.pressed
+      to:   output.vrchat-osc.pressure_0_b2.pressed
 
     - from: pressure_1_bits.bit_0
-      to:   output.pressure_1_b0.pressed
+      to:   output.vrchat-osc.pressure_1_b0.pressed
     - from: pressure_1_bits.bit_1
-      to:   output.pressure_1_b1.pressed
+      to:   output.vrchat-osc.pressure_1_b1.pressed
     - from: pressure_1_bits.bit_2
-      to:   output.pressure_1_b2.pressed
+      to:   output.vrchat-osc.pressure_1_b2.pressed
 
     - from: pressure_2_bits.bit_0
-      to:   output.pressure_2_b0.pressed
+      to:   output.vrchat-osc.pressure_2_b0.pressed
     - from: pressure_2_bits.bit_1
-      to:   output.pressure_2_b1.pressed
+      to:   output.vrchat-osc.pressure_2_b1.pressed
     - from: pressure_2_bits.bit_2
-      to:   output.pressure_2_b2.pressed
+      to:   output.vrchat-osc.pressure_2_b2.pressed
 
     - from: pressure_3_bits.bit_0
-      to:   output.pressure_3_b0.pressed
+      to:   output.vrchat-osc.pressure_3_b0.pressed
     - from: pressure_3_bits.bit_1
-      to:   output.pressure_3_b1.pressed
+      to:   output.vrchat-osc.pressure_3_b1.pressed
     - from: pressure_3_bits.bit_2
-      to:   output.pressure_3_b2.pressed
+      to:   output.vrchat-osc.pressure_3_b2.pressed
 
     - from: pressure_4_bits.bit_0
-      to:   output.pressure_4_b0.pressed
+      to:   output.vrchat-osc.pressure_4_b0.pressed
     - from: pressure_4_bits.bit_1
-      to:   output.pressure_4_b1.pressed
+      to:   output.vrchat-osc.pressure_4_b1.pressed
     - from: pressure_4_bits.bit_2
-      to:   output.pressure_4_b2.pressed
+      to:   output.vrchat-osc.pressure_4_b2.pressed
 
     - from: pressure_5_bits.bit_0
-      to:   output.pressure_5_b0.pressed
+      to:   output.vrchat-osc.pressure_5_b0.pressed
     - from: pressure_5_bits.bit_1
-      to:   output.pressure_5_b1.pressed
+      to:   output.vrchat-osc.pressure_5_b1.pressed
     - from: pressure_5_bits.bit_2
-      to:   output.pressure_5_b2.pressed
+      to:   output.vrchat-osc.pressure_5_b2.pressed
 
     - from: pressure_6_bits.bit_0
-      to:   output.pressure_6_b0.pressed
+      to:   output.vrchat-osc.pressure_6_b0.pressed
     - from: pressure_6_bits.bit_1
-      to:   output.pressure_6_b1.pressed
+      to:   output.vrchat-osc.pressure_6_b1.pressed
     - from: pressure_6_bits.bit_2
-      to:   output.pressure_6_b2.pressed
+      to:   output.vrchat-osc.pressure_6_b2.pressed
 
     - from: pressure_7_bits.bit_0
-      to:   output.pressure_7_b0.pressed
+      to:   output.vrchat-osc.pressure_7_b0.pressed
     - from: pressure_7_bits.bit_1
-      to:   output.pressure_7_b1.pressed
+      to:   output.vrchat-osc.pressure_7_b1.pressed
     - from: pressure_7_bits.bit_2
-      to:   output.pressure_7_b2.pressed
+      to:   output.vrchat-osc.pressure_7_b2.pressed
 
     - from: pressure_8_bits.bit_0
-      to:   output.pressure_8_b0.pressed
+      to:   output.vrchat-osc.pressure_8_b0.pressed
     - from: pressure_8_bits.bit_1
-      to:   output.pressure_8_b1.pressed
+      to:   output.vrchat-osc.pressure_8_b1.pressed
     - from: pressure_8_bits.bit_2
-      to:   output.pressure_8_b2.pressed
+      to:   output.vrchat-osc.pressure_8_b2.pressed
 
     - from: pressure_9_bits.bit_0
-      to:   output.pressure_9_b0.pressed
+      to:   output.vrchat-osc.pressure_9_b0.pressed
     - from: pressure_9_bits.bit_1
-      to:   output.pressure_9_b1.pressed
+      to:   output.vrchat-osc.pressure_9_b1.pressed
     - from: pressure_9_bits.bit_2
-      to:   output.pressure_9_b2.pressed
+      to:   output.vrchat-osc.pressure_9_b2.pressed
 
     # ----------------------------------------------------------
     # スライダー 1–9（float → 3bit）
     # ----------------------------------------------------------
 
-    - from: input.slider_1.value
+    - from: input.yamaha-els03.slider_1.value
       to:   slider_1_bits.in
     - from: slider_1_bits.bit_0
-      to:   output.slider_1_b0.pressed
+      to:   output.vrchat-osc.slider_1_b0.pressed
     - from: slider_1_bits.bit_1
-      to:   output.slider_1_b1.pressed
+      to:   output.vrchat-osc.slider_1_b1.pressed
     - from: slider_1_bits.bit_2
-      to:   output.slider_1_b2.pressed
+      to:   output.vrchat-osc.slider_1_b2.pressed
 
-    - from: input.slider_2.value
+    - from: input.yamaha-els03.slider_2.value
       to:   slider_2_bits.in
     - from: slider_2_bits.bit_0
-      to:   output.slider_2_b0.pressed
+      to:   output.vrchat-osc.slider_2_b0.pressed
     - from: slider_2_bits.bit_1
-      to:   output.slider_2_b1.pressed
+      to:   output.vrchat-osc.slider_2_b1.pressed
     - from: slider_2_bits.bit_2
-      to:   output.slider_2_b2.pressed
+      to:   output.vrchat-osc.slider_2_b2.pressed
 
-    - from: input.slider_3.value
+    - from: input.yamaha-els03.slider_3.value
       to:   slider_3_bits.in
     - from: slider_3_bits.bit_0
-      to:   output.slider_3_b0.pressed
+      to:   output.vrchat-osc.slider_3_b0.pressed
     - from: slider_3_bits.bit_1
-      to:   output.slider_3_b1.pressed
+      to:   output.vrchat-osc.slider_3_b1.pressed
     - from: slider_3_bits.bit_2
-      to:   output.slider_3_b2.pressed
+      to:   output.vrchat-osc.slider_3_b2.pressed
 
-    - from: input.slider_4.value
+    - from: input.yamaha-els03.slider_4.value
       to:   slider_4_bits.in
     - from: slider_4_bits.bit_0
-      to:   output.slider_4_b0.pressed
+      to:   output.vrchat-osc.slider_4_b0.pressed
     - from: slider_4_bits.bit_1
-      to:   output.slider_4_b1.pressed
+      to:   output.vrchat-osc.slider_4_b1.pressed
     - from: slider_4_bits.bit_2
-      to:   output.slider_4_b2.pressed
+      to:   output.vrchat-osc.slider_4_b2.pressed
 
-    - from: input.slider_5.value
+    - from: input.yamaha-els03.slider_5.value
       to:   slider_5_bits.in
     - from: slider_5_bits.bit_0
-      to:   output.slider_5_b0.pressed
+      to:   output.vrchat-osc.slider_5_b0.pressed
     - from: slider_5_bits.bit_1
-      to:   output.slider_5_b1.pressed
+      to:   output.vrchat-osc.slider_5_b1.pressed
     - from: slider_5_bits.bit_2
-      to:   output.slider_5_b2.pressed
+      to:   output.vrchat-osc.slider_5_b2.pressed
 
-    - from: input.slider_6.value
+    - from: input.yamaha-els03.slider_6.value
       to:   slider_6_bits.in
     - from: slider_6_bits.bit_0
-      to:   output.slider_6_b0.pressed
+      to:   output.vrchat-osc.slider_6_b0.pressed
     - from: slider_6_bits.bit_1
-      to:   output.slider_6_b1.pressed
+      to:   output.vrchat-osc.slider_6_b1.pressed
     - from: slider_6_bits.bit_2
-      to:   output.slider_6_b2.pressed
+      to:   output.vrchat-osc.slider_6_b2.pressed
 
-    - from: input.slider_7.value
+    - from: input.yamaha-els03.slider_7.value
       to:   slider_7_bits.in
     - from: slider_7_bits.bit_0
-      to:   output.slider_7_b0.pressed
+      to:   output.vrchat-osc.slider_7_b0.pressed
     - from: slider_7_bits.bit_1
-      to:   output.slider_7_b1.pressed
+      to:   output.vrchat-osc.slider_7_b1.pressed
     - from: slider_7_bits.bit_2
-      to:   output.slider_7_b2.pressed
+      to:   output.vrchat-osc.slider_7_b2.pressed
 
-    - from: input.slider_8.value
+    - from: input.yamaha-els03.slider_8.value
       to:   slider_8_bits.in
     - from: slider_8_bits.bit_0
-      to:   output.slider_8_b0.pressed
+      to:   output.vrchat-osc.slider_8_b0.pressed
     - from: slider_8_bits.bit_1
-      to:   output.slider_8_b1.pressed
+      to:   output.vrchat-osc.slider_8_b1.pressed
     - from: slider_8_bits.bit_2
-      to:   output.slider_8_b2.pressed
+      to:   output.vrchat-osc.slider_8_b2.pressed
 
-    - from: input.slider_9.value
+    - from: input.yamaha-els03.slider_9.value
       to:   slider_9_bits.in
     - from: slider_9_bits.bit_0
-      to:   output.slider_9_b0.pressed
+      to:   output.vrchat-osc.slider_9_b0.pressed
     - from: slider_9_bits.bit_1
-      to:   output.slider_9_b1.pressed
+      to:   output.vrchat-osc.slider_9_b1.pressed
     - from: slider_9_bits.bit_2
-      to:   output.slider_9_b2.pressed
+      to:   output.vrchat-osc.slider_9_b2.pressed

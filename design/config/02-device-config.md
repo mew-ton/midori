@@ -68,6 +68,8 @@ direction: input   # input | output | any（省略時）
 
 `direction: input` と宣言したファイルをプロファイルの出力側に設定した場合は起動時エラーとなる。逆も同様。
 
+`direction: any` のファイルは、同一プロファイル内で `input.device` と `output.device` の両方に同一ファイルを指定することができる（双方向 MIDI 機器など）。その場合、`binding.input` と `binding.output` が同一ファイルに共存する。
+
 ---
 
 ## セクションの役割
@@ -386,6 +388,7 @@ setMap:
 逆写像が導出できないケース（いずれもエラー）：
 
 - ドライバーが input をサポートしていない
+- `binding.input` と `binding.output` のドライバーが異なる（例: input が `midi`、output が `osc`）。逆写像はドライバーが一致する場合にのみ導出できる
 - 同一 `to.target` に**異種のイベント**が複数の入力経路を持つ（例: CC と SysEx の両方が同じ target を更新）。noteOn / noteOff のように対称なペアは「複数入力経路」ではなく「ペア」として扱われ、逆写像が導出できる
 - `setMap.map` を使っている（物理値域 → 論理値の多対一マッピングが通常であり、原則として逆写像不可。全単射の map のみ例外的に可だが実用上ほぼ存在しない）
 - `set: { expr: ... }` を使っている（式の逆関数は自動導出不可）

@@ -30,16 +30,18 @@ OPTIONS:
 
 ### device-state（Layer 2 / Layer 4 共通）
 
-入力・出力ともに同一フォーマット。`direction` フィールドで区別する。
+入力・出力ともに同一フォーマット。`direction` と `device` フィールドで区別する。
 
 ```json
-{"type":"device-state","direction":"input", "component":"upper","note":60,"value_name":"pressed","value":true}
-{"type":"device-state","direction":"input", "component":"upper","note":60,"value_name":"velocity","value":0.8}
-{"type":"device-state","direction":"output","component":"upper","note":60,"value_name":"pressed","value":true}
-{"type":"device-state","direction":"output","component":"upper","note":60,"value_name":"velocity","value":0.8}
+{"type":"device-state","direction":"input", "device":"yamaha-els03","component":"upper","note":60,"value_name":"pressed","value":true}
+{"type":"device-state","direction":"input", "device":"yamaha-els03","component":"upper","note":60,"value_name":"velocity","value":0.8}
+{"type":"device-state","direction":"output","device":"vrchat-default","component":"upper","note":60,"value_name":"pressed","value":true}
+{"type":"device-state","direction":"output","device":"vrchat-default","component":"upper","note":60,"value_name":"velocity","value":0.8}
 ```
 
-GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `device-state` イベントを購読し、`direction` でフィルタリングする。
+`device` フィールドはプロファイルの `inputs[].id` / `outputs[].id` と一致する。GUI はこのフィールドを使って複数デバイスのどのコンポーネントを更新するかを特定する。
+
+GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `device-state` イベントを購読し、`direction` と `device` でフィルタリングする。
 
 ### raw-event
 
@@ -105,15 +107,15 @@ const es = new EventSource('/events')
 // 監視コンポーネント：device-state を受けて dataset を更新
 es.addEventListener('device-state', (e) => {
   const ev = JSON.parse(e.data)
-  const el = document.querySelector(`[data-component="${ev.component}"][data-note="${ev.note}"]`)
+  const el = document.querySelector(`[data-device="${ev.device}"][data-component="${ev.component}"][data-note="${ev.note}"]`)
   if (el) el.dataset[ev.value_name] = ev.value
 })
 
 // エラー経路の赤表示
 es.addEventListener('error-path', (e) => {
   const ev = JSON.parse(e.data)
-  ev.components.forEach(({ component, note }) => {
-    const el = document.querySelector(`[data-component="${component}"][data-note="${note}"]`)
+  ev.components.forEach(({ device, component, note }) => {
+    const el = document.querySelector(`[data-device="${device}"][data-component="${component}"][data-note="${note}"]`)
     if (el) el.dataset.error = "1"
   })
 })

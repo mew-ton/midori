@@ -7,21 +7,23 @@
 
 name: エレクトーン → VRChat
 
-input:
-  device: devices/yamaha-els03.yaml   # 入力デバイス構成ファイル
-  connection:
-    type: midi
-    device_name: "ELS-03 Series"      # 実機と部分一致でバインドされる
+inputs:
+  - id: yamaha-els03                    # 省略時はデバイスファイルのベース名から自動生成
+    device: devices/yamaha-els03.yaml   # 入力デバイス構成ファイル
+    connection:
+      type: midi
+      device_name: "ELS-03 Series"      # 実機と部分一致でバインドされる
 
-transform: mappers/my-avatar.yaml     # 変換グラフファイル
+transform: mappers/my-avatar.yaml       # 変換グラフファイル
 
-output:
-  device: devices/vrchat-default.yaml # 出力デバイス構成ファイル
-  connection:
-    type: osc-vrchat
-    host: 127.0.0.1
-    port: 9000
-    avatar_params: "C:/Users/.../OSC/.../Avatars/avtr_xxx.json"  # 任意
+outputs:
+  - id: vrchat-default                  # 省略時はデバイスファイルのベース名から自動生成
+    device: devices/vrchat-default.yaml # 出力デバイス構成ファイル
+    connection:
+      type: osc-vrchat
+      host: 127.0.0.1
+      port: 9000
+      avatar_params: "C:/Users/.../OSC/.../Avatars/avtr_xxx.json"  # 任意
 ```
 
 ## セクション
@@ -29,11 +31,15 @@ output:
 | セクション | 必須 | 内容 |
 |---|---|---|
 | `name` | ❌ | 表示名 |
-| `input.device` | ✅ | 使用する入力デバイス構成ファイルのパス |
-| `input.connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
+| `inputs` | ✅ | 入力デバイス構成と接続設定のリスト（1件以上） |
+| `inputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
+| `inputs[].device` | ✅ | 入力デバイス構成ファイルのパス |
+| `inputs[].connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
 | `transform` | ✅ | 使用する変換グラフファイルのパス |
-| `output.device` | ✅ | 使用する出力デバイス構成ファイルのパス |
-| `output.connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
+| `outputs` | ✅ | 出力デバイス構成と接続設定のリスト（1件以上） |
+| `outputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
+| `outputs[].device` | ✅ | 出力デバイス構成ファイルのパス |
+| `outputs[].connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
 
 ## connection の type 別フィールド
 
@@ -46,4 +52,20 @@ output:
 
 ## 接続のバリデーション
 
-プロファイル読み込み時、`device_name` 等で指定された該当ポート・デバイスが OS 上に存在しない場合はロードエラーとなる。動的な ID 解決などの複雑な抽象化は持たず、プロファイルが実環境の接続情報を直接宣言するシンプルな方式をとる。
+プロファイル読み込み時、`device_name` 等で指定された該当ポート・デバイスが OS 上に存在するかをデバイスごとに確認する。動的な ID 解決などの複雑な抽象化は持たず、プロファイルが実環境の接続情報を直接宣言するシンプルな方式をとる。
+
+接続確認の結果はデバイスごとに独立して扱う。
+
+| 状況 | 挙動 |
+|---|---|
+| 全デバイスが接続済み | ブリッジ起動可能 |
+| 一部デバイスが未接続 | 未接続デバイスを灰色表示。ブリッジ起動不可（全デバイス接続が前提） |
+| 全デバイスが未接続 | 同上 |
+
+デバイスが接続されると自動検出し、全デバイスが揃った時点で実行ボタンが有効になる。
+
+---
+
+## 実行の制約
+
+同時に実行できるプロファイルは **1つのみ**。

@@ -36,46 +36,4 @@
 | 10 | ブリッジ起動中は ComponentState をリアルタイムで描画に反映できること（Preview） | stdout JSON stream 経由で GUI が受け取る |
 | 11 | ブリッジ停止中は静的表示のみとすること | リアルタイム応答なし |
 
-## レイアウトモデル
-
-| プロパティ | 値 | 意味 |
-|---|---|---|
-| `direction` | `row` / `column` | 子要素の並び方向 |
-| `align` | `start` / `center` / `end` | 主軸方向の整列 |
-| `wrap` | `true` / `false` | 溢れた場合に折り返すか（デフォルト `false`） |
-| `color` | カラーコード等 | コンポーネントの表示色（省略可） |
-
-## サンプル
-
-```yaml
-layout:
-  direction: column
-  components:
-    # 鍵盤3段を縦に並べる
-    - ref: upper
-      color: "#4af"
-    - ref: lower
-      color: "#f84"
-    - ref: pedal
-
-    # エクスプレッション類を横に並べるグループ
-    - direction: row
-      align: start
-      components:
-        - ref: upper_expression
-        - ref: upper_sustain
-```
-
-## Preview のデータフロー
-
-```
-Runtime（stdout）
-└── {"type":"device-state","direction":"input",...}
-      │ IPC
-      ▼
-Electron メインプロセス
-      │ contextBridge
-      ▼
-デバイス構成 Editor（入力）> Preview タブ
-└── component + note + value_name でコンポーネントを特定し状態を更新
-```
+レイアウトモデル・サンプル・Preview データフロー → [config/02-device-config.md#layout-セクション](../../config/02-device-config.md#layout-セクション)

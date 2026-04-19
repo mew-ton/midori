@@ -55,13 +55,7 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 
 暗黙の型変換は行わない。異なる型のポートをつなぐには変換ノードを明示的に挟む。
 
-| 変換 | ノード |
-|---|---|
-| `float` → `bool` | `gate`（閾値で二値化） |
-| `bool` → `float` | `to_float`（false=0.0 / true=1.0） |
-| `float` → `bool[]` | `to_bits`（量子化してビット分解） |
-| `float[]` → 個別 `float` | `flatten` |
-| 個別 `float` → `float[]` | `collect` |
+型変換に使えるノード一覧 → [config/mapper-nodes/](../../config/mapper-nodes/)
 
 ノード一覧・接続記法（`{note}` / `*`）・設定 YAML 仕様 → [config/03-mapper.md](../../config/03-mapper.md)
 
@@ -88,7 +82,6 @@ ComponentState を Signal に変換する。入力値の条件フィルタリン
 
 ## 現時点で対応しないこと（将来拡張ポイント）
 
-- 時系列処理（直前の値との差分・スムージングなど）
 - 外部データ参照
 
 ## 設定仕様
