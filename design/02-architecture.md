@@ -33,7 +33,7 @@
        ▼               ▼
 ┌──────────────┐  ┌──────────────┐
 │ 出力ドライバー│  │ 出力ドライバー│  … (outputs の数だけ)
-│ transport:udp│  │ transport:udp│  raw I/O のみ。意味解釈なし
+│ transport:udp│  │transport:midi│  raw I/O のみ。意味解釈なし
 └──────────────┘  └──────────────┘
 ```
 
