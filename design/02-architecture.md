@@ -57,14 +57,14 @@ binding の方向だけが逆になる。
 
 ```
 GUI
-├── デバイス構成 Editor（入力）   definition / binding / layout を編集
-│     └── Preview タブ              type=device-state & direction=input をリアルタイム表示
-├── 変換グラフ Editor                   トランスフォームグラフを組み立てる
-├── デバイス構成 Editor（出力）   definition / binding / layout を編集
-│     └── Monitor タブ              type=device-state & direction=output をリアルタイム表示
-├── Preferences Editor              デバイス紐付けを設定する
-├── イベントログ                全イベント（raw-event / device-state / signal / log）を表示
-└── [ ▶ 実行 ] [ ■ 停止 ]           ブリッジプロセスを起動・終了する
+├── デバイス構成 Editor           definition / binding / layout を編集
+├── 変換グラフ Editor              入力ブロック・計算ノード・出力ブロックのノードグラフを編集
+├── プロファイル詳細
+│     ├── プレビュータブ          Preview（入力）/ Monitor（出力）のリアルタイム表示
+│     └── 設定タブ               入出力デバイス・変換グラフの紐付けを設定
+├── Preferences 設定画面          一般 / AI / プラグイン の設定
+├── イベントログ                  全イベント（raw-event / device-state / signal / log / error-path）を表示
+└── [ ▶ 実行 ] [ ■ 停止 ]         ブリッジプロセスを起動・終了する
 
          │ プロセス起動 / stdout JSON Lines
          ▼
@@ -75,7 +75,7 @@ GUI
 
 **GUI はブリッジの入出力に一切触れない。純粋な設定エディター + プロセスマネージャー。**
 
-Preview と Monitor は同一の `device-state` イベントを購読し、`direction` フィールドでフィルタリングする。
+Preview と Monitor は同一の `device-state` イベントを購読し、`direction` と `device` フィールドでフィルタリングする。
 
 ---
 
@@ -126,7 +126,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
     ├── devices/                     ← direction フィールドで入力・出力・両用を識別
     │   ├── yamaha-els03.yaml        ← direction: input
     │   ├── generic-midi.yaml        ← direction: any
-    │   └── vrchat-osc.yaml          ← direction: output
+    │   └── vrchat-osc.yaml          ← direction: any
     └── mappers/
         └── example.yaml
 ```

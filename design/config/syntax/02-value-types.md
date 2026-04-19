@@ -76,7 +76,7 @@ tick 内での評価順序・リセットタイミング → [timing.md](../../.
 
 - 例: スライダー `0~1`、ピッチベンド `-1~1`、テンポ `40~280`
 - `range: [A, B]` の端点は両端ともに **inclusive**（A 以上 B 以下）
-- `range` を超える値の扱い（clamp / wrap）は実装定義
+- `range` を超える値の扱いは `out_of_range` フィールドで制御する（`ignore` / `clamp` / `error`）。詳細は [config/00-component-types.md](../00-component-types.md)
 
 ### static_array\<T\> / dynamic_array\<T\>
 

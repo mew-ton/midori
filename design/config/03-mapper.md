@@ -24,7 +24,7 @@ output_devices:
 
 ```yaml
 graph:
-  nodes:      # 計算ノードの定義（Input / Output Block は自動生成のため不要）
+  nodes:      # 計算ノードの定義（入力ブロック / 出力ブロックは自動生成のため不要）
     - id: <node_id>
       type: <node_type>
       params: { ... }
@@ -42,8 +42,8 @@ graph:
 
 | 対象 | 記法 | 例 |
 |---|---|---|
-| Input Block のポート | `input.<device_id>.<Signal 指定子>` | `input.yamaha-els03.upper.{note}.pressed` |
-| Output Block のポート | `output.<device_id>.<Signal 指定子>` | `output.vrchat-default.upper.{note}.pressed` |
+| 入力ブロックのポート | `input.<device_id>.<Signal 指定子>` | `input.yamaha-els03.upper.{note}.pressed` |
+| 出力ブロックのポート | `output.<device_id>.<Signal 指定子>` | `output.vrchat-default.upper.{note}.pressed` |
 | 計算ノードの入力ポート | `<node_id>.in` | `scale_vel.in` |
 | 計算ノードの出力ポート | `<node_id>.out` | `scale_vel.out` |
 
@@ -139,7 +139,7 @@ graph:
 
 ## Signal の定義
 
-Output Block のポートは出力デバイス構成の Signal 指定子で命名する（例: `output.vrchat-default.upper.{note}.pressed`）。
+出力ブロックのポートは出力デバイス構成の Signal 指定子で命名する（例: `output.vrchat-default.upper.{note}.pressed`）。
 Signal のデータ型には `int` / `float` / `bool` / `pulse` / `static_array<T>` / `dynamic_array<T>` がある。
 出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
 
@@ -156,7 +156,7 @@ null がいつ発生するかはデバイス（Input Driver）が定義する。
 |---|---|
 | スカラー単入力ノードに null が入力された | 出力も null（処理しない） |
 | スカラー多入力ノードに null が入力された | 設定エラー。手前に `defaults` ノードを挟んで対処する |
-| Output Block のポートに null が届いた | 何も出力しない |
+| 出力ブロックのポートに null が届いた | 何も出力しない |
 
 `pulse` は常に `true` か `false` を発火するため null にならない。多入力ノードの `pulse` 入力ポートに `defaults` は不要。
 

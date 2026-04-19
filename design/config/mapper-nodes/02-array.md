@@ -67,9 +67,9 @@ nodes:
 
 connections:
   # pressure は押鍵中のみ非 null → static_array<float | null>
-  - from: input.lower.*.pressure
+  - from: input.yamaha-els03.lower.*.pressure
     to:   pressure_merge.in_0
-  - from: input.upper.*.pressure
+  - from: input.yamaha-els03.upper.*.pressure
     to:   pressure_merge.in_1
 
   # null をオミット（dynamic_array<float>）→ 先頭 10 要素の固定長配列に変換

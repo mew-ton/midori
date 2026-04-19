@@ -79,9 +79,8 @@ binding:
 |---|---|
 | ELS-03 チャンネルマップ | 実機確認が必要。判明後 `els03.yaml` の binding に反映 |
 | ELS-03 キー横傾きの MIDI 実装 | MPE / チャンネル PitchBend / SysEx のいずれかを実機確認で特定 |
-| 変換グラフ の複合ロジック | 和音検出・時系列処理は現時点で対応外。将来拡張ポイント |
+| 変換グラフ の複合ロジック | 和音検出は現時点で対応外。将来拡張ポイント |
 | OSCQuery 対応 | VRChat 起動中にアバターパラメーターをリアルタイム取得。初期実装はローカルファイル読み取りで代替 |
-| VRChat アバター config 参照 | `AppData/.../OSC/{userId}/Avatars/{avatarId}.json` をパースしてパラメーター補完に使う |
 | 追加入力ドライバー | `ble-heart-rate`, `keyboard`, `osc-input` など |
 | 追加出力ドライバー | `websocket`, `serial` など |
 

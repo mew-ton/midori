@@ -124,7 +124,7 @@ nodes:
       value: 0.0
 
 connections:
-  - from: input.upper.{note}.pressure
+  - from: input.yamaha-els03.upper.{note}.pressure
     to:   pressure_default.in
   - from: pressure_default.out
     to:   gate_pressure.then

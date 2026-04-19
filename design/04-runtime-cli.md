@@ -127,8 +127,8 @@ SSE は切断時に自動再接続される。ブリッジ停止中は `/events`
 
 | タブ | フィルタ |
 |---|---|
-| Preview | `event: device-state` かつ `direction=input` |
-| Monitor | `event: device-state` かつ `direction=output` |
+| Preview | `event: device-state` かつ `direction=input`。複数デバイスがある場合は `device` フィールドで各カードに振り分ける |
+| Monitor | `event: device-state` かつ `direction=output`。同様に `device` フィールドで振り分ける |
 | イベントログ | 全イベントをログ表示 |
 
 ### GUI 操作フロー

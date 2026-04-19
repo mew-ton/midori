@@ -2,7 +2,7 @@
 
 definition の構成から決まるパス文字列。component id・note（keyboard のみ）・value name を `.` で連結する。
 
-変換グラフのポート参照（Input Block / Output Block）、binding の `to.target` / `from.target` 指定すべてで共通して使う。
+変換グラフのポート参照（入力ブロック / 出力ブロック）、binding の `to.target` / `from.target` 指定すべてで共通して使う。
 
 ---
 

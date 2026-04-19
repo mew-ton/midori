@@ -54,8 +54,8 @@
 
 | 用語 | 定義 |
 |---|---|
-| **Input Block** | 変換グラフの左端。入力デバイス構成の ComponentState がポートとして並ぶ |
-| **Output Block** | 変換グラフの右端。出力デバイス構成の definition コンポーネントがポートとして並ぶ |
+| **入力ブロック** | 変換グラフの左端に縦並びで置かれるブロック。入力デバイス1つにつき1ブロック（タイトル = `device_id`）。そのデバイス構成の ComponentState がポートとして並ぶ |
+| **出力ブロック** | 変換グラフの右端に縦並びで置かれるブロック。出力デバイス1つにつき1ブロック（タイトル = `device_id`）。対称な構造 |
 | **計算ノード** | Input と Output の間に置く変換・加工ノード |
 | **ポート** | ノードの入出力端子。型（bool / float / int / pulse）を持つ |
 
@@ -67,4 +67,4 @@
 |---|---|
 | **Preview** | 入力の ComponentState をリアルタイム表示するタブ。ブリッジ実行中のみ動作 |
 | **Monitor** | 出力の ComponentState をリアルタイム表示するタブ。ブリッジ実行中のみ動作 |
-| **イベントログ** | 全イベント（raw-event / device-state / signal / log）をログ表示するパネル |
+| **イベントログ** | 全イベント（raw-event / device-state / signal / log / error-path）をログ表示するパネル |

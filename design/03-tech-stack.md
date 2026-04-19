@@ -114,7 +114,7 @@ Electron メインプロセス
 └── Astro SSR サーバー起動
       ▼
 Electron レンダラー（http://localhost:PORT）
-├── 監視コンポーネント   IPC → dataset 書き換え
+├── 監視コンポーネント   SSE（/events）→ dataset 書き換え
 └── イベントログ    全イベントをログ表示
 ```
 

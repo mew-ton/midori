@@ -45,6 +45,11 @@ ai:
 | `<workspace>/devices/` | デバイス構成ファイル |
 | `<workspace>/mappers/` | 変換グラフファイル |
 | `<workspace>/profiles/` | プロファイルファイル |
+| `<workspace>/plugins/` | インストール済みプラグイン（読み取り専用。AI の write_file 対象外） |
+
+## プラグインのインストール情報
+
+インストール済みプラグインは `<workspace>/plugins/<name>/` に git clone として保存される。更新用の元 URL は各ディレクトリ内の `.git/config`（`remote.origin.url`）から取得するため、別途レジストリファイルは不要。`preferences.yaml` にも記録しない。GUI 起動時に `plugins/` ディレクトリをスキャンして一覧を構築する。
 
 これ以外のパスへの読み書きは拒否される。API キーは keychain または環境変数から取得し、`preferences.yaml` には保存しない。
 
