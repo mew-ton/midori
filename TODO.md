@@ -1,66 +1,64 @@
 # TODO: ドライバープラグイン仕様の策定
 
 別の AI エージェントへの作業依頼。
-`design/` 以下に新規ドキュメントとして仕様をまとめること。
+既存の設計ドキュメントに対して追加要件として仕様を整備すること。
+技術選定（実装方式・具体的な API 設計など）は含めない。
 
 ---
 
-## 背景・決定事項
+## 追加・変更する概念
 
-以下の設計方針が会話の中で確定した。既存の `design/09-plugin.md` は YAML デバイス構成のみを対象としたプラグイン仕様だが、これを拡張してドライバー（物理 I/O 層）もプラグインとして切り出す。
+### 1. driver（ドライバー）の概念追加
 
-### 1. プラグインの 2 層構造
+現行の設計では midi / osc / osc-vrchat が暗黙的に「ドライバー」として扱われているが、
+明示的な概念として定義する。
 
-```
-┌──────────────────────────────────────┐
-│  device config type plugin           │  デバイス構成の設定・UI を拡張する
-│  (例: osc-vrchat, midi-sysex-helper) │
-│  base_driver: <driver_id>            │
-└──────────────┬───────────────────────┘
-               │ 使う
-┌──────────────▼───────────────────────┐
-│  driver plugin                       │  I/O のみ。物理層。
-│  (例: osc, midi, ble, http)          │
-└──────────────────────────────────────┘
-```
+- ドライバーは物理 I/O 層を担う独立した構成要素である
+- ドライバーの種類が増えることを前提とした概念として設計書に位置づける
+- 既存の `layers/01-input-driver/requirements.md` の Driver インターフェース記述と整合させる
 
-- **driver plugin**：トランスポート（I/O）のみを担う。セマンティクスを持たない。
-- **device config type plugin**：特定の driver を `base_driver` として宣言し、binding の表現・接続設定の追加フィールド・UI 拡張を提供する。driver 自体は変えない。
+### 2. ウィジェット（widget）の概念追加
 
-### 2. osc-vrchat の位置づけ
+ドライバーが異なると、接続設定に必要な UI も異なる。
+この「ドライバーごとの接続設定 UI の差異」を表現する概念として **ウィジェット** を導入する。
 
-`osc-vrchat` は独立したドライバーではなく、`driver: osc` を基底とする **device config type** である。
+- ウィジェットとは、接続設定フォームにおける入力単位のことである
+- ドライバーは自身の接続に必要なウィジェットの種類を宣言する
+- ウィジェットの具体的な種別（テキスト入力・デバイス選択・スキャンなど）の設計は別途行う
 
-- driver は `osc`（UDP ソケット、OSC パケット送受信）
-- `osc-vrchat` が追加するもの：
-  - 接続設定への「アバターパラメーター JSON パス」フィールドの追加
-  - binding サジェストをアバターパラメーター JSON から自動生成
-  - float 値域を VRChat 仕様（0–1）として既知化し正規化を自動適用
+### 3. device config type（デバイス config タイプ）の概念追加
 
-### 3. driver plugin が提供するもの
+同じドライバーを使いながら、binding の表現や接続設定に差異を持つケースを扱うための概念。
 
-**Rust コード（I/O）：**
+- デバイス config タイプは、特定のドライバーを基底として、その上に乗る設定の拡張である
+- ドライバー自体（I/O）は変えず、接続設定の追加フィールドや binding の表現方法を変える
+- デバイス構成 YAML の `driver` フィールドを、config タイプを含めた形で再定義する
 
-- `connect()` / `disconnect()`
-- `on_message(callback)` → raw events のストリーム（入力）
-- `send(message)` → raw events の送信（出力）
-- `list_devices()` または `scan_devices()` → 動的デバイス一覧（接続設定 UI 向け）
+### 4. osc-vrchat の立ち位置の変更
 
-**宣言ファイル（フロントエンドコード不要）：**
+現行の設計では `osc-vrchat` は独立したドライバーとして扱われているが、これを見直す。
 
-- `event_taxonomy`：ドライバーが扱える raw event の種別・パラメーター定義。バインディングタブの from/to フォーム生成に使う。
-- `connection_schema`：接続設定に必要なフィールドの宣言。ホストがフォームを描画する。ウィジェット型として `text` / `uint16` / `device_select`（`list_devices()` を呼ぶ） / `device_scan`（`scan_devices()` を呼ぶ）などを想定。
+**変更前：** `osc-vrchat` は独立したドライバー  
+**変更後：** `osc-vrchat` は `osc` ドライバーを基底とする **device config type**
 
-### 4. device config type plugin が提供するもの
+理由：`osc-vrchat` の本質は「OSC の接続設定と binding 設定の特殊化」であり、
+I/O トランスポートとして osc と異なる実装を持つわけではない。
+変更内容は以下のドキュメントに反映する：
 
-- `base_driver`：使用する driver plugin の ID
-- `connection_schema` の差分（base_driver のスキーマに追記するフィールド）
-- binding 拡張（サジェスト生成ロジック、値域の既知化など）
+- `design/layers/01-input-driver/requirements.md`（初回実装ドライバーの表記）
+- `design/layers/05-output-driver/requirements.md`（同上）
+- `design/07-ui-ux.md`（driver ごとの接続設定表）
+- `design/05-future.md`（ドライバー一覧）
 
-### 5. 配布方式
+### 5. プラグインによる配布方針
 
-別リポジトリ・Git ベースの配布を前提とする（現行 `09-plugin.md` と同じモデル）。
-ただし driver plugin は Rust コードを含むため、YAML のみのデバイス構成プラグインとは配布・インストールフローが異なる。この差異を仕様に含めること。
+現行の `design/09-plugin.md` は YAML デバイス構成の配布のみを対象としている。
+ドライバーおよび device config type もプラグインとして配布できる方針を追加する。
+
+- ドライバーはプラグインとして別リポジトリで配布できる
+- device config type もプラグインとして別リポジトリで配布できる
+- 配布の基本モデルは現行の Git リポジトリ単位の配布方針を踏襲する
+- ただしドライバープラグインはコードを含むため、YAML のみのプラグインとは性質が異なることを明記する（具体的なインストールフローの設計は別途）
 
 ---
 
@@ -68,40 +66,25 @@
 
 ### `design/10-driver-plugin.md` を新規作成
 
-以下を含む仕様ドキュメントを作成すること。
+上記の概念追加・変更をまとめた要件ドキュメントを作成する。
+以下を含むこと：
 
-1. **概要**：driver plugin と device config type plugin の 2 層構造の説明
-2. **driver plugin 仕様**
-   - リポジトリ構成
-   - マニフェスト仕様（`midori-plugin.yaml` の拡張または新フォーマット）
-   - Rust インターフェース定義（trait）
-   - `event_taxonomy` の記述形式
-   - `connection_schema` の記述形式とウィジェット型一覧
-   - `list_devices()` / `scan_devices()` の仕様
-   - インストール・配布フロー
-3. **device config type plugin 仕様**
-   - `base_driver` の宣言方法
-   - 接続スキーマの差分宣言方法
-   - binding 拡張の記述方法
-   - `osc-vrchat` を具体例として記述
-4. **既存仕様との関係**
-   - `09-plugin.md`（YAML デバイス構成プラグイン）との違いと共存方法
-   - `layers/01-input-driver/requirements.md` の Driver インターフェースとの対応
-   - `07-ui-ux.md` の接続設定 UI（プロファイル詳細 > 設定タブ）への影響
-5. **初期実装ドライバーの扱い**
-   - midi / osc / osc-vrchat は内蔵（built-in）として扱うか、それとも同じプラグイン仕様で実装するか、方針を明記する
+1. driver と device config type の概念定義
+2. ウィジェットの概念定義
+3. osc-vrchat の立ち位置の変更の説明
+4. プラグインとしての配布方針の概要
+5. 既存ドキュメントのどの記述に影響するかの整理
 
-### `design/09-plugin.md` の更新（必要に応じて）
+### 既存ドキュメントの更新
 
-`10-driver-plugin.md` への参照追加や、YAML プラグインとの区別を明確にする記述の追加。
+上記 4 で列挙したドキュメントの該当箇所を、osc-vrchat の立ち位置変更に合わせて修正する。
 
 ---
 
 ## 参照すべき既存ドキュメント
 
 - `design/09-plugin.md`：現行プラグイン仕様
-- `design/layers/01-input-driver/requirements.md`：Driver インターフェース・物理型定義
+- `design/layers/01-input-driver/requirements.md`：Driver インターフェース・初回実装ドライバー一覧
 - `design/layers/05-output-driver/requirements.md`：出力ドライバー仕様
 - `design/07-ui-ux.md`：接続設定 UI（プロファイル詳細 > 設定タブ、driver ごとの接続設定表）
-- `design/03-tech-stack.md`：技術スタック
 - `design/05-future.md`：追加ドライバー候補一覧
