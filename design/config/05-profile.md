@@ -45,10 +45,9 @@ outputs:
 
 | type | フィールド | 内容 |
 |---|---|---|
-| `midi` | `device_name` | OS が返すデバイス名（部分一致） |
-| `osc` | `host`, `port` | 送受信先のホスト・ポート |
+| `midi` | `device_name` | OS が返すデバイス名（部分一致）。入出力共通 |
+| `osc` | `host`, `port`, `listen_port` | 出力時: `host`・`port`（送信先）。入力時: `listen_port`（待ち受けポート）。双方向の場合は全て指定 |
 | `osc-vrchat` | `host`, `port`, `listen_port`, `avatar_params` | `listen_port` は受信ポート（通常 `9001`）。VRChat → ブリッジ方向を使う場合に必要（任意）。`avatar_params` は VRChat が自動生成するアバターパラメーター JSON のパス（任意） |
-| `http` | `port` | 待ち受けポート番号 |
 
 ## 接続のバリデーション
 

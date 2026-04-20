@@ -736,9 +736,9 @@ driver: midi（変更不可。バインディングタブで設定済み）
 
 | driver | 接続設定 |
 |---|---|
-| `midi` | OS が認識している MIDI デバイスの一覧から選択 |
-| `osc` / `http` | host・port を入力 |
-| `osc-vrchat` | host・port を入力 ＋ アバターパラメーター JSON のパス（任意） |
+| `midi` | OS が認識している MIDI デバイスの一覧から選択（入出力共通） |
+| `osc` | 出力: host・port を入力 / 入力: listen_port を入力 / 双方向: 全て入力 |
+| `osc-vrchat` | host・port を入力 ＋ listen_port（任意）＋ アバターパラメーター JSON のパス（任意） |
 
 ### ブリッジの状態表現
 
