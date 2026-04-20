@@ -17,55 +17,72 @@
 midi / osc は必須実装であるにも関わらず、将来のプラグイン拡張（BLE 等）と
 アーキテクチャ上の扱いが変わらない仕組みにしたい。
 
-### 技術選定：サブプロセス方式
+### 技術選定：2種類のプラグイン実行方式
 
-ドライバーを **独立したプロセスとして実行** し、ブリッジとは標準 I/O（stdin/stdout）の
-JSON Lines で通信する。
+ドライバーのリアルタイム要件に応じて実行方式を分ける。
+
+| 方式 | 対象 | 実行形態 |
+|---|---|---|
+| **built-in plugin** | リアルタイム性が必要なドライバー | ブリッジ本体に同梱・同一プロセス内 Rust モジュール |
+| **subprocess plugin** | リアルタイム性を問わないドライバー | 独立プロセス・stdin/stdout JSON Lines 通信 |
+
+#### built-in plugin（同一プロセス）
+
+MIDI のように **1〜3 ms 以内のジッタが要求される** ドライバーは
+ブリッジ本体に Rust モジュールとして組み込む。
+
+OS の MIDI コールバック（CoreMIDI / WinMM）が高優先度スレッドで動作する恩恵を維持するため、
+subprocess に切り出すと失われるリアルタイム性を確保する。
 
 ```
 ブリッジプロセス (Rust)
- ├── driver プロセス A (MIDI)   ← child_process として起動
- │     stdin ← {type:"connect", config:{...}}
- │     stdout → {type:"event", ...}
- └── driver プロセス B (OSC)
-       ...
+ ├── [built-in] MIDI モジュール  ← 高優先度スレッド・OS コールバック直結
+ ├── [built-in] OSC モジュール   ← UDP ソケット直結
+ └── [subprocess] BLE ドライバー ← child_process として起動
 ```
 
-#### 採用理由
+built-in であっても、**プラグインと同一のインターフェース**（trait）で実装する。
+これによりプラグイン仕様の実証を兼ねつつ、リアルタイム性を確保する。
+
+本体同梱の built-in ドライバー（初期実装）:
+- `midi`（CoreMIDI / WinMM 使用）
+- `osc`（UDP ソケット）
+
+#### subprocess plugin（独立プロセス）
+
+リアルタイム性を必要としないコミュニティドライバーは
+独立プロセスとして起動し、stdin/stdout の JSON Lines で通信する。
+
+```
+ブリッジプロセス (Rust)
+ └── driver プロセス（任意言語）
+       stdin  ← {"type":"connect","config":{...}}
+       stdout → {"type":"event",...}
+               → {"type":"ready"}
+               → {"type":"error","message":"..."}
+```
+
+#### 採用根拠
 
 | 方式 | 採用 | 理由 |
 |---|---|---|
 | 動的ライブラリ（dylib） | ❌ | クロスプラットフォームのロードが複雑・クラッシュがブリッジ全体を落とす |
 | WebAssembly（WASM） | ❌ | OS の MIDI/BLE API にアクセスできない |
-| **サブプロセス（stdin/stdout）** | ✅ | OS レベルの分離・実装言語不問・既存の Bridge↔GUI 通信と同じパターン |
-| Rust crate（静的リンク） | ❌ | コミュニティ配布のたびにブリッジの再ビルドが必要 |
-
-#### プロトコル概要（JSON Lines）
-
-```jsonc
-// ブリッジ → ドライバー
-{"type":"connect","config":{"device_name":"ELS-03 Series"}}
-{"type":"disconnect"}
-
-// ドライバー → ブリッジ
-{"type":"event","driver":"midi","event":"noteOn","channel":1,"note":60,"velocity":80}
-{"type":"ready"}
-{"type":"error","message":"device not found"}
-```
+| サブプロセス（コミュニティ） | ✅ | OS レベルの分離・実装言語不問・Bridge↔GUI 通信と同じパターン |
+| built-in Rust モジュール（built-in） | ✅ | OS 高優先度スレッドを維持・ジッタを最小化 |
 
 #### バイナリ配布
 
-ドライバープラグインは `@midori/runtime` と同様に npm の
+subprocess プラグインは `@midori/runtime` と同様に npm の
 optionalDependencies パターンで配布する。
 
 ```
-@midori/driver-midi
-@midori/driver-osc
 （コミュニティ）some-org/midori-driver-ble-heart-rate
+（コミュニティ）some-org/midori-driver-keyboard
 ```
 
-プラグインリポジトリには `midori-plugin.yaml`（既存）に加え、
-ドライバーバイナリを含む npm パッケージへの参照を記述する。
+built-in ドライバーはブリッジ本体（`@midori/runtime`）に含まれるため
+別途配布しない。
 
 ---
 
@@ -197,7 +214,8 @@ outputs:
 |---|---|---|
 | デバイス構成（YAML） | `devices/*.yaml` | Git リポジトリのみ（現行方式） |
 | Device Config Type | YAML マニフェスト | Git リポジトリのみ |
-| ドライバー | バイナリ（OS 依存） | Git リポジトリ + npm バイナリパッケージ |
+| ドライバー（built-in） | Rust モジュール | ブリッジ本体（`@midori/runtime`）に同梱 |
+| ドライバー（subprocess） | バイナリ（OS 依存・任意言語） | Git リポジトリ + npm バイナリパッケージ |
 
 ### ドライバープラグインの配布フロー
 
