@@ -47,6 +47,8 @@ Bridge tick
   セマフォを待つ → 起きる → 読む → デバイスに送信
 ```
 
+セマフォ待機は CPU を消費せず、MIDI 要件（1〜3 ms）を満たすのに十分な応答速度がある。オーディオ波形レベル（µs 単位）の要件であればスピンロックが必要になるが、本プロジェクトでは不要。
+
 ---
 
 ## 技術的妥当性
@@ -67,18 +69,31 @@ Bridge tick
 
 ドライバーごとに独立した SPSC（Single Producer Single Consumer）バッファを割り当てる。ドライバー間で書き込み競合が発生しない。
 
-```
-イベント構造体（約 40 バイト）:
-  timestamp : u64   （ナノ秒）
-  event_type: u8    （noteOn / noteOff / cc / sysex 等）
-  channel   : u8
-  param1    : u16   （ノート番号 / コントローラ番号 等）
-  param2    : u16   （ベロシティ / 値 等）
-  data      : [u8; 28]  （SysEx や拡張データ用）
+SPSC のアトミック変数には Memory Ordering（Acquire / Release）の正確な設定が必要で、自前実装はバグを踏みやすい。SDK 内部では検証済みの既存クレートをラップして使う。
 
-リングバッファサイズ: 1024 イベント × 40 バイト = 40 KB / ドライバー
-10 ドライバー同時接続: 400 KB（実用上問題ない）
+| クレート | 特徴 |
+|---|---|
+| `ringbuf` | SPSC に特化。共有メモリとの組み合わせが容易 |
+| `crossbeam` | 汎用。SPSC 以外も含むが実績が豊富 |
+
+```rust
+#[repr(C)]
+pub struct DriverEvent {
+    timestamp : u64,     // 8 bytes（ナノ秒）
+    event_type: u8,      // 1 byte （noteOn / noteOff / cc / sysex 等）
+    channel   : u8,      // 1 byte
+    param1    : u16,     // 2 bytes（ノート番号 / コントローラ番号 等）
+    param2    : u16,     // 2 bytes（ベロシティ / 値 等）
+    // 14 bytes here
+    data      : [u8; 50], // 50 bytes（SysEx や拡張データ用）
+    // 合計 64 bytes = CPU キャッシュライン 1 行分
+}
 ```
+
+`#[repr(C)]` を付与してパディングを排除し、サイズを **64 バイト（キャッシュライン 1 行分）** に揃える。これにより False Sharing（偽共有）によるマルチスレッドのパフォーマンス低下を防げる。
+
+リングバッファサイズ: 1024 イベント × 64 バイト = **64 KB / ドライバー**  
+10 ドライバー同時接続: 640 KB（実用上問題ない）
 
 ### 共有メモリのセットアップ手順
 
