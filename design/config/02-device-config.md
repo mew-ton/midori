@@ -128,12 +128,22 @@ definition:
 
 ### value フィールド仕様
 
+**`additionals` 内のエントリ**（`keyboard` の per-note 追加値等）には以下のフィールドを使う：
+
 | フィールド | 必須 | 値域 |
 |---|---|---|
 | `name` | ✅ | 任意の識別子 |
 | `type` | ✅ | `bool` / `float` / `int` / `pulse` |
 | `range` | `float` / `int` の時のみ必須 | 最小・最大値の配列。例: `[0, 1]`、`[0, 127]`、`[-8192, 8191]` |
 | `out_of_range` | ❌ | `range` を持つ値のみ有効。`ignore`（デフォルト）/ `clamp` / `error`。詳細は [config/00-component-types.md](./00-component-types.md) |
+
+**`slider` / `switch` など単一値を持つ component** は `type` がコンポーネント種別として使われるため、値の型は `valueType` フィールドで宣言する：
+
+| フィールド | 必須 | 値域 |
+|---|---|---|
+| `valueType` | ✅ | `bool` / `float` / `int` / `pulse` |
+| `range` | `float` / `int` の時のみ必須 | 同上 |
+| `out_of_range` | ❌ | 同上 |
 
 `pulse` は瞬間トリガーを表す型で連続値を持たないため、`range` は不要（指定しても無視される）。
 

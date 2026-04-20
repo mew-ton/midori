@@ -14,7 +14,7 @@
 | [04-runtime-cli.md](./04-runtime-cli.md) | CLI オプション・ログフォーマット |
 | [05-future.md](./05-future.md) | 未解決事項・将来の拡張ポイント・参考リンク |
 | [06-error-handling.md](./06-error-handling.md) | エラー分類・クリティカル／ランタイムエラーの挙動・GUI 可視化 |
-| [07-ui-ux.md](./07-ui-ux.md) | 画面構成・遷移・各画面の UI 要件 |
+| [07-ui-ux/](./07-ui-ux/) | 画面構成・遷移・各画面の UI 要件 |
 | [08-ai.md](./08-ai.md) | AI アシスタント機能設計 |
 | [09-plugin.md](./09-plugin.md) | プラグイン（デバイス構成・ドライバー・デバイス種別定義 の配布）仕様 |
 | [10-driver-plugin.md](./10-driver-plugin.md) | ドライバー・デバイス種別定義・ウィジェット の概念と仕様 |

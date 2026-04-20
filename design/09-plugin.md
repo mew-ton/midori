@@ -148,7 +148,7 @@ inputs:
 
 ## GUI
 
-プラグイン管理は **Preferences 設定画面のプラグインタブ** に統合されている。UI 仕様の詳細は [`07-ui-ux.md`](07-ui-ux.md) の Preferences 設定画面セクションを参照。
+プラグイン管理は **Preferences 設定画面のプラグインタブ** に統合されている。UI 仕様の詳細は [`07-ui-ux/08-preferences.md`](07-ui-ux/08-preferences.md) を参照。
 
 ### デバイス構成セレクターでの表示
 
