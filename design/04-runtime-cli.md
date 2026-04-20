@@ -47,7 +47,7 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 
 ```json
 {"type":"raw-event","direction":"input", "driver":"midi","event":"noteOn","channel":1,"note":60,"velocity":100}
-{"type":"raw-event","direction":"output","driver":"udp","host":"127.0.0.1","port":9000,"address":"/avatar/parameters/upper_key_60","value":1.0}
+{"type":"raw-event","direction":"output","driver":"osc","host":"127.0.0.1","port":9000,"address":"/avatar/parameters/upper_key_60","value":1.0}
 ```
 
 ### signal
@@ -61,7 +61,10 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 ```json
 {"type":"log","level":"error","layer":"device-profile/input","message":"unknown component: foo"}
 {"type":"log","level":"warn", "layer":"output-driver",        "message":"send failed, dropping packet"}
+{"type":"log","level":"info", "layer":"driver/midi",          "message":"connected to ELS-03 Series"}
 ```
+
+ドライバープロセスの stdout に出力された非 JSON 行は、Bridge が `{"type":"log","level":"info","layer":"driver/<name>","message":"<raw text>"}` に変換してイベントとして流す。`<name>` はドライバー識別子（`driver.yaml` の `name` フィールド）。
 
 ---
 
@@ -90,7 +93,7 @@ Content-Type: text/event-stream
 
 ```
 event: device-state
-data: {"direction":"input","component":"upper","note":60,"value_name":"pressed","value":true}
+data: {"direction":"input","device":"yamaha-els03","component":"upper","note":60,"value_name":"pressed","value":true}
 
 event: error-path
 data: {"nodes":["vel_scale"],"signals":["upper.60.velocity"],...}

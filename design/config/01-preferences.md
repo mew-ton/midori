@@ -25,7 +25,7 @@ recent:
 device_preview:           # デバイス構成編集画面のプレビュータブ用テスト接続キャッシュ
   # "devices/yamaha-els03.yaml":
   #   connection:
-  #     type: midi
+  #     driver: midi
   #     device_name: "ELS-03 Series"
 
 ai:

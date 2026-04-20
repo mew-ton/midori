@@ -11,7 +11,7 @@ inputs:
   - id: yamaha-els03                    # 省略時はデバイスファイルのベース名から自動生成
     device: devices/yamaha-els03.yaml   # 入力デバイス構成ファイル
     connection:
-      type: midi
+      driver: midi
       device_name: "ELS-03 Series"      # 実機と部分一致でバインドされる
 
 transform: mappers/my-avatar.yaml       # 変換グラフファイル
@@ -20,10 +20,10 @@ outputs:
   - id: vrchat-default                  # 省略時はデバイスファイルのベース名から自動生成
     device: devices/vrchat-default.yaml # 出力デバイス構成ファイル
     connection:
-      type: osc-vrchat
+      driver: osc
       host: 127.0.0.1
       port: 9000
-      avatar_params: "C:/Users/.../OSC/.../Avatars/avtr_xxx.json"  # 任意
+      avatar_params: "C:/Users/.../OSC/.../Avatars/avtr_xxx.json"  # 任意（osc-vrchat config type の追加フィールド）
 ```
 
 ## セクション
@@ -34,20 +34,21 @@ outputs:
 | `inputs` | ✅ | 入力デバイス構成と接続設定のリスト（1件以上） |
 | `inputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
 | `inputs[].device` | ✅ | 入力デバイス構成ファイルのパス。ユーザーファイルは `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml` |
-| `inputs[].connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
+| `inputs[].connection` | ✅ | 実デバイスとの接続設定。`driver` で内容が変わる |
 | `transform` | ✅ | 使用する変換グラフファイルのパス |
 | `outputs` | ✅ | 出力デバイス構成と接続設定のリスト（1件以上） |
 | `outputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
 | `outputs[].device` | ✅ | 出力デバイス構成ファイルのパス。ユーザーファイルは `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml` |
-| `outputs[].connection` | ✅ | 実デバイスとの接続設定。`type` で内容が変わる |
+| `outputs[].connection` | ✅ | 実デバイスとの接続設定。`driver` で内容が変わる |
 
-## connection の type 別フィールド
+## connection の driver 別フィールド
 
-| type | フィールド | 内容 |
+| driver | フィールド | 内容 |
 |---|---|---|
 | `midi` | `device_name` | OS が返すデバイス名（部分一致）。入出力共通 |
 | `osc` | `host`, `port`, `listen_port` | 出力時: `host`・`port`（送信先）。入力時: `listen_port`（待ち受けポート）。双方向の場合は全て指定 |
-| `osc-vrchat` | `host`, `port`, `listen_port`, `avatar_params` | `listen_port` は受信ポート（通常 `9001`）。VRChat → ブリッジ方向を使う場合に必要（任意）。`avatar_params` は VRChat が自動生成するアバターパラメーター JSON のパス（任意） |
+
+Device Config Type（例: `osc-vrchat`）が `additional_fields` を宣言している場合、それらのフィールドも接続設定に追加される。`avatar_params` 等は osc-vrchat config type が宣言した追加フィールドであり、このテーブルには含まない。詳細 → [`../10-driver-plugin.md`](../10-driver-plugin.md)
 
 ## 接続のバリデーション
 

@@ -242,6 +242,7 @@ binding:
   # ------------------------------------------------------------
   input:
     driver: osc
+    config_type: osc-vrchat
     mappings:
 
       - from:
@@ -295,6 +296,7 @@ binding:
   # ------------------------------------------------------------
   output:
     driver: osc
+    config_type: osc-vrchat
     mappings:
 
       - mirror: upper_key.{note}.pressed

@@ -81,32 +81,25 @@ event               ────────────▶  pulse
 
 ## ドライバーの拡張性
 
-YAML によるドライバー定義は採用しない。プロトコルの本質（ステート処理・エンコーディング・条件分岐）は宣言的記述に限界があるためである。
+すべてのドライバーは**プラグインとして外部プロセスで動作する**。built-in（本体組み込み）という概念は持たない。MIDI・OSC を含む全てのドライバーがプラグインとして実装される。
 
-代わりに、ドライバーは以下のコーディングパターン（インターフェース実装）で拡張する。
+ドライバーは以下の2つのサブコマンドを提供する CLI インターフェースを持つ：
 
-```
-interface Driver {
-  id: string
-  connect(): void
-  disconnect(): void
-  onMessage: (callback: (msg: DriverMessage) => void) => void
-}
+| コマンド | 動作 |
+|---|---|
+| `<driver> list` | 接続可能なデバイス一覧を JSON で stdout に出力して終了 |
+| `<driver> start [options]` | Bridge に対してイベントを送り続ける常駐プロセス |
 
-interface DriverMessage {
-  type: string          // ドライバー固有のメッセージ種別
-  values: Record<string, PhysicalValue>  // キャプチャされた物理型の値
-}
-```
+Bridge とドライバーの通信は2チャンネルで行う：制御（stdin/stdout, JSON Lines）とリアルタイムイベント（共有メモリ）。デバイス構成 YAML は `driver: midi` のように ID で参照するだけでよく、ドライバー実装の詳細を知る必要はない。
 
-MIDI はこのインターフェースの標準実装として組み込まれる。OSC・HID・カスタムプロトコルは同インターフェースを実装することで追加できる。デバイス構成 YAML は `driver: midi` のように ID で参照するだけでよく、ドライバー実装の詳細を知る必要はない。
+詳細 → [`10-driver-plugin.md`](../10-driver-plugin.md)
 
 ## 初回実装 / 将来拡張
 
 | ドライバー | I/O モデル | 状態 |
 |---|---|---|
 | MIDI（CoreMIDI / WinMM） | イベントストリーム | 初回実装 |
-| OSC 受信（`osc` / `osc-vrchat`） | サーバー起動型（UDP） | 初回実装 |
+| OSC 受信（`osc`） | サーバー起動型（UDP） | 初回実装 |
 | BLE Heart Rate | イベントストリーム | 将来 |
 | HTTP | サーバー起動型（TCP） | 将来 |
 | キーボード | イベントストリーム | 将来 |
