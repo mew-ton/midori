@@ -135,6 +135,48 @@ pub struct DriverEvent {
 
 ---
 
+## ドライバーの CLI インターフェース
+
+すべてのドライバーは以下の2つのサブコマンドを提供する。
+
+| コマンド | 動作 |
+|---|---|
+| `<driver> list` | 接続可能なデバイス一覧を JSON で stdout に出力して終了 |
+| `<driver> start [options]` | 共有メモリに接続して常駐。Bridge に対してイベントを送り続ける |
+
+```bash
+# GUI が呼ぶ（一時プロセス）
+$ midi-driver list
+[
+  {"id": "ELS-03 Series",  "name": "Yamaha ELS-03", "available": true},
+  {"id": "IAC Driver Bus 1","name": "IAC Driver",   "available": false}
+]
+
+# Bridge が起動する（常駐プロセス）
+$ midi-driver start --device "ELS-03 Series" --shm /dev/shm/midori-abc123 --slot 0
+```
+
+`list` は使い捨てプロセスとして即座に終了する。`start` は Bridge から SIGTERM を受けるまで常駐する。
+
+SDK はこの CLI を自動で構築する。ドライバー開発者はデバイス固有のロジックだけ実装すれば良い。
+
+```rust
+fn main() {
+    match DriverCli::parse() {          // SDK が argv を解釈
+        DriverCli::List => {
+            let devices = my_list_devices();        // ドライバー固有
+            DriverCli::print_list_json(devices);    // SDK が JSON 出力
+        }
+        DriverCli::Start(args) => {
+            let conn = DriverConnection::connect(args); // SDK が shm 接続
+            my_run_driver(conn);                        // ドライバー固有
+        }
+    }
+}
+```
+
+---
+
 ## Driver SDK
 
 共有メモリの操作・リングバッファへの読み書き・セマフォ・ハートビートといったボイラープレートをすべて **Driver SDK**（`midori-driver-sdk` crate）に隠蔽する。
