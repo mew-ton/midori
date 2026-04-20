@@ -5,84 +5,135 @@
 
 ---
 
-## 1. Driver（ドライバー）の概念
+## 1. Driver（ドライバー）の概念と通信アーキテクチャ
 
-### 現状
+### 基本方針
 
-`layers/01-input-driver/requirements.md` に Driver インターフェースが定義されているが、
-「ドライバー = Rust コードで実装された内部モジュール」として暗黙に扱われている。
+すべてのドライバーを**サブプロセス**として扱い、built-in / 外部プラグインの区別を撤廃する。
 
-### 課題
+リアルタイム性の問題は、通信方式を「共有メモリ + ロックフリーリングバッファ」にすることで解決する。
 
-midi / osc は必須実装であるにも関わらず、将来のプラグイン拡張（BLE 等）と
-アーキテクチャ上の扱いが変わらない仕組みにしたい。
+### 2チャンネルモデル
 
-### 技術選定：2種類のプラグイン実行方式
+ドライバーとブリッジの通信を目的別に2つのチャンネルに分離する。
 
-ドライバーのリアルタイム要件に応じて実行方式を分ける。
+```
+Bridge → Driver : stdin（制御コマンド。非リアルタイム）
+Driver → Bridge : 共有メモリ リングバッファ（イベント。リアルタイム）
+```
 
-| 方式 | 対象 | 実行形態 |
+```
+                       共有メモリ（イベント）
+Driver プロセス A ──→ [SPSC リングバッファ A] ──→ Bridge tick スレッド
+Driver プロセス B ──→ [SPSC リングバッファ B] ──→ （drain して処理）
+Driver プロセス C ──→ [SPSC リングバッファ C] ──→
+
+Bridge → Driver stdin : {"type":"connect","config":{...}}
+Driver → Bridge stdout: {"type":"ready"} / {"type":"error",...}
+```
+
+制御（接続・切断・設定）は JSON Lines で stdin/stdout を使う。遅延は問題にならない。  
+イベント（音符・CC・センサー値）は共有メモリ経由で書き込む。OS スケジューラを介さない。
+
+### 技術的妥当性
+
+#### 共有メモリ + SPSC リングバッファの書き込み遅延
+
+| 手段 | 書き込み遅延 | MIDI 要件（1〜3 ms）との比較 |
 |---|---|---|
-| **built-in plugin** | リアルタイム性が必要なドライバー | ブリッジ本体に同梱・同一プロセス内 Rust モジュール |
-| **subprocess plugin** | リアルタイム性を問わないドライバー | 独立プロセス・stdin/stdout JSON Lines 通信 |
+| stdin/stdout パイプ | 0.5〜5 ms | ❌ ジッタでスパイクあり |
+| Unix domain socket | 0.05〜0.5 ms | △ ギリギリ |
+| **共有メモリ SPSC** | **0.01〜0.1 µs** | ✅ 要件の 10,000 倍の余裕 |
 
-#### built-in plugin（同一プロセス）
+共有メモリへの書き込みは CPU キャッシュラインの操作（〜5 ns）＋メモリフェンス（〜50 ns）で完了する。OS スケジューラは関与しない。
 
-MIDI のように **1〜3 ms 以内のジッタが要求される** ドライバーは
-ブリッジ本体に Rust モジュールとして組み込む。
+これは JACK・PipeWire・CoreAudio が内部で採用している確立された手法であり、  
+プロオーディオ用途で実績がある。
 
-OS の MIDI コールバック（CoreMIDI / WinMM）が高優先度スレッドで動作する恩恵を維持するため、
-subprocess に切り出すと失われるリアルタイム性を確保する。
+#### SPSC リングバッファの設計
 
-```
-ブリッジプロセス (Rust)
- ├── [built-in] MIDI モジュール  ← 高優先度スレッド・OS コールバック直結
- ├── [built-in] OSC モジュール   ← UDP ソケット直結
- └── [subprocess] BLE ドライバー ← child_process として起動
-```
-
-built-in であっても、**プラグインと同一のインターフェース**（trait）で実装する。
-これによりプラグイン仕様の実証を兼ねつつ、リアルタイム性を確保する。
-
-本体同梱の built-in ドライバー（初期実装）:
-- `midi`（CoreMIDI / WinMM 使用）
-- `osc`（UDP ソケット）
-
-#### subprocess plugin（独立プロセス）
-
-リアルタイム性を必要としないコミュニティドライバーは
-独立プロセスとして起動し、stdin/stdout の JSON Lines で通信する。
+ドライバーごとに独立した SPSC（Single Producer Single Consumer）バッファを割り当てる。  
+ドライバー間で書き込み競合が発生しない。
 
 ```
-ブリッジプロセス (Rust)
- └── driver プロセス（任意言語）
-       stdin  ← {"type":"connect","config":{...}}
-       stdout → {"type":"event",...}
-               → {"type":"ready"}
-               → {"type":"error","message":"..."}
+イベント構造体（約 40 バイト）:
+  timestamp : u64   （ナノ秒）
+  event_type: u8    （noteOn / noteOff / cc / sysex 等）
+  channel   : u8
+  param1    : u16   （ノート番号 / コントローラ番号 等）
+  param2    : u16   （ベロシティ / 値 等）
+  data      : [u8; 28]  （SysEx や拡張データ用）
+
+リングバッファサイズ: 1024 イベント × 40 バイト = 40 KB / ドライバー
+10 ドライバー同時接続: 400 KB（実用上問題ない）
 ```
 
-#### 採用根拠
+#### 共有メモリのセットアップ手順
+
+```
+1. Bridge 起動時に名前付き共有メモリを作成
+   Unix:    /dev/shm/midori-{session-id}
+   Windows: CreateFileMapping("midori-{session-id}")
+
+2. Bridge がレイアウトマップ（各ドライバースロットのオフセット）を
+   共有メモリの先頭に書き込む
+
+3. ドライバープロセスを起動する際、共有メモリ名と自分のスロット番号を
+   引数として渡す
+   例: midori-driver-midi --shm /dev/shm/midori-abc123 --slot 0
+
+4. ドライバーが共有メモリをマップし、自スロットのリングバッファに書き込み開始
+```
+
+#### クロスプラットフォーム対応
+
+| OS | 共有メモリ API | Rust クレート |
+|---|---|---|
+| macOS / Linux | `mmap` + POSIX shm | `memmap2` |
+| Windows | `CreateFileMapping` / `MapViewOfFile` | `memmap2`（Windows 対応済み） |
+
+`memmap2` クレートは Unix・Windows 双方を同一 API で扱える。
+
+#### クラッシュ検出
+
+ドライバーが共有メモリの自スロットにハートビートカウンタを書く（100 ms ごと）。  
+Bridge の監視スレッドがカウンタの停滞を検出したらそのドライバーをクラッシュ扱いにし、  
+スロットを解放してランタイムエラーとして記録する。
+
+#### built-in の扱い
+
+この設計では「built-in（同一プロセス内スレッド）」も同じ SPSC リングバッファ抽象に載せられる。  
+built-in ドライバーはプロセス内のスレッドとして動き、共有メモリを介さず直接リングバッファに書く。  
+Bridge の tick スレッドからは外部ドライバーと区別できない。
+
+初期実装では midi・osc を built-in として含めつつ、将来は外部プロセスに移行できる構造にする。
+
+```
+（built-in）  MIDI スレッド → リングバッファ A（プロセス内参照）
+（外部）      BLE プロセス  → リングバッファ B（共有メモリ経由）
+              ↓ どちらも同じインターフェース
+         Bridge tick スレッド
+```
+
+#### 採用根拠まとめ
 
 | 方式 | 採用 | 理由 |
 |---|---|---|
-| 動的ライブラリ（dylib） | ❌ | クロスプラットフォームのロードが複雑・クラッシュがブリッジ全体を落とす |
-| WebAssembly（WASM） | ❌ | OS の MIDI/BLE API にアクセスできない |
-| サブプロセス（コミュニティ） | ✅ | OS レベルの分離・実装言語不問・Bridge↔GUI 通信と同じパターン |
-| built-in Rust モジュール（built-in） | ✅ | OS 高優先度スレッドを維持・ジッタを最小化 |
+| stdin/stdout のみ | ❌ | MIDI 等の 1〜3 ms 要件を満たせない |
+| 動的ライブラリ（dylib） | ❌ | クロスプラットフォーム ABI が複雑・クラッシュがブリッジを巻き込む |
+| WebAssembly | ❌ | OS の MIDI/BLE API にアクセスできない |
+| **共有メモリ SPSC + stdin 制御** | ✅ | リアルタイム要件を満たす・プロセス分離を維持・実装言語不問 |
 
 #### バイナリ配布
 
-subprocess プラグインは `@midori/runtime` と同様に npm の
+すべてのドライバープラグインは `@midori/runtime` と同様に npm の  
 optionalDependencies パターンで配布する。
 
 ```
-（コミュニティ）some-org/midori-driver-ble-heart-rate
-（コミュニティ）some-org/midori-driver-keyboard
+（本体同梱 built-in）: @midori/runtime に含まれる
+（コミュニティ）:       some-org/midori-driver-ble-heart-rate
+                        some-org/midori-driver-hand-tracking
 ```
-
-built-in ドライバーはブリッジ本体（`@midori/runtime`）に含まれるため
-別途配布しない。
 
 ---
 
@@ -90,16 +141,16 @@ built-in ドライバーはブリッジ本体（`@midori/runtime`）に含まれ
 
 ### 課題
 
-ドライバーによって接続設定フォームの内容が異なる。
-MIDI は「OS デバイス一覧から選択」、OSC は「ホスト・ポート入力」、
+ドライバーによって接続設定フォームの内容が異なる。  
+MIDI は「OS デバイス一覧から選択」、OSC は「ホスト・ポート入力」、  
 将来の BLE は「スキャンボタン」など。
 
 ドライバーが増えるたびに GUI を修正するのは維持困難。
 
 ### 技術選定：標準ウィジェット型の宣言マニフェスト
 
-ドライバーは **自身が必要とするウィジェットの種類** を
-マニフェスト（`midori-plugin.yaml`）に宣言する。
+ドライバーは **自身が必要とするウィジェットの種類** を  
+マニフェスト（`midori-plugin.yaml`）に宣言する。  
 GUI は事前定義された標準ウィジェット型を組み合わせてフォームを構築する。
 
 ```yaml
@@ -110,7 +161,7 @@ direction: both
 
 connection_widgets:
   - id: device_name
-    type: device-select   # 標準ウィジェット型
+    type: device-select
     label: "接続するMIDI機器"
     required: true
 ```
@@ -126,7 +177,7 @@ connection_widgets:
 | `text` | テキスト入力 | 汎用 |
 | `scan` | スキャン実行ボタン + 結果一覧 | BLE 等 |
 
-カスタムウィジェット（HTML/JS の直接埋め込み）は**サポートしない**。
+カスタムウィジェット（HTML/JS の直接埋め込み）は**サポートしない**。  
 セキュリティリスクと実装コストが高く、標準型で十分カバーできる想定。
 
 ---
@@ -135,44 +186,39 @@ connection_widgets:
 
 ### 課題
 
-同じドライバー（例: OSC）を使いながら、binding の表現や
+同じドライバー（例: OSC）を使いながら、binding の表現や  
 接続設定に拡張を持つケースを汎化したい。
 
 - `osc`: 汎用 OSC。値域は手動で指定。
 - `osc-vrchat`: OSC を基底に VRChat 固有の自動正規化・アドレス制約・追加設定フィールドを乗せたもの。
 
-これらを「ドライバーの方言」として定義できると、将来の拡張が統一的に扱える。
-
 ### 技術選定：YAML マニフェストによる宣言
 
-Config タイプは **コードを持たない**。
-基底ドライバーへの差分（追加ウィジェット・binding の制約・自動正規化ルール）を
+Config タイプは **コードを持たない**。  
+基底ドライバーへの差分（追加ウィジェット・binding の制約・自動正規化ルール）を  
 YAML マニフェストで宣言する。
 
 ```yaml
 # midori-plugin.yaml（device config type プラグイン）
 name: osc-vrchat
 type: device-config-type
-base_driver: osc              # 基底ドライバー
+base_driver: osc
 
-# 接続設定に追加するウィジェット
 additional_widgets:
   - id: avatar_params
     type: file
     label: "アバターパラメーター JSON"
     required: false
 
-# binding の自動正規化ルール
 auto_normalize:
   float: { from: [0.0, 1.0], to: range }
   int:   { from: [0, 255],   to: range }
 
-# OSC アドレスのプレフィックス制約
 address_prefix: /avatar/parameters/
 ```
 
-Config タイプは **YAML のみ** で構成されるため、
-バイナリ配布不要。既存のプラグイン配布（Git リポジトリ）で十分。
+Config タイプは **YAML のみ** で構成されるため、バイナリ配布不要。  
+既存のプラグイン配布（Git リポジトリ）で十分。
 
 ---
 
@@ -188,11 +234,11 @@ Config タイプは **YAML のみ** で構成されるため、
 
 ### 影響範囲
 
-既存設計ドキュメントで `driver: osc-vrchat` と記述されている箇所は、
+既存設計ドキュメントで `driver: osc-vrchat` と記述されている箇所は、  
 反映時に `driver: osc, config_type: osc-vrchat` 形式に変更する。
 
-プロファイルの記述例（変更後イメージ）:
 ```yaml
+# プロファイル記述例（変更後イメージ）
 outputs:
   - id: vrchat-default
     device: "@osc-vrchat/devices/vrchat-default.yaml"
@@ -212,22 +258,24 @@ outputs:
 
 | プラグイン種別 | 内容 | 配布方式 |
 |---|---|---|
-| デバイス構成（YAML） | `devices/*.yaml` | Git リポジトリのみ（現行方式） |
+| デバイス構成（YAML） | `devices/*.yaml` | Git リポジトリのみ |
 | Device Config Type | YAML マニフェスト | Git リポジトリのみ |
 | ドライバー（built-in） | Rust モジュール | ブリッジ本体（`@midori/runtime`）に同梱 |
-| ドライバー（subprocess） | バイナリ（OS 依存・任意言語） | Git リポジトリ + npm バイナリパッケージ |
+| ドライバー（外部） | バイナリ（OS 依存・任意言語） | Git リポジトリ + npm バイナリパッケージ |
+| 描画コンポーネント | Web Component（JS） | Git リポジトリ（JS 含む） |
 
-### ドライバープラグインの配布フロー
+### 外部ドライバーの配布フロー
 
 ```
 1. ユーザーが Preferences > プラグイン から URL を入力
 2. git clone → midori-plugin.yaml を読んで type: driver を検出
 3. GUI が npm install @some-org/midori-driver-xxx を実行
 4. プラットフォーム別バイナリが取得される
-5. ブリッジ起動時にドライバーバイナリをサブプロセスとして起動
+5. ブリッジ起動時にドライバーバイナリをサブプロセスとして起動し
+   共有メモリスロットを割り当てる
 ```
 
-セキュリティ上、インストール時に以下を表示する:
+コードを含むプラグインのインストール時に以下を表示する:
 - プラグインが実行するバイナリのパス
 - npm パッケージの出所（スコープ・バージョン）
 - 「このプラグインはコードを含みます。信頼できる提供者からのみインストールしてください」
@@ -238,52 +286,46 @@ outputs:
 
 ### 課題
 
-現行設計では Preview / Monitor の描画コンポーネント（`key` / `slider` / `pan` 等）は
-アプリ本体に内蔵されている。
+内蔵の描画コンポーネント（`key` / `slider` / `pan` 等）でカバーできない  
+デバイス固有の表示（心拍波形・ハンドトラッキングの手の形・LED マトリクス等）が  
+ドライバー追加とともに増える。
 
-ドライバーや device config type が増えると、対応する描画コンポーネントも
-必要になる（例: BLE 心拍センサーなら「心拍数の数値表示」）。
+### 技術選定：Web Component + Shadow DOM 制約
 
-### 技術選定：標準描画コンポーネント型 + Web Component による拡張
-
-#### 基本方針
-
-内蔵の描画コンポーネント（`key`, `slider`, `pan`, `button`, `knob`）で
-カバーできるものはそのまま使う。
-
-カバーできない場合、プラグインは **Web Component** として描画コンポーネントを提供できる。
+プラグインは **Web Component** として描画コンポーネントを提供できる。
 
 ```yaml
-# midori-plugin.yaml（ドライバープラグイン）
+# midori-plugin.yaml
 render_components:
-  - component_type: heart-rate-display   # layout section で参照する type 名
-    web_component: ./ui/heart-rate-display.js   # プラグインリポジトリ内のパス
+  - component_type: heart-rate-display
+    web_component: ./ui/heart-rate-display.js
     element_name: midori-heart-rate-display
 ```
 
 #### セキュリティ制約
 
-- Web Component は **Shadow DOM 内に完全に閉じ込める**
-- `dataset` 経由でのみ値を受け取る（外部 JS API へのアクセス不可）
+- Shadow DOM 内に完全に閉じ込める
+- `dataset` 経由でのみ値を受け取る
 - ネットワークリクエスト禁止（CSP で制限）
 - DOM の外側への書き込み不可
 
-#### 描画コンポーネントのロード
+#### ロード
 
-GUI 起動時、インストール済みプラグインの `render_components` を走査して
-`customElements.define()` で登録する。
-layout セクションで未知の `component` type が現れた場合は
-登録済み Web Component から探す。見つからなければ「未対応コンポーネント」としてフォールバック表示する。
+GUI 起動時に登録済み Web Component を `customElements.define()` で登録。  
+layout セクションで未知の `component` type が現れた場合は登録済み Web Component から探す。  
+見つからなければフォールバック表示。
 
 ---
 
-## まとめ：プラグイン種別と配布方式
+## まとめ：プラグイン種別と通信方式
 
-| 種別 | コード | 配布 | 例 |
-|---|---|---|---|
-| デバイス構成 | なし（YAML） | Git リポジトリ | yamaha-els03.yaml |
-| Device Config Type | なし（YAML） | Git リポジトリ | osc-vrchat マニフェスト |
-| ドライバー | あり（Rust/任意言語） | Git + npm バイナリ | midi, osc |
-| 描画コンポーネント | あり（Web Component） | Git リポジトリ（JS 含む） | heart-rate-display |
+| 種別 | リアルタイム | 実行形態 | イベント通信 | 制御通信 |
+|---|---|---|---|---|
+| built-in ドライバー | 必要 | 同一プロセス スレッド | 直接リングバッファ書き込み | — |
+| 外部ドライバー | 要〜不要 | サブプロセス | 共有メモリ SPSC | stdin/stdout JSON |
+| Device Config Type | — | なし（YAML のみ） | — | — |
+| 描画コンポーネント | — | GUI プロセス内 Web Component | dataset | — |
 
-コードを含むプラグインはインストール時に警告を表示し、ユーザーが明示的に承認する。
+**すべてのドライバーが同一の SPSC リングバッファ抽象に載る。**  
+built-in はプロセス内参照、外部は共有メモリ経由という実装の違いだけで、  
+Bridge の tick スレッドからは区別できない。
