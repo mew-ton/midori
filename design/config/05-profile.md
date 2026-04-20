@@ -33,12 +33,12 @@ outputs:
 | `name` | ❌ | 表示名 |
 | `inputs` | ✅ | 入力デバイス構成と接続設定のリスト（1件以上） |
 | `inputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
-| `inputs[].device` | ✅ | 入力デバイス構成ファイルのパス。ユーザーファイルは `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml` |
+| `inputs[].device` | ✅ | 入力デバイス構成ファイルのパス。ワークスペース内は `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml`（`<app-data-dir>/plugins/<plugin-name>/` に解決） |
 | `inputs[].connection` | ✅ | 実デバイスとの接続設定。`driver` で内容が変わる |
 | `transform` | ✅ | 使用する変換グラフファイルのパス |
 | `outputs` | ✅ | 出力デバイス構成と接続設定のリスト（1件以上） |
 | `outputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
-| `outputs[].device` | ✅ | 出力デバイス構成ファイルのパス。ユーザーファイルは `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml` |
+| `outputs[].device` | ✅ | 出力デバイス構成ファイルのパス。ワークスペース内は `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml`（`<app-data-dir>/plugins/<plugin-name>/` に解決） |
 | `outputs[].connection` | ✅ | 実デバイスとの接続設定。`driver` で内容が変わる |
 
 ## connection の driver 別フィールド

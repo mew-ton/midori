@@ -93,6 +93,8 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 
 ## リポジトリ構成（案）
 
+**ソースリポジトリ構成（案）：**
+
 ```
 /
 ├── runtime/                         ← ブリッジ本体
@@ -103,27 +105,55 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       ├── device_config.*          ← デバイス構成（入力・出力共通）
 │       └── mapper.*                 ← 変換グラフ Runtime
 │
-├── driver-midi/                     ← 公式 MIDI ドライバー（プラグイン）
-├── driver-osc/                      ← 公式 OSC ドライバー（プラグイン）
+├── driver-midi/                     ← 公式 MIDI ドライバー（プラグインリポジトリ）
+│   ├── .midori-plugin/
+│   │   └── plugin.yaml
+│   └── ...
+├── driver-osc/                      ← 公式 OSC ドライバー（プラグインリポジトリ）
 ├── driver-sdk/                      ← Driver SDK（midori-driver-sdk crate）
 │
 ├── gui/                             ← GUI アプリ
 │   ├── backend/                     ← ブリッジプロセス起動・ログ中継のみ
 │   └── frontend/                    ← UI
-│       ├── DeviceConfigEditor/      ← 入力・出力で共通コンポーネント
+│       ├── DeviceConfigEditor/
 │       │     ├── DefinitionEditor
 │       │     ├── BindingEditor
 │       │     ├── LayoutEditor
-│       │     └── Preview / Monitor  ← リアルタイム可視化
+│       │     └── Preview / Monitor
 │       ├── 変換グラフEditor/
 │       ├── PreferencesEditor/
 │       └── PipelineMonitor/
 │
-└── profiles/                        ← 配布用サンプル設定
-    ├── devices/                     ← direction フィールドで入力・出力・両用を識別
-    │   ├── yamaha-els03.yaml        ← direction: input
-    │   ├── generic-midi.yaml        ← direction: any
-    │   └── vrchat-osc.yaml          ← direction: any
+└── profiles/                        ← 配布用サンプルワークスペース（git リポジトリ）
+    ├── devices/
+    │   ├── yamaha-els03.yaml
+    │   ├── generic-midi.yaml
+    │   └── vrchat-osc.yaml
     └── mappers/
         └── example.yaml
+```
+
+**ユーザーワークスペース（git リポジトリ）の構成：**
+
+```
+<workspace>/
+├── .midori-plugin/        ← このリポジトリ自体をプラグインとして公開する場合のみ
+│   └── plugin.yaml
+├── devices/               ← デバイス構成ファイル
+├── mappers/               ← 変換グラフファイル
+└── profiles/              ← プロファイルファイル
+```
+
+**OS アプリデータディレクトリの構成：**
+
+```
+<app-data-dir>/
+├── plugins/               ← インストール済みプラグイン（ワークスペースには置かない）
+│   ├── yamaha-stagea/     ← git clone されたプラグイン
+│   │   ├── .midori-plugin/
+│   │   │   └── plugin.yaml
+│   │   └── devices/
+│   ├── driver-midi/       ← 公式ドライバー（アプリに同梱）
+│   └── driver-osc/
+└── preferences.yaml       ← UI 設定・最近使用したファイル・AI 設定
 ```

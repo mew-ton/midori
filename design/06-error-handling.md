@@ -55,14 +55,17 @@
 | 例 | 発生層 |
 |---|---|
 | ゼロ除算・数値変換失敗 | Layer 3（変換グラフ 計算ノード） |
-| 出力パケット送信失敗 | Layer 5 |
-| 入力デバイスの切断 | Layer 1 |
+| 出力パケット送信失敗 | Layer 5（出力ドライバープロセス内） |
+| 入力デバイスの切断 | Layer 1（入力ドライバープロセス内） |
+
+Layer 1 / Layer 5 のエラーはドライバー外部プロセスの stdout から発生する。Bridge はドライバーの非 JSON stdout 行を `layer: driver/<name>` の `log` イベントとして転送する（`04-runtime-cli.md` のログフォーマット参照）。
 
 ### ログ出力
 
 ```json
 {"type":"log","level":"error","layer":"mapper","node":"vel_scale","message":"division by zero"}
-{"type":"log","level":"warn", "layer":"output-driver","message":"send failed, dropping packet"}
+{"type":"log","level":"warn", "layer":"driver/osc",              "message":"send failed, dropping packet"}
+{"type":"log","level":"warn", "layer":"driver/midi",             "message":"device disconnected"}
 ```
 
 ### GUI での可視化

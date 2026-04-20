@@ -79,10 +79,10 @@ connection_fields:
 ### プラグインマニフェスト（ドライバー）
 
 ```yaml
-# midori-plugin.yaml
+# .midori-plugin/plugin.yaml
 name: midi-plugin
 drivers:
-  - driver: ./drivers/midi/driver.yaml
+  - driver: ../drivers/midi/driver.yaml   # plugin.yaml からの相対パス
 ```
 
 `driver.yaml` のフィールド：
@@ -152,7 +152,7 @@ some-org/driver-ble     ← コミュニティプラグイン
 
 ```
 1. ユーザーが Preferences > プラグインタブ から URL を入力
-2. git clone → midori-plugin.yaml を読んで drivers エントリを検出
+2. git clone <app-data-dir>/plugins/<name>/ → .midori-plugin/plugin.yaml を読んで drivers エントリを検出
 3. GUI が npm install <package> を実行
 4. プラットフォーム別バイナリが取得される
 5. Bridge 起動時にドライバーバイナリをサブプロセスとして起動
@@ -183,10 +183,10 @@ some-org/driver-ble     ← コミュニティプラグイン
 
 ### プラグインマニフェスト（Device Config Type）
 
-Device Config Type は `midori-plugin.yaml` の `device_config_types` セクションに定義する。
+Device Config Type は `.midori-plugin/plugin.yaml` の `device_config_types` セクションに定義する。
 
 ```yaml
-# midori-plugin.yaml
+# .midori-plugin/plugin.yaml
 name: osc-vrchat-plugin
 device_config_types:
   - name: osc-vrchat
@@ -201,7 +201,7 @@ device_config_types:
       int:   { from: [0, 255],   to: range }
     address_prefix: /avatar/parameters/
     config_widget:
-      generator_ui: ./ui/generator.js   # オプション。なければ generator UI なし
+      generator_ui: ../ui/generator.js   # plugin.yaml からの相対パス。オプション
 ```
 
 `device_config_types` エントリのフィールド：
@@ -273,7 +273,7 @@ binding:
 
 ### Bridge による config_type の発見・ロード
 
-プロファイルまたはデバイス YAML に `config_type: <name>` が記述されている場合、Bridge は起動時に `<workspace>/plugins/` を走査して該当マニフェストを探す。見つからなければ起動時エラー。
+プロファイルまたはデバイス YAML に `config_type: <name>` が記述されている場合、Bridge は起動時に `<app-data-dir>/plugins/` を走査して該当マニフェストを探す。見つからなければ起動時エラー。
 
 ---
 
@@ -294,9 +294,9 @@ Additional Fields はカスタムコードを必要とせず、GUI が標準 HTM
 `additional_fields` の `file` フィールドはパスを保存するだけだが、ファイル内容を変換してデバイス構成 YAML を生成するケース（osc-vrchat 等）は `generator_ui` を使う。
 
 ```yaml
-# midori-plugin.yaml（device_config_types エントリ内）
+# .midori-plugin/plugin.yaml（device_config_types エントリ内）
 config_widget:
-  generator_ui: ./ui/generator.js
+  generator_ui: ../ui/generator.js   # plugin.yaml からの相対パス
 ```
 
 実行フロー：
@@ -322,10 +322,10 @@ GUI が generator_ui を表示
 内蔵の描画コンポーネント（`key` / `slider` / `pan` 等）でカバーできないデバイス固有の表示に、プラグインが **Web Component** を提供する。
 
 ```yaml
-# midori-plugin.yaml
+# .midori-plugin/plugin.yaml
 render_components:
   - component_type: heart-rate-display
-    web_component: ./ui/heart-rate-display.js
+    web_component: ../ui/heart-rate-display.js   # plugin.yaml からの相対パス
     element_name: midori-heart-rate-display
 ```
 

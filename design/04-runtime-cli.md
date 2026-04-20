@@ -7,10 +7,24 @@ midori [OPTIONS]
 
 OPTIONS:
   --profile         <path>   プロファイル YAML（デフォルト: ./profiles/default.yaml）
-  --preferences     <path>   Preferences YAML（デフォルト: ./preferences.yaml）
+  --app-data-dir    <path>   app-data-dir のパス（省略時は OS 標準の場所を使用）
   --log-level       <level>  error | warn | info | debug
   --log-format      <fmt>    text | json
 ```
+
+### app-data-dir
+
+Bridge はプラグイン（ドライバー・Device Config Type 等）を `<app-data-dir>/plugins/` から探索する。
+
+`--app-data-dir` を省略した場合は OS 標準の場所を使用する：
+
+| OS | デフォルト |
+|---|---|
+| macOS | `~/Library/Application Support/Midori` |
+| Windows | `%APPDATA%\Midori` |
+| Linux | `$XDG_DATA_HOME/midori`（未設定時 `~/.local/share/midori`） |
+
+Electron アプリから起動する場合は `--app-data-dir` を省略してよい（OS 標準の場所が使われる）。
 
 ---
 
