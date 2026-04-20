@@ -14,7 +14,7 @@ OPTIONS:
 
 ### app-data-dir
 
-Bridge はプラグイン（ドライバー・Device Config Type 等）を `<app-data-dir>/plugins/` から探索する。
+Bridge はプラグイン（ドライバー・デバイス種別定義 等）を `<app-data-dir>/plugins/` から探索する。
 
 `--app-data-dir` を省略した場合は OS 標準の場所を使用する：
 

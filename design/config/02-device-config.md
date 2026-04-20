@@ -197,12 +197,12 @@ binding:
       - ...
   output:
     driver: osc
-    config_type: osc-vrchat   # オプション。Device Config Type を適用する
+    device_kind: osc-vrchat   # オプション。デバイス種別定義 を適用する
     mappings:
       - ...
 ```
 
-`config_type` は省略可能。Device Config Type プラグインがインストールされており、その `base_driver` が `driver` と一致する場合に使用できる。`config_type` を指定すると、接続設定フォームへの追加フィールド・`set` 省略時の自動正規化・`address_prefix` の自動付与が有効になる。詳細 → [`../10-driver-plugin.md`](../10-driver-plugin.md)
+`device_kind` は省略可能。デバイス種別定義 プラグインがインストールされており、その `base_driver` が `driver` と一致する場合に使用できる。`device_kind` を指定すると、接続設定フォームへの追加フィールド・`set` 省略時の自動正規化・`address_prefix` の自動付与が有効になる。詳細 → [`../10-driver-plugin.md`](../10-driver-plugin.md)
 
 ---
 

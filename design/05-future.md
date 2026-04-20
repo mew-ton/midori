@@ -6,7 +6,7 @@
 
 ### 追加ドライバー
 
-初期実装では MIDI / OSC を双方向でサポートする。VRChat 用の OSC 設定は `osc-vrchat` Device Config Type として提供する。追加ドライバーは将来拡張。
+初期実装では MIDI / OSC を双方向でサポートする。VRChat 用の OSC 設定は `osc-vrchat` デバイス種別定義 として提供する。追加ドライバーは将来拡張。
 
 | ドライバー | 入力 | 出力 |
 |---|---|---|
@@ -16,7 +16,7 @@
 | WebSocket | 将来 | 将来 |
 | HTTP | 将来 | 将来 |
 
-`osc-vrchat` は独立ドライバーではなく、`osc` ドライバーを基底とする **Device Config Type** として提供する。詳細 → [`10-driver-plugin.md`](10-driver-plugin.md)
+`osc-vrchat` は独立ドライバーではなく、`osc` ドライバーを基底とする **デバイス種別定義** として提供する。詳細 → [`10-driver-plugin.md`](10-driver-plugin.md)
 
 #### HTTP ドライバーのイメージ
 

@@ -48,7 +48,7 @@ outputs:
 | `midi` | `device_name` | OS が返すデバイス名（部分一致）。入出力共通 |
 | `osc` | `host`, `port`, `listen_port` | 出力時: `host`・`port`（送信先）。入力時: `listen_port`（待ち受けポート）。双方向の場合は全て指定 |
 
-Device Config Type（例: `osc-vrchat`）が `additional_fields` を宣言している場合、それらのフィールドも接続設定に追加される。`avatar_params` 等は osc-vrchat config type が宣言した追加フィールドであり、このテーブルには含まない。詳細 → [`../10-driver-plugin.md`](../10-driver-plugin.md)
+デバイス種別定義（例: `osc-vrchat`）が `additional_fields` を宣言している場合、それらのフィールドも接続設定に追加される。`avatar_params` 等は osc-vrchat config type が宣言した追加フィールドであり、このテーブルには含まない。詳細 → [`../10-driver-plugin.md`](../10-driver-plugin.md)
 
 ## 接続のバリデーション
 

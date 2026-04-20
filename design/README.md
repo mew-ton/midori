@@ -16,8 +16,8 @@
 | [06-error-handling.md](./06-error-handling.md) | エラー分類・クリティカル／ランタイムエラーの挙動・GUI 可視化 |
 | [07-ui-ux.md](./07-ui-ux.md) | 画面構成・遷移・各画面の UI 要件 |
 | [08-ai.md](./08-ai.md) | AI アシスタント機能設計 |
-| [09-plugin.md](./09-plugin.md) | プラグイン（デバイス構成・ドライバー・Device Config Type の配布）仕様 |
-| [10-driver-plugin.md](./10-driver-plugin.md) | ドライバー・Device Config Type・ウィジェット の概念と仕様 |
+| [09-plugin.md](./09-plugin.md) | プラグイン（デバイス構成・ドライバー・デバイス種別定義 の配布）仕様 |
+| [10-driver-plugin.md](./10-driver-plugin.md) | ドライバー・デバイス種別定義・ウィジェット の概念と仕様 |
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
