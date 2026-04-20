@@ -100,6 +100,45 @@ Driver → Bridge stdout: {"type":"ready"} / {"type":"error",...}
 Bridge の監視スレッドがカウンタの停滞を検出したらそのドライバーをクラッシュ扱いにし、  
 スロットを解放してランタイムエラーとして記録する。
 
+#### Driver SDK
+
+共有メモリの操作・リングバッファへの読み書き・セマフォ・ハートビートといった
+ボイラープレートをすべて **Driver SDK**（`midori-driver-sdk` crate）に隠蔽する。
+
+ドライバー開発者はデバイス固有のロジックだけを書けばよい。
+
+```rust
+// ドライバー開発者が書くコード（入力ドライバーの例）
+fn main() {
+    let conn = DriverConnection::connect_from_env(); // 引数を自動解決
+
+    midi_device.on_note_on(|ch, note, vel| {
+        conn.push_event(DriverEvent::NoteOn { ch, note, vel }); // これだけ
+    });
+}
+```
+
+SDK が隠す処理：
+- 共有メモリのマップ（`memmap2`）
+- 自分のリングバッファスロットへの書き込み
+- セマフォの待機・通知（出力ドライバー）
+- ハートビートカウンタの更新
+
+**他言語対応：** SDK は Rust crate を核とし、C FFI バインディング経由で任意言語から利用できる。
+これにより MIDI ドライバーは Rust、BLE ドライバーは Python、カスタムハードウェアは C++ など、
+得意な言語でドライバーを書けるようになる。
+
+```
+midori-driver-sdk（Rust crate）
+  └── C FFI バインディング
+        ├── Python バインディング（PyO3）
+        ├── Node.js バインディング（napi-rs）
+        └── その他（Go / C++ / 任意の C FFI 対応言語）
+```
+
+公式ドライバー（`@midori/driver-midi`・`@midori/driver-osc`）も
+同じ SDK を使って実装することで、SDK の品質と API 設計を自然に検証する。
+
 #### 全ドライバーが同一モデル
 
 MIDI・OSC も含め、すべてのドライバーが同じ方式で動作する。
