@@ -137,7 +137,7 @@ definition:
 | `range` | `float` / `int` の時のみ必須 | 最小・最大値の配列。例: `[0, 1]`、`[0, 127]`、`[-8192, 8191]` |
 | `out_of_range` | ❌ | `range` を持つ値のみ有効。`ignore`（デフォルト）/ `clamp` / `error`。詳細は [config/00-component-types.md](./00-component-types.md) |
 
-**`slider` / `switch` など単一値を持つ component** は `type` がコンポーネント種別として使われるため、値の型は `valueType` フィールドで宣言する：
+**`slider` / `knob` / `number` など 1D 型の component** は `type` がコンポーネント種別として使われるため、値の型は `valueType` フィールドで宣言する：
 
 | フィールド | 必須 | 値域 |
 |---|---|---|

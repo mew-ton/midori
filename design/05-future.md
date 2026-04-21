@@ -30,7 +30,7 @@ HTTP はドライバー固有の I/O モデルを持つ：
 definition:
   components:
     - id: note_trigger
-      type: pulse
+      type: pulser
     - id: expression
       type: slider
       range: [0, 1]
@@ -45,7 +45,7 @@ binding:
           body: $.note        # JSON パス
         to:
           target: note_trigger.triggered
-          set: 1
+          set: pulse
       - from:
           method: POST
           path: /expression
