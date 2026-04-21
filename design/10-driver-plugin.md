@@ -353,7 +353,7 @@ GUI が generator_ui を表示
 - ファイルシステムへの直接アクセス不可
 - ネットワークリクエスト禁止（CSP で制限）
 
-`generator_ui` がある config type もバイナリは不要で、Git リポジトリのみで配布できる。
+`generator_ui` があるデバイス種別定義もバイナリは不要で、Git リポジトリのみで配布できる。
 
 ### render_components（プレビュー/モニタリング）
 
