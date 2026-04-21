@@ -141,11 +141,9 @@ definition:
 
 | フィールド | 必須 | 値域 |
 |---|---|---|
-| `valueType` | ✅ | `bool` / `float` / `int` / `pulse` |
-| `range` | `float` / `int` の時のみ必須 | 同上 |
+| `valueType` | ✅ | `int` / `float` |
+| `range` | 必須（`number` は任意） | 最小・最大値の配列。例: `[0, 1]`、`[-1, 1]`、`[40, 280]` |
 | `out_of_range` | ❌ | 同上 |
-
-`pulse` は瞬間トリガーを表す型で連続値を持たないため、`range` は不要（指定しても無視される）。
 
 `additionals` はすべての component type に追加できる。ただし実用的な使用ケースは主に `keyboard`（per-note の追加値）。
 

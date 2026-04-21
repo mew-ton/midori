@@ -24,7 +24,7 @@
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
 | [config/02-device-config.md](./config/02-device-config.md) | デバイス構成 設定仕様（direction / definition / binding / layout） |
 | [config/03-mapper.md](./config/03-mapper.md) | 変換グラフ 設定仕様（ノードグラフ・Signal 定義） |
-| [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（デバイスマッチング・変換グラフ割り当て） |
+| [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（入出力デバイス・変換グラフ・接続設定） |
 | [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
 | [config/syntax/01-expr.md](./config/syntax/01-expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
 | [config/drivers/midi.md](./config/drivers/midi.md) | ドライバー仕様: MIDI（binding.input / binding.output） |
