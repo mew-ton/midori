@@ -1,5 +1,5 @@
 ---
-name: review-loop
+name: loop-reviewer
 description: Use this agent when the user wants to run the full contradiction-fix-commit cycle on design docs. Spawns find-contradiction investigations in a loop, applies all immediate fixes, commits each round, and appends judgment-required items to DESIGN_REVIEW.md until no more immediate fixes remain. Triggers on "矛盾を潰す", "設計レビューループを回す", "run review loop", "fix all doc issues".
 model: inherit
 ---
