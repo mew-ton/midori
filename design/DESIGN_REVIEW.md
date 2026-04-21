@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-04-21 ラウンド 2
+
+### [config/02-device-config.md:406] mirror の setMap.map 全単射判定が未定義
+
+**問題:**  
+`mirror` の使用条件として「`setMap.map` は原則不可。全単射の map のみ例外的に可」と書かれているが、Bridge がその map が全単射かどうかを**どうやって判定するか**が未記述。
+
+`setMap.map` の全単射判定は：
+- すべての `set` 値が重複しない場合 = 全単射
+- いずれかの `set` 値が重複する場合 = 非全単射 → mirror 不可
+
+**選択肢:**  
+A: Bridge が起動時に `setMap.map` の全エントリを走査し、出力値の重複チェックを行う。重複があればエラー  
+B: `setMap.map` の `mirror` を単純に禁止し、仕様から「全単射なら可」の記述を削除する（実用上ほぼ存在しないため）
+
+---
+
 ## 2026-04-21 ラウンド 1
 
 ### [02-architecture.md / 04-runtime-cli.md] Signal イベントに device_id が含まれない
