@@ -6,11 +6,13 @@ ComponentState を Signal に変換する。ノードグラフ形式で定義す
 
 ```yaml
 input_devices:
-  yamaha-els03: devices/yamaha-els03.yaml   # キー = プロファイルの inputs[].id と一致させる
+  yamaha-els03: devices/yamaha-els03/yamaha-els03.yaml   # キー = プロファイルの inputs[].id と一致させる
 
 output_devices:
-  vrchat-default: devices/vrchat-default.yaml
+  vrchat-default: devices/vrchat-default/vrchat-default.yaml
 ```
+
+パスは**ワークスペースルートからの相対パス**で記述する。mapper ファイル自身の位置（`mappers/` 等）は基準にならない。`@plugin/` プレフィックスによるプラグイン由来ファイルの参照も可能（[→ 09-plugin.md](../09-plugin.md)）。
 
 | 目的 | 内容 |
 |---|---|
