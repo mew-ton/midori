@@ -1,24 +1,11 @@
 ---
 name: find-contradiction
-description: Use this skill when the user asks to find contradictions or inconsistencies in design docs, run a review loop, or check for naming drift. Triggers on phrases like "矛盾を探す", "不整合チェック", "find contradictions", "find inconsistencies", or "design doc cleanup".
+description: Use this skill to scan design documents and sample YAML for contradictions, inconsistencies, naming drift, or broken references. Returns a classified list of findings (immediate-fix vs. needs-review). Triggers on "矛盾を探す", "不整合チェック", "find contradictions", "find inconsistencies".
 ---
 
-# Design Document Review Loop
+# find-contradiction
 
-Autonomously scan all design docs and sample YAML for contradictions, fix what can be fixed, and log judgment-required items to `design/DESIGN_REVIEW.md`. Repeat until no immediate fixes remain.
-
-## Loop
-
-```
-REPEAT:
-  1. Investigate  — use Explore agent to scan all target files
-  2. Classify     — immediate fix vs. needs-review
-  3. Fix          — apply only immediate fixes
-  4. Commit       — git add -A && git commit
-  5. Append       — add needs-review items to DESIGN_REVIEW.md
-UNTIL no immediate fixes found (max 5 rounds)
-END → present DESIGN_REVIEW.md to user
-```
+Scan all design docs and sample YAML. Return findings classified as **immediate-fix** or **needs-review**.
 
 ## Target Files
 
@@ -35,55 +22,38 @@ profiles/mappers/*.yaml
 | Category | What to check |
 |---|---|
 | Broken links | Markdown links point to existing files |
-| Naming drift | Same concept used under different names |
+| Naming drift | Same concept under different names |
 | Schema consistency | `profiles/` YAML matches `design/config/` spec |
-| Stale field names | Renamed fields fully propagated (`config_type→device_kind` etc.) |
+| Stale field names | Past renames fully propagated (e.g. `config_type→device_kind`) |
 | Contradicting statements | Different explanations for the same fact |
-| Missing definitions | Terms used but not defined in `00-naming.md` |
+| Missing definitions | Terms used but absent from `00-naming.md` |
 | Stack divergence | `03-tech-stack.md` policy vs. actual specs |
-| UI/arch alignment | UI-assumed features exist in architecture |
+| UI/arch alignment | UI-assumed features defined in architecture |
 
-## Immediate Fix Criteria
+## Classification
 
-Fix without asking when:
-- Broken link (target file doesn't exist)
+**Immediate fix** — act without asking:
+- Broken link
 - Conversion artifact (garbled text, mis-concatenated backticks)
 - Obvious naming drift (same concept, different label)
-- Stale field name (old renamed term)
-- Missing spec note where the answer is unambiguous from existing docs
+- Stale field name
+- Unambiguous spec gap (answer clear from existing docs)
 
-## Needs-Review Criteria
-
-Append to `design/DESIGN_REVIEW.md` instead of fixing:
+**Needs review** — do not fix, surface to user:
 - Architecture decision required
 - User intent unclear
-- Multiple valid interpretations exist
+- Multiple valid interpretations
 
-## DESIGN_REVIEW.md Format
+## Output Format
 
-```markdown
-## YYYY-MM-DD Round N
-
-### [file:line] Title
-Problem description.
-Option A: ...
-Option B: ...
+Report findings as:
+```
+[immediate-fix] file:line — description
+[needs-review]  file:line — description + options
 ```
 
-## Commit Message
+## Accuracy
 
-```
-design: fix inconsistencies round N (summary)
-
-- fix 1
-- fix 2
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-```
-
-## Accuracy Tips
-
-- Use Explore agent for the investigation phase — faster and more thorough than reading files one by one
-- Verify apparent contradictions by reading both files before acting — many are false positives from different contexts
-- Use Python `str.replace()` for multi-file text replacement; avoids sed backtick/special-char bugs
-- Do not fix based on inference alone; if unsure, add to DESIGN_REVIEW.md
+- Use Explore agent — faster and more thorough than reading files one by one
+- Verify apparent contradictions by reading both files; many are false positives from different contexts
+- Never fix based on inference alone
