@@ -126,11 +126,12 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │
 └── profiles/                        ← 配布用サンプルワークスペース（git リポジトリ）
     ├── devices/
-    │   ├── yamaha-els03.yaml
-    │   ├── generic-midi.yaml
-    │   └── vrchat-osc.yaml
+    │   ├── yamaha-els03/
+    │   │   └── yamaha-els03.yaml
+    │   └── vrchat-osc/
+    │       └── vrchat-osc.yaml
     └── mappers/
-        └── example.yaml
+        └── els03-vrchat-simple.yaml
 ```
 
 **ユーザーワークスペース（git リポジトリ）の構成：**
