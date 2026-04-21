@@ -131,18 +131,21 @@ inputs:
 
 ## セキュリティ
 
+詳細設計 → [`11-security/`](11-security/)
+
 | 項目 | 方針 |
 |---|---|
 | コード実行 | デバイス構成のみのプラグインはなし（YAML 読み込みのみ）。ドライバーを含むプラグインはバイナリを実行する |
-| ファイルアクセス | `<app-data-dir>/plugins/<name>/devices/` 以下のみ（YAML プラグイン）。ドライバープラグインはユーザー権限でフルアクセス可能 |
-| `spec_source` URL | プラグイン由来のデバイス構成でも http/https のみ（既存ルールと同じ） |
+| ファイルアクセス | `<app-data-dir>/plugins/<name>/devices/` 以下のみ（YAML プラグイン）。ドライバーは段階的サンドボックス化（`11-security/01-driver-sandbox.md`） |
+| `spec_source` URL | プラグイン由来のデバイス構成でも http/https のみ。プライベートアドレスは拒否（`11-security/03-ai.md`） |
 | ネットワーク | インストール・更新時の `git clone` / `git pull`、ドライバーインストール時の GitHub Releases からのバイナリダウンロード |
+| ウィジェット | `render_components` は sandbox iframe、`generator_ui` は contextBridge 経由に限定（`11-security/02-widget.md`） |
 
 ### プロンプトインジェクション
 
-プラグインの `.midori-plugin/plugin.yaml` の `description` や、同梱デバイス構成の `metadata.spec` / `metadata.name` は AI のコンテキストに渡される。信頼できないリポジトリがこれらのフィールドに命令文を埋め込む可能性がある。
+プラグインの `plugin.yaml` の `description` や、同梱デバイス構成の `metadata.spec` / `metadata.name` は AI のコンテキストに渡される。信頼できないリポジトリがこれらのフィールドに命令文を埋め込む可能性がある。
 
-対策は `08-ai.md` のプロンプトインジェクション対策セクションを参照。プラグイン由来コンテンツは特に外部データタグによる分離と、初回使用時の GUI 通知を徹底する。
+対策 → [`11-security/03-ai.md`](11-security/03-ai.md)（外部データタグによる分離・初回使用時の GUI 通知）
 
 ---
 
