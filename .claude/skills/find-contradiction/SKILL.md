@@ -1,6 +1,6 @@
 ---
-name: design-review
-description: Use this skill when the user asks to find contradictions or inconsistencies in design docs, run a design review loop, or check for naming drift. Triggers on phrases like "矛盾を探す", "設計レビュー", "/design-review", or "inconsistency check".
+name: find-contradiction
+description: Use this skill when the user asks to find contradictions or inconsistencies in design docs, run a review loop, or check for naming drift. Triggers on phrases like "矛盾を探す", "不整合チェック", "find contradictions", "find inconsistencies", or "design doc cleanup".
 ---
 
 # Design Document Review Loop
