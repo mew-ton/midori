@@ -107,7 +107,7 @@
 ─── 出力 ─────────────────────────────── [ + 追加 ]
 ┌──────────────────────────────────────────────────┐
 │ id: vrchat-default  devices/vrchat-default.yaml  │
-│   driver: osc  ( config type: osc-vrchat )      │
+│   device_kind: osc-vrchat                       │
 │   host: [ 127.0.0.1 ]   port: [ 9000 ]          │
 │   アバターパラメーター JSON: [ パスを選択... ]   │
 └──────────────────────────────────────────────────┘

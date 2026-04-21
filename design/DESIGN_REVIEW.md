@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-04-21 ラウンド 3
+
+### [04-runtime-cli.md:70 / 02-architecture.md:25] signal イベントと device_id の整合
+
+（ラウンド1から継続）詳細が確認できた。
+
+**問題の詳細:**  
+- `02-architecture.md` は Layer 3 出力を「Signal（device_id 付き）」と記載
+- `04-runtime-cli.md` の signal イベント: `{"type":"signal","name":"upper.60.pressed","value":1.0}` — device_id なし
+- `error-path` イベント（06-error-handling.md）の `"signals":["upper.60.velocity"]` も同様に device_id なし
+- `config/03-mapper.md` のポート記法では `output.<device_id>.<Signal指定子>` と device_id を含む
+
+**選択肢:**  
+A: signal イベントに `"device"` フィールドを追加 `{"type":"signal","device":"vrchat-osc","name":"upper.60.pressed","value":1.0}`  
+B: アーキテクチャ図の「device_id 付き」を修正し、Signal 指定子のみで識別すると統一。device_id との紐づけはルーティング時に行われ、イベントストリームには出現しない
+
+---
+
+### [08-ai.md:52] sample_raw_events ツールの呼び出しシグネチャ未定義
+
+**問題:**  
+`sample_raw_events` ツールが引数テーブルに登場するが呼び出しパラメータ（device_id, duration 等）と戻り値の形式が未記述。
+
+**必要な仕様:**  
+- パラメータ: `device_id: string`, `duration_ms?: number`（デフォルト値）
+- 戻り値: raw events の配列（JSON Lines 形式 or 配列？）
+- エラー時の動作（デバイス未接続等）
+
+---
+
+### [07-ui-ux/06-graph.md:113] 変換グラフテスターの状態遷移・デバイス接続設定
+
+**問題:**  
+変換グラフ編集画面のテスターモードは「ブリッジを内部的に起動」するが：
+- 起動時にどのデバイス接続設定を使うか未定義（プロファイルがない状態）
+- テスト実行中とプロファイル実行中の状態遷移が未定義
+- テスト用の接続設定をどこに入力するか未定義
+
+デバイス構成プレビュータブ（05-device-config.md）は「テスト接続設定」を preferences にキャッシュする仕様があるが、変換グラフテスターは2つのデバイスが必要で設定が複雑。
+
+---
+
 ## 2026-04-21 ラウンド 2
 
 ### [config/02-device-config.md:406] mirror の setMap.map 全単射判定が未定義
