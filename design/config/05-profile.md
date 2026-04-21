@@ -43,6 +43,10 @@ outputs:
 
 ## connection の driver 別フィールド
 
+`connection` のフィールドは、ドライバーの `connection_fields` 宣言から自動生成される。`connection_fields` の各エントリの `id` がそのまま YAML のキーになる。GUI はこの宣言をもとに接続設定フォームを生成し、ユーザーが入力した値をプロファイルの `connection` に保存する。
+
+Driver SDK は任意キーに対する設定値を取得するための関数を提供する（`get_connection_field(key) -> value`）。ドライバーはこの関数を通じて接続設定値を取得する。
+
 | driver | フィールド | 内容 |
 |---|---|---|
 | `midi` | `device_name` | OS が返すデバイス名（部分一致）。入出力共通 |

@@ -67,7 +67,7 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 ### signal
 
 ```json
-{"type":"signal","name":"upper.60.pressed","value":1.0}
+{"type":"signal","device":"vrchat-osc","name":"upper.60.pressed","value":1.0}
 ```
 
 ### log

@@ -87,7 +87,7 @@ Layer 1 / Layer 5 のエラーはドライバー外部プロセスの stdout か
 ランタイムエラーは通常の `log` イベントに加え、経路の可視化用に `error-path` イベントを出力する。
 
 ```json
-{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":["upper.60.velocity"],"components":[{"direction":"output","device":"vrchat-default","component":"upper","note":60,"value_name":"velocity"}]}
+{"type":"error-path","nodes":["vel_scale","vel_flatten"],"signals":[{"device":"vrchat-osc","name":"upper.60.velocity"}],"components":[{"direction":"output","device":"vrchat-default","component":"upper","note":60,"value_name":"velocity"}]}
 ```
 
 GUI はこのイベントを受け取り、該当する要素に `data-error="1"` を付与する。
