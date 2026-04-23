@@ -9,5 +9,8 @@
   ],
   "cpu": [
     "arm64"
-  ]
+  ],
+  "exports": {
+    ".": "./index.js"
+  }
 }
