@@ -8,3 +8,6 @@ repository = "https://github.com/mew-ton/midori"
 
 [dependencies]
 midori-core = { workspace = true }
+
+[lints]
+workspace = true
