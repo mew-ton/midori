@@ -164,25 +164,25 @@ physical_input_identity: [device_name]
 
 ```yaml
 # プロファイル inputs（NG: 同じマイクを 2 ドライバーが open）
-- device_config: devices/voice-mic.yaml      # driver: audio-voice
+- device: devices/voice-mic.yaml      # driver: audio-voice
   connection: { device_name: "Shure SM58" }
-- device_config: devices/voice-spec.yaml     # driver: audio-spectrum
+- device: devices/voice-spec.yaml     # driver: audio-spectrum
   connection: { device_name: "Shure SM58" }  # ← 同 modality, 同 device_name → エラー
 ```
 
 ```yaml
 # OK: modality が違う
-- device_config: devices/els03.yaml          # driver: midi
+- device: devices/els03.yaml          # driver: midi
   connection: { device_name: "ELS-03" }
-- device_config: devices/voice-mic.yaml      # driver: audio-voice
+- device: devices/voice-mic.yaml      # driver: audio-voice
   connection: { device_name: "Shure SM58" }
 ```
 
 ```yaml
 # OK: 同 modality だが physical_input_identity の値が異なる
-- device_config: devices/voice-mic.yaml      # driver: audio-voice
+- device: devices/voice-mic.yaml      # driver: audio-voice
   connection: { device_name: "Shure SM58" }
-- device_config: devices/spec-electone.yaml  # driver: audio-spectrum
+- device: devices/spec-electone.yaml  # driver: audio-spectrum
   connection: { device_name: "UAB-80 内蔵マイク" }
 ```
 

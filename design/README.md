@@ -30,7 +30,7 @@
 | [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
 | [config/syntax/01-expr.md](./config/syntax/01-expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
 | [config/drivers/midi.md](./config/drivers/midi.md) | ドライバー仕様: MIDI（binding.input / binding.output） |
-| [config/drivers/osc.md](./config/drivers/osc.md) | ドライバー仕様: OSC（binding.output） |
+| [config/drivers/osc.md](./config/drivers/osc.md) | ドライバー仕様: OSC（binding.input / binding.output） |
 | [layers/01-input-driver/requirements.md](./layers/01-input-driver/requirements.md) | Layer 1 入力ドライバー 要件 |
 | [layers/02-input-recognition/requirements.md](./layers/02-input-recognition/requirements.md) | Layer 2 デバイス構成（入力）要件 |
 | [layers/02-input-recognition/definition-requirements.md](./layers/02-input-recognition/definition-requirements.md) | Layer 2 definition 要件（component type 体系・additionals） |
