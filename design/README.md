@@ -20,7 +20,7 @@
 | [10-driver-plugin.md](./10-driver-plugin.md) | ドライバー・デバイス種別定義・ウィジェット の概念と仕様 |
 | [11-security/](./11-security/) | セキュリティ設計（セキュリティ水準・ドライバーサンドボックス・ウィジェット・AI） |
 | [12-distribution.md](./12-distribution.md) | 配布窓口・アップデート方針・利用規約の枠組み |
-| [12-ecosystem-readiness.md](./12-ecosystem-readiness.md) | エコシステム整備 TODO（契約・規約・導線の準備項目） |
+| [13-ecosystem-readiness.md](./13-ecosystem-readiness.md) | エコシステム整備 TODO（契約・規約・導線の準備項目） |
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |

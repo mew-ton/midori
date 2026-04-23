@@ -64,12 +64,9 @@
 
 ## 2026-04-23 Round 1
 
-### [design/12-distribution.md / design/12-ecosystem-readiness.md] ファイル番号の重複
+### [design/12-distribution.md / design/12-ecosystem-readiness.md] ファイル番号の重複 ✅ 解決済み
 
-`12-distribution.md` と `12-ecosystem-readiness.md` がともに `12-` 番号を共有している。README にも両方が列挙されており、現状は動作上問題はないが、将来ファイルを追加する際の番号採番規則が曖昧になる。
-
-Option A: `12-ecosystem-readiness.md` を `13-ecosystem-readiness.md` に改番する。README とファイル内の相互リンクを更新する。
-Option B: 現状の番号体系を維持し、`12-` のサブグループとして両ファイルを許容する（例: 将来は `12a-` / `12b-` 記法に揃える）。
+`13-ecosystem-readiness.md` に改番し、README の参照も更新した。
 
 ### [profiles/devices/vrchat-osc/vrchat-osc.yaml:41] direction: any と受信専用パラメーターの整合性
 
