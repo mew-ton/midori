@@ -30,10 +30,8 @@ pub enum IpcEvent {
     DeviceState {
         direction: Direction,
         device: String,
-        component: String,
-        /// Present for keyboard components.
-        note: Option<u8>,
-        value_name: String,
+        /// Full dot-separated specifier, e.g. `"upper.60.pressed"` or `"rightHand.index.proximal.bend"`.
+        specifier: String,
         value: Value,
     },
 
@@ -66,6 +64,7 @@ pub enum IpcEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalRef {
     pub device: String,
+    /// Full dot-separated specifier string.
     pub name: String,
 }
 
@@ -74,9 +73,8 @@ pub struct SignalRef {
 pub struct ComponentRef {
     pub direction: Direction,
     pub device: String,
-    pub component: String,
-    pub note: Option<u8>,
-    pub value_name: String,
+    /// Full dot-separated specifier string.
+    pub specifier: String,
 }
 
 #[cfg(test)]
@@ -92,5 +90,16 @@ mod tests {
             message: "unknown component".into(),
         };
         assert!(matches!(e, IpcEvent::Log { .. }));
+    }
+
+    #[test]
+    fn device_state_dynamic_specifier() {
+        let e = IpcEvent::DeviceState {
+            direction: Direction::Input,
+            device: "els03".into(),
+            specifier: "upper.60.pressed".into(),
+            value: Value::Bool(true),
+        };
+        assert!(matches!(e, IpcEvent::DeviceState { .. }));
     }
 }
