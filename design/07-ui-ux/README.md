@@ -11,3 +11,4 @@
 | [07-profile.md](07-profile.md) | プロファイル詳細画面 |
 | [08-preferences.md](08-preferences.md) | Preferences 設定画面 |
 | [09-errors.md](09-errors.md) | エラー・空状態・用語整理 |
+| [10-playfulness.md](10-playfulness.md) | 遊び心（機能契約層／装飾層／フロー外の層分けと配分ルール） |
