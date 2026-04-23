@@ -59,6 +59,8 @@ description: |        # 任意
 | `device_kinds` | ❌ | 提供する デバイス種別定義 の一覧 |
 | `render_components` | ❌ | 提供する描画コンポーネントの一覧 |
 
+プラグインは `.midori-plugin/security.json` を置くことで、yanked バージョンや強制アップデートをプラグイン開発者自身が宣言できる。詳細 → [`12-distribution.md`](12-distribution.md)
+
 マニフェスト内のパス（`drivers` 等に記述するファイルパス）はすべて **`plugin.yaml` ファイルからの相対パス**で記述する。
 
 `drivers` / `device_kinds` / `render_components` の詳細フィールド仕様 → [`10-driver-plugin.md`](10-driver-plugin.md)
