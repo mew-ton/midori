@@ -20,6 +20,7 @@
 | 3 | 切断後の再接続を自動で試みられること | ブリッジを停止せずに復帰できることが望ましい |
 | 4 | 複数デバイスの同時接続に対応できること | プロファイルの `inputs` に複数エントリを持てる |
 | 5 | ドライバーをインターフェース越しに差し替えられること | 上位層は具体的なドライバー実装を知らない |
+| 6 | 同一の物理入力を複数のドライバーが同時に open する構成は起動時バリデーションエラーとすること | 同一 `modality` ・同一 `physical_input_identity` 値の組み合わせを Bridge が検出。詳細 → [物理入力の重複禁止](#物理入力の重複禁止) |
 
 ## I/O モデル
 
@@ -137,6 +138,69 @@ event               ────────────▶  pulse
 | **手段命名** (`audio-fft`, `audio-onnx-x`) | 実装が変わるたび名前を変えたくなる。プロファイル / device_config からの参照が壊れる |
 
 audio 系での具体適用例 → [`05-future.md` の Audio 系ドライバーのイメージ](../../05-future.md#audio-系ドライバーのイメージ)
+
+### 物理入力の重複禁止
+
+粒度指標を破って **同一物理入力に複数のドライバーを向けた構成は起動時バリデーションエラー**とする。GUI のドロップダウンには重複候補が表示されてもよい（フィルタリングしない）が、保存・起動の段階で Bridge がエラーを返す。
+
+#### 同定方法
+
+各ドライバーは `driver.yaml` で以下を宣言する（[`10-driver-plugin.md`](../../10-driver-plugin.md) 参照）：
+
+| フィールド | 役割 |
+|---|---|
+| `modality` | 物理 I/O のクラス（`audio` / `midi` / `osc` / `ble` / `http` 等） |
+| `physical_input_identity` | `connection_fields` のうち、物理入力を一意に同定する ID の配列 |
+
+Bridge はプロファイルの `inputs` 全件について `(modality, physical_input_identity の値タプル)` を集計し、**完全一致するエントリが 2 つ以上あればエラー**を返す。
+
+```yaml
+# 例: driver.yaml
+modality: audio
+physical_input_identity: [device_name]
+```
+
+#### 衝突例
+
+```yaml
+# プロファイル inputs（NG: 同じマイクを 2 ドライバーが open）
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+- device_config: devices/voice-spec.yaml     # driver: audio-spectrum
+  connection: { device_name: "Shure SM58" }  # ← 同 modality, 同 device_name → エラー
+```
+
+```yaml
+# OK: modality が違う
+- device_config: devices/els03.yaml          # driver: midi
+  connection: { device_name: "ELS-03" }
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+```
+
+```yaml
+# OK: 同 modality だが physical_input_identity の値が異なる
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+- device_config: devices/spec-electone.yaml  # driver: audio-spectrum
+  connection: { device_name: "UAB-80 内蔵マイク" }
+```
+
+#### `physical_input_identity` 省略時
+
+宣言を省略したドライバーは重複検出の対象外になる。「物理入力という概念を持たない」ドライバー（例: 仮想信号源）向けの抜け穴。標準的なハードウェア由来ドライバーは必ず宣言する。
+
+#### サーバー型ドライバーの扱い
+
+OSC / HTTP のような「サーバー起動型」I/O は **Listen 側のソケットがリソース** になる。`physical_input_identity` には listen 側のキー（`[host, listen_port]` 等）を指定する。同じポートを 2 ドライバーで bind しようとする構成も同じ仕組みで弾かれる。
+
+#### エラーの提示
+
+Bridge は次の情報を含むエラーを返す：
+
+- 衝突した `inputs` エントリの `device_config` パス
+- 共通する `modality` と `physical_input_identity` 値
+- 推奨される対処（「同一物理入力から複数特徴量が必要なら 1 ドライバー多 component 構成にしてください。粒度指標を参照」）
 
 ## ドライバーの拡張性
 

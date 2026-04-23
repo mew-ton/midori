@@ -103,11 +103,15 @@ binding:
 
 ##### 同一マイクを 2 ドライバーで共有する構成について
 
-原則として推奨しない。粒度指標の軸 1（時刻結合）が YES の特徴量を別ドライバーに分けてしまった場合に発生する事態であり、その時点で設計が間違っている。技術的にも以下の問題がある：
+**起動時バリデーションエラーになる**（[物理入力の重複禁止](layers/01-input-driver/requirements.md#物理入力の重複禁止)）。`audio` modality の `physical_input_identity: [device_name]` を Bridge が突き合わせ、2 つの inputs が同じデバイスを指している時点で profile load が失敗する。
+
+仮にこの仕組みがなく許してしまった場合の問題（=禁止する根拠）：
 
 - マイクの同時 open は OS 依存（macOS / Windows shared mode は OK、Linux ALSA 直叩きは不可）
 - 各ドライバーが独立した内部バッファ・解析フレームを持つため**フレーム位相が揃わない**（数十 ms ズレる）
 - 同じ PCM のデコードと窓掛けが二重化する
+
+同一マイクから複数特徴量が必要な場合は **1 ドライバー多 component 構成**（粒度指標 軸 1）を取る。`audio-voice` が viseme + volume を 1 ドライバーで出すのはこの適用例。
 
 なお同じ audio トランスポートに対して用途違いを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
 

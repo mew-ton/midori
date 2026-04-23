@@ -71,6 +71,8 @@ MIDI・OSC を含む全てのドライバーがプラグインとして実装さ
 ```yaml
 # drivers/midi/driver.yaml（ドライバー構成ファイル）
 name: midi
+modality: midi
+physical_input_identity: [device_name]
 release_assets:
   darwin-arm64: midori-driver-midi-darwin-arm64
   darwin-x64:   midori-driver-midi-darwin-x64
@@ -127,7 +129,9 @@ drivers:
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
-| `name` | ✅ | ドライバー識別子 |
+| `name` | ✅ | ドライバー識別子（`<modality>-<purpose>` 形式推奨。命名ルール → [`layers/01-input-driver/requirements.md#ネームスペース命名`](layers/01-input-driver/requirements.md#ネームスペース命名)） |
+| `modality` | ✅ | 物理 I/O のクラス。同一物理入力の重複検出に使用（例: `audio` / `midi` / `osc` / `ble` / `http`）。詳細 → [`layers/01-input-driver/requirements.md#物理入力の重複禁止`](layers/01-input-driver/requirements.md#物理入力の重複禁止) |
+| `physical_input_identity` | ❌ | `connection_fields` のうち、物理入力を一意に同定するフィールド ID の配列（例: `[device_name]`、`[host, listen_port]`）。省略時は重複検出を行わない |
 | `release_assets` | ✅ | プラットフォーム別 GitHub Releases アセット名。`darwin-arm64` / `darwin-x64` / `linux-x64` / `win32-x64` をキーとして定義する |
 | `start_args` | ❌ | `start` 時の追加引数 |
 | `connection_fields` | ❌ | 接続設定フォームフィールドの宣言 |
