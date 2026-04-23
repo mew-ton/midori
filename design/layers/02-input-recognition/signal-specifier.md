@@ -38,7 +38,7 @@ definition の構成から決まるパス文字列。component id・note（keybo
 | Signal 指定子 | 意味 | 種別 |
 |---|---|---|
 | `upper.{note}.pressed` | upper keyboard の各キーの pressed | primitive |
-| `upper.{note}.velocity` | upper keyboard の各キーの velocity | primitive |
+| `upper.{note}.velocity` | upper keyboard の各キーの velocity | additionals 宣言が必要 |
 | `upper.{note}.pressure` | upper keyboard の各キーの pressure（PolyAT） | additionals 宣言が必要 |
 | `upper.*.pressed` | upper keyboard 全キーの pressed（bool[]） | gather（変換グラフ専用） |
 | `upper_expression.value` | upper_expression slider の value | primitive |

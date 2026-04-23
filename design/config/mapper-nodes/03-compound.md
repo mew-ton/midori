@@ -59,7 +59,7 @@ expression(変化時のみ発火) → defaults(0.0) → output
                                       ↓ gate を挟む
 expression → defaults(0.0) ─┐
                               ├─▶ gate ─▶ output（信号がない tick は送信しない）
-pressed(継続発火)    ────────┘
+sustain(継続発火)    ─────────┘
 ```
 
 ```yaml
@@ -77,7 +77,7 @@ connections:
     to:   expr_default.in
   - from: expr_default.out
     to:   expr_gate.in
-  - from: input.yamaha-els03.expression.pressed   # 信号が来ている tick だけ true
+  - from: input.yamaha-els03.upper_sustain.pressed   # サステイン ON の tick だけ gate を開く例
     to:   expr_gate.condition
   - from: expr_gate.out
     to:   output.vrchat-default.expression.value
