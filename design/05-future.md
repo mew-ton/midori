@@ -77,7 +77,9 @@ binding:
 
 #### Audio 系ドライバーのイメージ
 
-マイク入力から特徴量を抽出するドライバー。**用途別に専門化したドライバーを並べる**ことで、異なるマイクに異なる解析を掛けたいケース（例: エレクトーン集音マイク → 楽器スペクトラム、歌声用マイク → ボイス解析）を自然に表現する。
+マイク入力から特徴量を抽出するドライバー群。[ドライバー分割の粒度指標](layers/01-input-driver/requirements.md#ドライバー分割の粒度指標) の具体適用例。
+
+##### ドライバー一覧
 
 - `audio-spectrum`: 楽器・環境音向け。接続設定 = 入力デバイス選択 + `fft_size` / `band_count` / `window`。出力 = `static_array<float>`（長さ = band_count）
 - `audio-voice`: ボイス特化。接続設定 = 入力デバイス選択 + `model_path` / `frame_ms` / `smoothing`。出力 =
@@ -85,19 +87,29 @@ binding:
   - dominant viseme: `int`（0–14）
   - volume: `float`（range [0, 1]、RMS 由来の正規化値）
 
-##### ドライバーを「用途別」に切る理由
+将来追加候補: `audio-music`（beat / chord / key）など。
 
-ボイス入力は「viseme と volume を同じ瞬間の音声から取る」ことに意味がある（リップシンクと表情の振幅が時刻一致する）。同じマイクを `audio-viseme` と `audio-volume` の 2 ドライバーで共有する構成も理屈の上では可能だが、
+##### 粒度指標の当てはめ
+
+| 比較 | 軸 1 時刻結合 | 軸 2 目的 | 軸 3 パラメーター系 | 軸 4 計算特性 | 結論 |
+|---|---|---|---|---|---|
+| viseme と volume | YES（リップシンクで位相一致が効く） | — | — | — | **同一 `audio-voice` に畳む**（軸 1 で確定） |
+| `audio-voice` と `audio-spectrum` | NO（独立して解釈する） | NO（ボイス vs 楽器） | NO（model vs fft_size） | YES（ML 推論 vs 純 DSP） | **別ドライバー** |
+| `audio-spectrum` と仮想 `audio-rms` | NO | やや YES（どちらも音量系の見方） | YES（同じ FFT パイプ） | NO（ともに軽量 DSP） | **別ドライバーにしない**（`audio-spectrum` の component に RMS を足す） |
+
+##### 命名
+
+`<modality>-<purpose>` 規則に従い、`audio-` プレフィックスで並べる。手段命名（`audio-fft` / `audio-onnx-viseme` 等）は避ける。命名ルールの全文 → [ドライバー分割の粒度指標 § ネームスペース命名](layers/01-input-driver/requirements.md#ネームスペース命名)
+
+##### 同一マイクを 2 ドライバーで共有する構成について
+
+原則として推奨しない。粒度指標の軸 1（時刻結合）が YES の特徴量を別ドライバーに分けてしまった場合に発生する事態であり、その時点で設計が間違っている。技術的にも以下の問題がある：
 
 - マイクの同時 open は OS 依存（macOS / Windows shared mode は OK、Linux ALSA 直叩きは不可）
 - 各ドライバーが独立した内部バッファ・解析フレームを持つため**フレーム位相が揃わない**（数十 ms ズレる）
 - 同じ PCM のデコードと窓掛けが二重化する
 
-といった問題がある。**「同一の物理入力から得る関連特徴量は 1 ドライバーにまとめて多 component で出す」** 方が現行モデルと整合する。`audio-voice` がボイス用途で必要になる特徴量（viseme + volume + 将来的に pitch / energy 等）を一括で出すのはこの方針の適用例。
-
-逆に「ボイス用と楽器用は別ドライバー」となるのは、扱う特徴量と適性パラメーター（fft_size / model 等）が用途によって大きく異なるため、単一ドライバーに畳むメリットが薄いから。
-
-同じ audio トランスポートに対して用途違いを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
+なお同じ audio トランスポートに対して用途違いを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
 
 ##### 設計上の裏付け
 
