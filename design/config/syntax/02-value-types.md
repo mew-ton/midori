@@ -168,9 +168,9 @@ setMap:
 setMap:
   source: arg1
   map:
-    - when: "0"
+    - when: 0
       set: false
-    - when: "1"
+    - when: 1
       set: true
 ```
 

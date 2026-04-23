@@ -1,0 +1,43 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/gui:
+    dependencies:
+      '@midori/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@midori/ui':
+        specifier: workspace:*
+        version: link:../ui
+
+  packages/runtime:
+    optionalDependencies:
+      '@midori/runtime-darwin-arm64':
+        specifier: workspace:*
+        version: link:../runtime-darwin-arm64
+      '@midori/runtime-darwin-x64':
+        specifier: workspace:*
+        version: link:../runtime-darwin-x64
+      '@midori/runtime-linux-x64':
+        specifier: workspace:*
+        version: link:../runtime-linux-x64
+      '@midori/runtime-win32-x64':
+        specifier: workspace:*
+        version: link:../runtime-win32-x64
+
+  packages/runtime-darwin-arm64: {}
+
+  packages/runtime-darwin-x64: {}
+
+  packages/runtime-linux-x64: {}
+
+  packages/runtime-win32-x64: {}
+
+  packages/ui: {}

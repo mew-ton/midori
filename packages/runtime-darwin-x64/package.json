@@ -1,0 +1,9 @@
+{
+  "name": "@midori/runtime-darwin-x64",
+  "version": "0.1.0",
+  "description": "Midori runtime binary for darwin-x64",
+  "private": false,
+  "main": "index.js",
+  "os": ["darwin"],
+  "cpu": ["x64"]
+}

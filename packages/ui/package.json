@@ -1,0 +1,9 @@
+{
+  "name": "@midori/ui",
+  "version": "0.1.0",
+  "description": "Midori UI component library (Svelte)",
+  "private": false,
+  "scripts": {
+    "build": "echo 'TODO: implement build'"
+  }
+}

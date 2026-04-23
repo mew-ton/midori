@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "crates/midori-core",
+    "crates/midori-sdk",
+    "crates/midori-runtime",
+    "crates/midori-driver-midi",
+    "crates/midori-driver-osc",
+]
+resolver = "2"
+
+[workspace.dependencies]
+midori-core = { path = "crates/midori-core", version = "0.1.0" }
+midori-sdk  = { path = "crates/midori-sdk",  version = "0.1.0" }

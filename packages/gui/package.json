@@ -1,0 +1,14 @@
+{
+  "name": "@midori/gui",
+  "version": "0.1.0",
+  "description": "Midori desktop application (Electron + Astro SSR)",
+  "private": true,
+  "scripts": {
+    "build": "echo 'TODO: implement build'",
+    "dev": "echo 'TODO: implement dev'"
+  },
+  "dependencies": {
+    "@midori/runtime": "workspace:*",
+    "@midori/ui": "workspace:*"
+  }
+}

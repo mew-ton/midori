@@ -1,0 +1,9 @@
+{
+  "name": "@midori/runtime-win32-x64",
+  "version": "0.1.0",
+  "description": "Midori runtime binary for win32-x64",
+  "private": false,
+  "main": "index.js",
+  "os": ["win32"],
+  "cpu": ["x64"]
+}

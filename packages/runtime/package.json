@@ -1,0 +1,13 @@
+{
+  "name": "@midori/runtime",
+  "version": "0.1.0",
+  "description": "Midori signal bridge runtime (platform-native binary)",
+  "private": false,
+  "main": "index.js",
+  "optionalDependencies": {
+    "@midori/runtime-win32-x64": "workspace:*",
+    "@midori/runtime-darwin-x64": "workspace:*",
+    "@midori/runtime-darwin-arm64": "workspace:*",
+    "@midori/runtime-linux-x64": "workspace:*"
+  }
+}

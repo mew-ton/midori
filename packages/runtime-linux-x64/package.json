@@ -1,0 +1,9 @@
+{
+  "name": "@midori/runtime-linux-x64",
+  "version": "0.1.0",
+  "description": "Midori runtime binary for linux-x64",
+  "private": false,
+  "main": "index.js",
+  "os": ["linux"],
+  "cpu": ["x64"]
+}

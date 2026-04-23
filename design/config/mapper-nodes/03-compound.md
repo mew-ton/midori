@@ -49,17 +49,14 @@ connections:
 
 両入力とも non-null 必須。
 
-### 用途: 出力のバタつきを防ぐ
+### 用途: 特定条件のときだけ出力を通す
 
-変化時のみ発火する信号（expression ペダル等）に `defaults` を組み合わせると、信号がない tick に補填された値が出力に届いてしまう。`gate` で元の発火条件を使ってゲートすることで、信号がない tick の出力を null（＝送信しない）に抑制できる。
+あるスイッチが ON のときだけ別の信号を出力したい場合に使う。`condition` が null または false の tick は `in` の値に関わらず出力が null（＝送信しない）になる。
 
 ```
-# defaults だけでは "0.0 → 実値 → 0.0 → 実値" と出力がバタつく
-expression(変化時のみ発火) → defaults(0.0) → output
-                                      ↓ gate を挟む
-expression → defaults(0.0) ─┐
-                              ├─▶ gate ─▶ output（信号がない tick は送信しない）
-pressed(継続発火)    ────────┘
+expression ─────────────────┐
+                              ├─▶ gate ─▶ output（サステイン ON のときだけ送信）
+upper_sustain.pressed ───────┘
 ```
 
 ```yaml
@@ -77,7 +74,7 @@ connections:
     to:   expr_default.in
   - from: expr_default.out
     to:   expr_gate.in
-  - from: input.yamaha-els03.expression.pressed   # 信号が来ている tick だけ true
+  - from: input.yamaha-els03.upper_sustain.pressed   # サステイン ON のときだけ gate を開く
     to:   expr_gate.condition
   - from: expr_gate.out
     to:   output.vrchat-default.expression.value

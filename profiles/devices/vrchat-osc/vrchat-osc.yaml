@@ -230,6 +230,7 @@ definition:
     # VRChat int は 0–255 だが、このアバターでの実用範囲は 0–15。
     - id: scene_index
       type: number
+      direction: input   # 受信専用: ブリッジから VRChat への送信は行わない
       valueType: int
       range: [0, 15]
       out_of_range: ignore
