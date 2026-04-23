@@ -55,7 +55,7 @@ MIDI イベントによって note フィールドの有無が異なるため、
 | `noteOn` | ✅ あり | `{note}` を使う（イベントから自動展開） | `upper.{note}.pressed` |
 | `noteOff` | ✅ あり | `{note}` を使う（イベントから自動展開） | `upper.{note}.pressed` |
 | `polyAftertouch` | ✅ あり | `{note}` を使う（イベントから自動展開） | `upper.{note}.pressure` |
-| `pitchBend` | ❌ なし（チャンネル単位） | note をリテラルで直接書く | `upper.60.lateral` |
+| `pitchBend` | ❌ なし（チャンネル単位） | keyboard 以外のコンポーネント（slider 等）に直接マッピングする | `upper_horizontal.value` |
 | `controlChange` | ❌ なし（チャンネル単位） | note をリテラルで直接書く | `upper.60.value` |
 | `channelAftertouch` | ❌ なし（チャンネル単位） | note をリテラルで直接書く | `upper.60.pressure` |
 

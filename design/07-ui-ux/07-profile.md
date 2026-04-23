@@ -78,7 +78,7 @@
 | 要素 | 内容 |
 |---|---|
 | タイムスタンプ | `HH:mm:ss.SSS` 形式 |
-| イベント種別 | `raw-event` / `device-state` / `signal` / `log` / `error` の 5 種。種別ごとに色分けする |
+| イベント種別 | `raw-event` / `device-state` / `signal` / `log` / `error-path` の 5 種。種別ごとに色分けする |
 | ログ本文 | `raw-event` / `device-state` は `[device_id]` プレフィックスを付ける |
 | クリアボタン | 表示中のログをすべて消去する |
 | 記録停止ボタン | ログの追記を一時停止する。再クリックで再開 |

@@ -324,14 +324,14 @@ binding:
           type: noteOn
         to:
           target: upper.{note}.pressed
-          set: 1
+          set: true
 
       - from:
           channel: 1
           type: noteOff
         to:
           target: upper.{note}.pressed
-          set: 0
+          set: false
 
       - from:
           channel: 1
@@ -360,14 +360,14 @@ binding:
           type: noteOn
         to:
           target: lower.{note}.pressed
-          set: 1
+          set: true
 
       - from:
           channel: 2
           type: noteOff
         to:
           target: lower.{note}.pressed
-          set: 0
+          set: false
 
       - from:
           channel: 2
@@ -396,14 +396,14 @@ binding:
           type: noteOn
         to:
           target: pedal.{note}.pressed
-          set: 1
+          set: true
 
       - from:
           channel: 3
           type: noteOff
         to:
           target: pedal.{note}.pressed
-          set: 0
+          set: false
 
       - from:
           channel: 3
@@ -463,9 +463,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       # Lower Sustain  cc=0x51
       - from:
@@ -477,9 +477,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       # Pedal Sustain  cc=0x52
       - from:
@@ -491,9 +491,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       # =============================================
       # フット / ニースイッチ（EL Controller SysEx）
@@ -510,9 +510,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 127
-                set: 1
+                set: true
 
       - from:
           type: sysex
@@ -523,9 +523,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 127
-                set: 1
+                set: true
 
       - from:
           type: sysex
@@ -536,9 +536,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 127
-                set: 1
+                set: true
 
       # =============================================
       # テンポ（EL Controller SysEx）
@@ -569,9 +569,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       - from:
           type: sysex
@@ -582,9 +582,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       - from:
           type: sysex
@@ -595,9 +595,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       - from:
           type: sysex
@@ -608,9 +608,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       # =============================================
       # ロータリースピーカー（Panel Switch SysEx）
@@ -626,9 +626,9 @@ binding:
             source: arg1
             map:
               - when: 0
-                set: 0
+                set: false
               - when: 1
-                set: 1
+                set: true
 
       # =============================================
       # リズムスタート / ストップ（MIDI Real-Time）

@@ -17,7 +17,7 @@
 | 2 | component の type を指定できること | type によって primitive value が決まる |
 | 3 | primitive value は type が確定した時点で暗黙的に存在すること | 宣言不要。binding から常に参照できる |
 | 4 | デバイスが対応する場合に限り、追加の value を `additionals:` で宣言できること | 宣言しなければその value は存在しない扱いになる |
-| 5 | `float` の value には `range` を必須とすること | `0~1` または `-1~1` |
+| 5 | `float` の value には `range` を必須とすること | 例: `0~1`、`-1~1`、`40~280` など任意の値域 |
 | 6 | component id と value name の組み合わせはファイル内で一意であること | |
 | 7 | ドライバーの種類に依存しない共通構造であること | |
 

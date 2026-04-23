@@ -19,13 +19,14 @@
 | [09-plugin.md](./09-plugin.md) | プラグイン（デバイス構成・ドライバー・デバイス種別定義 の配布）仕様 |
 | [10-driver-plugin.md](./10-driver-plugin.md) | ドライバー・デバイス種別定義・ウィジェット の概念と仕様 |
 | [11-security/](./11-security/) | セキュリティ設計（セキュリティ水準・ドライバーサンドボックス・ウィジェット・AI） |
+| [12-distribution.md](./12-distribution.md) | 配布窓口・アップデート方針・利用規約の枠組み |
 | [12-ecosystem-readiness.md](./12-ecosystem-readiness.md) | エコシステム整備 TODO（契約・規約・導線の準備項目） |
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
 | [config/02-device-config.md](./config/02-device-config.md) | デバイス構成 設定仕様（direction / definition / binding / layout） |
 | [config/03-mapper.md](./config/03-mapper.md) | 変換グラフ 設定仕様（ノードグラフ・Signal 定義） |
-| [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（デバイスマッチング・変換グラフ割り当て） |
+| [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（入出力デバイス・変換グラフ・接続設定） |
 | [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
 | [config/syntax/01-expr.md](./config/syntax/01-expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
 | [config/drivers/midi.md](./config/drivers/midi.md) | ドライバー仕様: MIDI（binding.input / binding.output） |
