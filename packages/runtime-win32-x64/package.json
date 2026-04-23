@@ -4,6 +4,10 @@
   "description": "Midori runtime binary for win32-x64",
   "private": false,
   "main": "index.js",
-  "os": ["win32"],
-  "cpu": ["x64"]
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ]
 }
