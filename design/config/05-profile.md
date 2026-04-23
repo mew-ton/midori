@@ -8,17 +8,17 @@
 name: エレクトーン → VRChat
 
 inputs:
-  - id: yamaha-els03                    # 省略時はデバイスファイルのベース名から自動生成
-    device: devices/yamaha-els03.yaml   # 入力デバイス構成ファイル
+  - id: yamaha-els03                               # 省略時はデバイスファイルのベース名から自動生成
+    device: devices/yamaha-els03/yamaha-els03.yaml # 入力デバイス構成ファイル
     connection:
       driver: midi
-      device_name: "ELS-03 Series"      # 実機と部分一致でバインドされる
+      device_name: "ELS-03 Series"                 # 実機と部分一致でバインドされる
 
-transform: mappers/my-avatar.yaml       # 変換グラフファイル
+transform: mappers/my-avatar.yaml                  # 変換グラフファイル
 
 outputs:
-  - id: vrchat-default                  # 省略時はデバイスファイルのベース名から自動生成
-    device: devices/vrchat-default.yaml # 出力デバイス構成ファイル
+  - id: vrchat-default                             # 省略時はデバイスファイルのベース名から自動生成
+    device: devices/vrchat-default/vrchat-default.yaml # 出力デバイス構成ファイル
     connection:
       driver: osc
       host: 127.0.0.1

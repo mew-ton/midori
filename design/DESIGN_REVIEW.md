@@ -81,6 +81,13 @@ Option A: `direction: any` のまま運用し、`scene_index` の受信専用性
 Option B: `direction: input` にしてデバイス構成を受信専用として宣言し、出力用（鍵盤・エクスプレッション・スライダー送信）は別ファイルに分離する。
 Option C: 将来の設計として「component レベルの direction 制約」を追加する（現在の仕様にはない）。
 
+### [design/07-ui-ux/07-profile.md:99,109 / design/06-error-handling.md:46] UIモックとログ例のデバイスパスがフラット形式
+
+`07-profile.md` のプロファイル設定タブのUIモックでは `devices/yamaha-els03.yaml`（フラット形式）を使用している。`06-error-handling.md` のwarningログ例も同様。一方、`02-architecture.md` のリポジトリ構成図・実際の `profiles/devices/` サンプルはサブディレクトリ形式（`devices/yamaha-els03/yamaha-els03.yaml`）を示している。
+
+Option A: UIモック・ログ例もサブディレクトリ形式に統一する。
+Option B: UIは画面幅の都合上フラット表示を維持し、パスの形式はどちらでも動作することを注記として追加する（設計として強制しない）。
+
 ### [design/04-runtime-cli.md:76 / design/06-error-handling.md:30] ログの layer 名が統一されていない
 
 `04-runtime-cli.md` の log イベント例では `"layer":"device-profile/input"` を使用しているが、`06-error-handling.md` のログ出力例では `"layer":"mapper"` / `"layer":"driver/osc"` が使われており、`device-profile/input` という文字列形式が規約として明文化されていない。
