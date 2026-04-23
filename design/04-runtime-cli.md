@@ -73,12 +73,14 @@ GUI の Preview タブ（入力）と Monitor タブ（出力）は同じ `devic
 ### log
 
 ```json
-{"type":"log","level":"error","layer":"device-profile/input","message":"unknown component: foo"}
-{"type":"log","level":"warn", "layer":"output-driver",        "message":"send failed, dropping packet"}
-{"type":"log","level":"info", "layer":"driver/midi",          "message":"connected to ELS-03 Series"}
+{"type":"log","level":"error","layer":"input-profile", "device":"yamaha-els03","message":"unknown component: foo"}
+{"type":"log","level":"warn", "layer":"driver/osc",    "device":"vrchat-osc",  "message":"send failed, dropping packet"}
+{"type":"log","level":"info", "layer":"driver/midi",   "device":"yamaha-els03","message":"connected to ELS-03 Series"}
 ```
 
-ドライバープロセスの stdout に出力された非 JSON 行は、Bridge が `{"type":"log","level":"info","layer":"driver/<name>","message":"<raw text>"}` に変換してイベントとして流す。`<name>` はドライバー識別子（`driver.yaml` の `name` フィールド）。
+`layer` 識別子の一覧と `device` フィールドの規約 → [00-naming.md](./00-naming.md)
+
+ドライバープロセスの stdout に出力された非 JSON 行は、Bridge が `{"type":"log","level":"info","layer":"driver/<name>","device":"<device_id>","message":"<raw text>"}` に変換してイベントとして流す。`<name>` はドライバー識別子（`driver.yaml` の `name` フィールド）、`<device_id>` はそのドライバーを使用しているデバイスのID。
 
 ---
 
@@ -113,7 +115,7 @@ event: error-path
 data: {"nodes":["vel_scale"],"signals":["upper.60.velocity"],...}
 
 event: log
-data: {"level":"warn","layer":"output-driver","message":"send failed"}
+data: {"level":"warn","layer":"driver/osc","device":"vrchat-osc","message":"send failed"}
 ```
 
 #### クライアント側の購読

@@ -96,7 +96,7 @@
 
 ─── 入力 ─────────────────────────────── [ + 追加 ]
 ┌──────────────────────────────────────────────────┐
-│ id: yamaha-els03  devices/yamaha-els03.yaml  [ × ]│
+│ id: yamaha-els03  devices/yamaha-els03/yamaha-els03.yaml  [ × ]│
 │   driver: midi                                   │
 │   接続: [ ELS-03 Series               ▼ ]        │
 └──────────────────────────────────────────────────┘
@@ -106,7 +106,7 @@
 
 ─── 出力 ─────────────────────────────── [ + 追加 ]
 ┌──────────────────────────────────────────────────┐
-│ id: vrchat-default  devices/vrchat-default.yaml  │
+│ id: vrchat-default  devices/vrchat-default/vrchat-default.yaml  │
 │   driver: osc                                   │
 │   host: [ 127.0.0.1 ]   port: [ 9000 ]          │
 │   アバターパラメーター JSON: [ パスを選択... ]   │
@@ -122,7 +122,7 @@
 ```
 デバイス構成を選択:
   ▼ マイデバイス
-      devices/my-custom.yaml
+      devices/my-custom/my-custom.yaml
   ▼ yamaha-els03 プラグイン
       @yamaha-els03/devices/yamaha-els03.yaml
   ─────────────────────────────

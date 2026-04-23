@@ -126,6 +126,24 @@ definition:
       type: switch
 ```
 
+### コンポーネント共通オプションフィールド
+
+各 component エントリには以下の任意フィールドを追加できる：
+
+| フィールド | 必須 | 値域 | 意味 |
+|---|---|---|---|
+| `direction` | ❌ | `input` / `output` | デバイスレベルの `direction: any` に対し、このコンポーネントだけ受信専用・送信専用と宣言する。`direction: any` のデバイスの一部コンポーネントが片方向のみ有効な場合（例: 受信専用パラメーター）に使用する |
+
+コンポーネントレベルの `direction: input` は「このコンポーネントを `binding.output` に含めてはならない」ことをバリデーターに伝え、誤ってマッピングに追加した場合は起動時エラーとなる。
+
+```yaml
+- id: scene_index
+  type: number
+  direction: input   # このコンポーネントは受信専用（VRChat → ブリッジ）
+  valueType: int
+  range: [0, 15]
+```
+
 ### value フィールド仕様
 
 **`additionals` 内のエントリ**（`keyboard` の per-note 追加値等）には以下のフィールドを使う：

@@ -27,7 +27,7 @@
 ログ出力例：
 
 ```json
-{"type":"log","level":"error","layer":"device-profile/input","message":"unknown target path: upper.999.pressed"}
+{"type":"log","level":"error","layer":"input-profile","device":"yamaha-els03","message":"unknown target path: upper.999.pressed"}
 ```
 
 ---
@@ -43,7 +43,7 @@
 ログ出力例：
 
 ```json
-{"type":"log","level":"warn","layer":"mapper","message":"mapper was authored for devices/yamaha-els03.yaml but profile uses devices/generic-midi.yaml"}
+{"type":"log","level":"warn","layer":"mapper","message":"mapper was authored for devices/yamaha-els03/yamaha-els03.yaml but profile uses devices/generic-midi/generic-midi.yaml"}
 ```
 
 ---
@@ -63,9 +63,9 @@ Layer 1 / Layer 5 のエラーはドライバー外部プロセスの stdout か
 ### ログ出力
 
 ```json
-{"type":"log","level":"error","layer":"mapper","node":"vel_scale","message":"division by zero"}
-{"type":"log","level":"warn", "layer":"driver/osc",              "message":"send failed, dropping packet"}
-{"type":"log","level":"warn", "layer":"driver/midi",             "message":"device disconnected"}
+{"type":"log","level":"error","layer":"mapper",       "node":"vel_scale",                       "message":"division by zero"}
+{"type":"log","level":"warn", "layer":"driver/osc",  "device":"vrchat-osc",   "message":"send failed, dropping packet"}
+{"type":"log","level":"warn", "layer":"driver/midi", "device":"yamaha-els03", "message":"device disconnected"}
 ```
 
 ### GUI での可視化
