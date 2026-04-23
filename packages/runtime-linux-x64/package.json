@@ -4,6 +4,13 @@
   "description": "Midori runtime binary for linux-x64",
   "private": false,
   "main": "index.js",
-  "os": ["linux"],
-  "cpu": ["x64"]
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "exports": {
+    ".": "./index.js"
+  }
 }
