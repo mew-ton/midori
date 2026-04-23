@@ -16,7 +16,7 @@
 | WebSocket | 将来 | 将来 |
 | HTTP | 将来 | 将来 |
 | Audio Spectrum | 将来 | — |
-| Audio Viseme | 将来 | — |
+| Audio Voice | 将来 | — |
 
 `osc-vrchat` は独立ドライバーではなく、`osc` ドライバーを基底とする **デバイス種別定義** として提供する。詳細 → [`10-driver-plugin.md`](10-driver-plugin.md)
 
@@ -77,17 +77,34 @@ binding:
 
 #### Audio 系ドライバーのイメージ
 
-マイク入力から特徴量を抽出するドライバー。**異なるマイクに異なる解析を掛けたいケース**（例: エレクトーン集音マイク → スペクトラム、歌声用マイク → viseme）は、ドライバー自体を分割することで自然に表現する。
+マイク入力から特徴量を抽出するドライバー。**用途別に専門化したドライバーを並べる**ことで、異なるマイクに異なる解析を掛けたいケース（例: エレクトーン集音マイク → 楽器スペクトラム、歌声用マイク → ボイス解析）を自然に表現する。
 
-- `audio-spectrum`: 接続設定 = 入力デバイス選択 + `fft_size` / `band_count` / `window`。出力 = `static_array<float>`（長さ = band_count）
-- `audio-viseme`: 接続設定 = 入力デバイス選択 + `model_path` / `frame_ms` / `smoothing`。出力 = `static_array<float>`（長さ = 15, [OVRLipSync](https://developers.meta.com/horizon/documentation/unity/audio-ovrlipsync-viseme-reference/) 準拠）と `dominant: int`（0–14）
+- `audio-spectrum`: 楽器・環境音向け。接続設定 = 入力デバイス選択 + `fft_size` / `band_count` / `window`。出力 = `static_array<float>`（長さ = band_count）
+- `audio-voice`: ボイス特化。接続設定 = 入力デバイス選択 + `model_path` / `frame_ms` / `smoothing`。出力 =
+  - viseme weights: `static_array<float>`（長さ = 15, [OVRLipSync](https://developers.meta.com/horizon/documentation/unity/audio-ovrlipsync-viseme-reference/) 準拠）
+  - dominant viseme: `int`（0–14）
+  - volume: `float`（range [0, 1]、RMS 由来の正規化値）
 
-同じ audio トランスポートに対して複数の解析モードを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。解析モード毎にドライバーを分けるのが現行モデルと整合する。
+##### ドライバーを「用途別」に切る理由
+
+ボイス入力は「viseme と volume を同じ瞬間の音声から取る」ことに意味がある（リップシンクと表情の振幅が時刻一致する）。同じマイクを `audio-viseme` と `audio-volume` の 2 ドライバーで共有する構成も理屈の上では可能だが、
+
+- マイクの同時 open は OS 依存（macOS / Windows shared mode は OK、Linux ALSA 直叩きは不可）
+- 各ドライバーが独立した内部バッファ・解析フレームを持つため**フレーム位相が揃わない**（数十 ms ズレる）
+- 同じ PCM のデコードと窓掛けが二重化する
+
+といった問題がある。**「同一の物理入力から得る関連特徴量は 1 ドライバーにまとめて多 component で出す」** 方が現行モデルと整合する。`audio-voice` がボイス用途で必要になる特徴量（viseme + volume + 将来的に pitch / energy 等）を一括で出すのはこの方針の適用例。
+
+逆に「ボイス用と楽器用は別ドライバー」となるのは、扱う特徴量と適性パラメーター（fft_size / model 等）が用途によって大きく異なるため、単一ドライバーに畳むメリットが薄いから。
+
+同じ audio トランスポートに対して用途違いを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
+
+##### 設計上の裏付け
 
 FFT / ML 推論を Layer 1 に置く正当性は [01-input-driver/requirements.md#コーデックの射程](layers/01-input-driver/requirements.md#コーデックの射程) を参照。
 
 対応が必要になる周辺要素：
-- 新しい component type（`spectrum` / `viseme` 等）または既存の `static_array<float>` を直接公開する component 表現
+- 新しい component type（`spectrum` / `viseme` 等）または既存の `static_array<float>` / `slider` を組み合わせた component 表現
 - 新しい mapper ノード（例: `argmax` — `static_array<float>` → `int`）
 - ドライバーの permissions に `microphone` を追加（Phase 2 以降。[`11-security/01-driver-sandbox.md`](11-security/01-driver-sandbox.md)）
 - `device-select` の `list` サブコマンドが OS の音声入力デバイス列挙にも対応すること（現仕様の範囲内）
