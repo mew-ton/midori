@@ -15,11 +15,12 @@
 
 | # | 要件 | 補足 |
 |---|---|---|
-| 1 | 意味解釈をしないこと | どの note が何のキーにあたるかは知らない。byte 列・数値をそのまま渡す |
+| 1 | プロファイル依存の意味解釈をしないこと | 「どの note が上鍵盤のどのキーか」「どの CC がエクスプレッションか」等の意味付けは上位層に委ねる。物理型から論理型へのコーデック（特徴量抽出を含む。詳細は [コーデックの射程](#コーデックの射程)）はドライバーの責務 |
 | 2 | デバイスの接続・切断を検知できること | 切断時はパイプラインにエラーイベントを通知する |
 | 3 | 切断後の再接続を自動で試みられること | ブリッジを停止せずに復帰できることが望ましい |
 | 4 | 複数デバイスの同時接続に対応できること | プロファイルの `inputs` に複数エントリを持てる |
 | 5 | ドライバーをインターフェース越しに差し替えられること | 上位層は具体的なドライバー実装を知らない |
+| 6 | 同一の物理入力を複数のドライバーが同時に open する構成は起動時バリデーションエラーとすること | 同一 `modality` ・同一 `physical_input_identity` 値の組み合わせを Bridge が検出。詳細 → [物理入力の重複禁止](#物理入力の重複禁止) |
 
 ## I/O モデル
 
@@ -78,6 +79,128 @@ uint7  (0x00–0x7F)  ──linear──▶  float  (0.0–1.0)
 uint7  (00 / 01)    ──map──────▶  bool   (0 / 1)
 event               ────────────▶  pulse
 ```
+
+### コーデックの射程
+
+ドライバーのコーデックは値域変換（uint7 → float 等）に限定されない。**プロトコル上の事実として決まる特徴量抽出**も射程に含む。重い DSP や機械学習モデルは負荷の観点でもドライバー側（外部プロセス）に置くのが自然で、共有メモリ経由で論理型の結果だけを tick スレッドに渡す構造は既存の MIDI/OSC ドライバーと同じ形に収まる。
+
+| 層 | ドライバーが持つ | ドライバーが持たない |
+|---|---|---|
+| トランスポート | MIDI / OSC / audio / BLE 等の受信 | — |
+| コーデック（値域変換） | uint7 → float、event → pulse 等 | — |
+| コーデック（特徴量抽出） | PCM → spectrum bins、PCM → viseme weights、音声 → pitch/RMS 等 | — |
+| 意味解釈 | — | 「この note は上鍵盤の中央ド」「この CC はエクスプレッション」「このパラメーターはどのアバター機能か」 |
+
+判断基準は **「プロトコル依存か、プロファイル依存か」**。spectrum の band 数や viseme のクラス定義（例: OVRLipSync の 15 viseme）はプロトコル側で確定するためドライバー内に閉じる。どの band を VRChat のどの OSC パラメーターに流すかはプロファイル依存なので Layer 3（変換グラフ）で扱う。
+
+出力レートはドライバーが決める（audio の FFT フレームは ~50–100Hz、MIDI は不定期）。tick スレッドは差分出力モデル（[timing.md](../cross/timing.md)）でそのまま受ける。
+
+### ドライバー分割の粒度指標
+
+**原則は「1 物理入力 = 1 ドライバー」**。同一物理入力（同じ MIDI ポート・同じマイク・同じ BLE デバイス等）から複数の特徴量を取り出すとき、まずは 1 ドライバーに畳むことを検討する。これによりデバイス open は 1 回・PCM デコード等の前処理は 1 回・特徴量間のフレーム位相が一致する。
+
+ただし用途・パラメーター系・計算特性が大きく異なる特徴量を 1 ドライバーに詰め込むと責務が肥大して `connection_fields` が爆発する。**同一物理入力に対して複数のドライバーを並べることは許容する。** 分割の判断は次の 4 軸で行う。
+
+#### 4 つの判断軸（順に適用）
+
+| # | 軸 | 質問 | YES のとき | NO のとき |
+|---|---|---|---|---|
+| 1 | **時刻結合** (time coupling) | それらの特徴量が「同じフレームから取れている」ことに意味があるか | 1 ドライバーに畳む（同居強制） | 軸 2 へ |
+| 2 | **目的** (purpose) | ユーザー視点で「同じ問いに答える」道具か | 1 ドライバー候補 | 別ドライバー可 |
+| 3 | **パラメーター系** (parameter family) | 接続設定（`fft_size` / `model_path` 等）が大きく重なるか | 1 ドライバー候補 | 別ドライバー可 |
+| 4 | **アルゴリズム特性** (cost class) | フレームレート・レイテンシ・計算量が桁違いに違うか | 別ドライバーへ分離 | 同居可 |
+
+軸 1 は「畳むべき」を示す軸（リップシンクで viseme と volume の位相がズレない、等）。軸 2–4 は「分けてよい」を示す軸。**軸 1 が YES のときは他軸を見ずに同居**。軸 1 が NO のとき、軸 2–4 のどれかが「異質」と判定されれば分割を選んでよい。
+
+#### ネームスペース命名
+
+ドライバー名は `<modality>-<purpose>` 形式に揃える。
+
+| 例 | modality | purpose |
+|---|---|---|
+| `audio-voice` | audio | ボイス解析（viseme / volume / pitch） |
+| `audio-spectrum` | audio | 楽器・環境音のスペクトル |
+| `audio-music` | audio | 楽曲解析（beat / chord / key） |
+| `ble-heart-rate` | ble | 心拍数 |
+
+ルール：
+
+- `<modality>` 単独（`audio` のみ等）は**禁止**。何でも屋になり、軸 2–4 の判断ができなくなる
+- 同一 modality の複数ドライバーは prefix で並ぶ → GUI のドライバー一覧・ファイル整列で関連性が一目で分かる
+- `purpose` は **ユーザーが選ぶときの言葉** で命名する（実装手段ではなく）。`audio-fft` ではなく `audio-spectrum`、`audio-onnx-viseme` ではなく `audio-voice`
+
+#### アンチパターン
+
+| パターン | 問題 |
+|---|---|
+| **メガドライバー** (`audio` に全特徴量) | `connection_fields` が爆発、軸 4 の異質性を吸収できず重い処理が軽い処理を巻き込んで遅延 |
+| **原子化ドライバー** (`audio-rms` / `audio-zcr` / `audio-pitch` を別々に) | 同一マイク共有が必須化し OS 依存問題（macOS hog mode / Linux ALSA 直叩き等）を踏む。軸 1（時刻結合）も担保できない |
+| **手段命名** (`audio-fft`, `audio-onnx-x`) | 実装が変わるたび名前を変えたくなる。プロファイル / device_config からの参照が壊れる |
+
+audio 系での具体適用例 → [`05-future.md` の Audio 系ドライバーのイメージ](../../05-future.md#audio-系ドライバーのイメージ)
+
+### 物理入力の重複禁止
+
+粒度指標を破って **同一物理入力に複数のドライバーを向けた構成は起動時バリデーションエラー**とする。GUI のドロップダウンには重複候補が表示されてもよい（フィルタリングしない）が、保存・起動の段階で Bridge がエラーを返す。
+
+#### 同定方法
+
+各ドライバーは `driver.yaml` で以下を宣言する（[`10-driver-plugin.md`](../../10-driver-plugin.md) 参照）：
+
+| フィールド | 役割 |
+|---|---|
+| `modality` | 物理 I/O のクラス（`audio` / `midi` / `osc` / `ble` / `http` 等） |
+| `physical_input_identity` | `connection_fields` のうち、物理入力を一意に同定する ID の配列 |
+
+Bridge はプロファイルの `inputs` 全件について `(modality, physical_input_identity の値タプル)` を集計し、**完全一致するエントリが 2 つ以上あればエラー**を返す。
+
+```yaml
+# 例: driver.yaml
+modality: audio
+physical_input_identity: [device_name]
+```
+
+#### 衝突例
+
+```yaml
+# プロファイル inputs（NG: 同じマイクを 2 ドライバーが open）
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+- device_config: devices/voice-spec.yaml     # driver: audio-spectrum
+  connection: { device_name: "Shure SM58" }  # ← 同 modality, 同 device_name → エラー
+```
+
+```yaml
+# OK: modality が違う
+- device_config: devices/els03.yaml          # driver: midi
+  connection: { device_name: "ELS-03" }
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+```
+
+```yaml
+# OK: 同 modality だが physical_input_identity の値が異なる
+- device_config: devices/voice-mic.yaml      # driver: audio-voice
+  connection: { device_name: "Shure SM58" }
+- device_config: devices/spec-electone.yaml  # driver: audio-spectrum
+  connection: { device_name: "UAB-80 内蔵マイク" }
+```
+
+#### `physical_input_identity` 省略時
+
+宣言を省略したドライバーは重複検出の対象外になる。「物理入力という概念を持たない」ドライバー（例: 仮想信号源）向けの抜け穴。標準的なハードウェア由来ドライバーは必ず宣言する。
+
+#### サーバー型ドライバーの扱い
+
+OSC / HTTP のような「サーバー起動型」I/O は **Listen 側のソケットがリソース** になる。`physical_input_identity` には listen 側のキー（`[host, listen_port]` 等）を指定する。同じポートを 2 ドライバーで bind しようとする構成も同じ仕組みで弾かれる。
+
+#### エラーの提示
+
+Bridge は次の情報を含むエラーを返す：
+
+- 衝突した `inputs` エントリの `device_config` パス
+- 共通する `modality` と `physical_input_identity` 値
+- 推奨される対処（「同一物理入力から複数特徴量が必要なら 1 ドライバー多 component 構成にしてください。粒度指標を参照」）
 
 ## ドライバーの拡張性
 
