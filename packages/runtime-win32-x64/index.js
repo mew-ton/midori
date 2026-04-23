@@ -1,2 +1,2 @@
 const path = require("path");
-module.exports = { binaryPath: path.join(__dirname, "midori") };
+module.exports = { binaryPath: path.join(__dirname, "midori.exe") };
