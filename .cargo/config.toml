@@ -1,0 +1,4 @@
+[build]
+
+[clippy]
+# Treat all clippy warnings as errors in CI (override with RUSTFLAGS= to disable locally)

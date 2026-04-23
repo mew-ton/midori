@@ -12,3 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 midori-sdk = { workspace = true }
+
+[lints]
+workspace = true

@@ -8,6 +8,18 @@ members = [
 ]
 resolver = "2"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all         = { level = "warn", priority = -1 }
+pedantic    = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }  # all=warn が default-deny を上書きするのを防ぐ
+# 実用上うるさすぎるものを個別に許可
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+
 [workspace.dependencies]
 midori-core = { path = "crates/midori-core", version = "0.1.0" }
 midori-sdk  = { path = "crates/midori-sdk",  version = "0.1.0" }
