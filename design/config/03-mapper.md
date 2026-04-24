@@ -31,7 +31,7 @@ graph:
 | 計算ノードの入力ポート | `<node_id>.in` | `scale_vel.in` |
 | 計算ノードの出力ポート | `<node_id>.out` | `scale_vel.out` |
 
-`<device_id>` は `input_devices` / `output_devices` のキーに一致する。プロファイルと組み合わせた際、プロファイルの `inputs[].id` / `outputs[].id` と一致していることが起動時にバリデーションされる。
+`<device_id>` はプロファイルの `inputs[].id` / `outputs[].id` に一致する。起動時にバリデーションされる。
 
 計算ノードのタイプ一覧と使用例は [mapper-nodes/](mapper-nodes/) を参照。
 
