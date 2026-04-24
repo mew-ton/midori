@@ -24,7 +24,7 @@
 ```
 コミュニティで公開・共有されるもの
 
-  プラグインリポジトリ  ルートに .midori-plugin/plugin.yaml を持つ git リポジトリ。
+  プラグインリポジトリ  ルートに .midori/plugin.yaml を持つ git リポジトリ。
                         devices/*.yaml / ドライバー / デバイス種別定義 等を提供する。
                         → URL を GUI に貼るだけで <app-data-dir>/plugins/ にインストールされる
 
