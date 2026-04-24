@@ -42,7 +42,11 @@ impl SignalSpecifier {
         path: Vec<String>,
     ) -> Result<Self, SignalSpecifierError> {
         let component_id = component_id.into();
-        if component_id.is_empty() || path.is_empty() || path.iter().any(String::is_empty) {
+        if component_id.is_empty()
+            || component_id.contains('.')
+            || path.is_empty()
+            || path.iter().any(|s| s.is_empty() || s.contains('.'))
+        {
             return Err(SignalSpecifierError);
         }
         Ok(Self { component_id, path })
@@ -160,6 +164,19 @@ mod tests {
         assert!(".foo".parse::<SignalSpecifier>().is_err());
         assert!("a..b".parse::<SignalSpecifier>().is_err());
         assert!(SignalSpecifier::try_new("upper", vec!["60".into(), String::new()]).is_err());
+    }
+
+    #[test]
+    fn specifier_rejects_dot_in_segment() {
+        assert!(SignalSpecifier::try_new("up.per", vec!["pressed".into()]).is_err());
+        assert!(SignalSpecifier::try_new("upper", vec!["60.pressed".into()]).is_err());
+    }
+
+    #[test]
+    fn specifier_roundtrip_no_dot_in_segment() {
+        let s = SignalSpecifier::new("upper", vec!["60".into(), "pressed".into()]);
+        let parsed: SignalSpecifier = s.to_string().parse().unwrap();
+        assert_eq!(s, parsed);
     }
 
     #[test]
