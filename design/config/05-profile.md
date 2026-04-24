@@ -6,6 +6,8 @@
 # profiles/my-setup.yaml
 
 name: エレクトーン → VRChat
+description: |                                         # 任意。ダッシュボードのカードに表示される説明文
+  ELS-03 と VRChat を接続する基本セット。
 
 inputs:
   - id: yamaha-els03                               # 省略時はデバイスファイルのベース名から自動生成
@@ -31,6 +33,7 @@ outputs:
 | セクション | 必須 | 内容 |
 |---|---|---|
 | `name` | ❌ | 表示名 |
+| `description` | ❌ | 説明文。ダッシュボードのプロファイルカードに表示される。複数行可 |
 | `inputs` | ✅ | 入力デバイス構成と接続設定のリスト（1件以上） |
 | `inputs[].id` | ❌ | 変換グラフから参照する識別子。省略時はデバイスファイルのベース名（拡張子除く）を自動使用 |
 | `inputs[].device` | ✅ | 入力デバイス構成ファイルのパス。ワークスペース内は `devices/foo.yaml`、プラグイン由来は `@<plugin-name>/devices/foo.yaml`（`<app-data-dir>/plugins/<plugin-name>/` に解決） |
