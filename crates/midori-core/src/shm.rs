@@ -54,19 +54,23 @@ pub struct RingSlot {
 
 /// Header written at the start of the shared memory region.
 ///
-/// Layout (all fields are 8-byte aligned):
+/// Layout (`AtomicU64` is `#[repr(C, align(8))]`, so both fields are 8 bytes):
 /// ```text
-/// offset 0:  write_index (u64)
-/// offset 8:  read_index  (u64)
+/// offset 0:  write_index (AtomicU64)
+/// offset 8:  read_index  (AtomicU64)
 /// offset 16: slots[RING_CAPACITY] (RingSlot array)
 /// ```
 ///
 /// Both indices are monotonically increasing. Actual slot index is `index % RING_CAPACITY`.
 /// The buffer is full when `write_index - read_index == RING_CAPACITY`.
+///
+/// The producer must store slot data before publishing `write_index` with
+/// [`Ordering::Release`]; the consumer must load `write_index` with
+/// [`Ordering::Acquire`] before reading slot data.
 #[repr(C)]
 pub struct ShmHeader {
-    pub write_index: u64,
-    pub read_index: u64,
+    pub write_index: std::sync::atomic::AtomicU64,
+    pub read_index: std::sync::atomic::AtomicU64,
 }
 
 #[cfg(test)]
@@ -79,8 +83,9 @@ mod tests {
     }
 
     #[test]
-    fn shm_header_size() {
+    fn shm_header_size_and_align() {
         assert_eq!(std::mem::size_of::<ShmHeader>(), 16);
+        assert_eq!(std::mem::align_of::<ShmHeader>(), 8);
     }
 
     #[test]

@@ -36,18 +36,16 @@ impl std::fmt::Display for SignalSpecifierError {
 impl std::error::Error for SignalSpecifierError {}
 
 impl SignalSpecifier {
-    /// Fallible constructor. Returns `Err` when `path` is empty.
+    /// Fallible constructor. Returns `Err` when `component_id`, `path`, or any path segment is empty.
     pub fn try_new(
         component_id: impl Into<String>,
         path: Vec<String>,
     ) -> Result<Self, SignalSpecifierError> {
-        if path.is_empty() {
+        let component_id = component_id.into();
+        if component_id.is_empty() || path.is_empty() || path.iter().any(String::is_empty) {
             return Err(SignalSpecifierError);
         }
-        Ok(Self {
-            component_id: component_id.into(),
-            path,
-        })
+        Ok(Self { component_id, path })
     }
 
     /// Panicking constructor for use-sites where the caller guarantees a non-empty path.
@@ -79,11 +77,8 @@ impl std::str::FromStr for SignalSpecifier {
         let mut parts = s.splitn(2, '.');
         let component_id = parts.next().ok_or(SignalSpecifierError)?.to_owned();
         let rest = parts.next().ok_or(SignalSpecifierError)?;
-        if rest.is_empty() {
-            return Err(SignalSpecifierError);
-        }
         let path = rest.split('.').map(str::to_owned).collect();
-        Ok(Self { component_id, path })
+        Self::try_new(component_id, path)
     }
 }
 
@@ -152,6 +147,19 @@ mod tests {
     #[test]
     fn specifier_try_new_empty_path() {
         assert!(SignalSpecifier::try_new("upper", vec![]).is_err());
+    }
+
+    #[test]
+    fn specifier_rejects_empty_component_id() {
+        assert!("".parse::<SignalSpecifier>().is_err());
+        assert!(SignalSpecifier::try_new("", vec!["pressed".into()]).is_err());
+    }
+
+    #[test]
+    fn specifier_rejects_empty_segment() {
+        assert!(".foo".parse::<SignalSpecifier>().is_err());
+        assert!("a..b".parse::<SignalSpecifier>().is_err());
+        assert!(SignalSpecifier::try_new("upper", vec!["60".into(), String::new()]).is_err());
     }
 
     #[test]
