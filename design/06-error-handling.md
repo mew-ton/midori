@@ -17,9 +17,8 @@
 |---|---|
 | binding の `to.target` が definition に存在しないパスを参照している | Layer 2 / Layer 4 |
 | 変換グラフ の接続ポートの型が不一致 | Layer 3 |
-| 変換グラフ が参照する `input_devices` / `output_devices` のファイルが存在しない | Layer 3 |
+| 変換グラフのポートが参照する device_id がプロファイルの `inputs[].id` / `outputs[].id` に存在しない | Layer 3 |
 | 変換グラフにサイクル（循環接続）が存在する | Layer 3 |
-| 変換グラフの `input_devices` / `output_devices` のキーがプロファイルの `inputs[].id` / `outputs[].id` と一致しない | Layer 3 |
 | プロファイルの `inputs[].id` / `outputs[].id` に重複がある | プロファイル読み込み |
 | `direction: output` のデバイス構成をプロファイルの入力側に設定している | Layer 2 |
 | `direction: input` のデバイス構成をプロファイルの出力側に設定している | Layer 4 |
@@ -38,12 +37,12 @@
 
 | 例 | 検出層 |
 |---|---|
-| 変換グラフの `input_devices` / `output_devices` がプロファイルの実デバイスファイルと一致しない（互換コンポーネント ID が存在すれば動作は続行） | Layer 3 |
+| プロファイルの `inputs[].device` / `outputs[].device` が参照するデバイス構成ファイルのコンポーネント ID と、変換グラフのポートが参照する Signal 指定子に不一致がある（互換コンポーネントが存在すれば動作は続行） | Layer 3 |
 
 ログ出力例：
 
 ```json
-{"type":"log","level":"warn","layer":"mapper","message":"mapper was authored for devices/yamaha-els03/yamaha-els03.yaml but profile uses devices/generic-midi/generic-midi.yaml"}
+{"type":"log","level":"warn","layer":"mapper","message":"signal path not found in device: upper.999.pressed"}
 ```
 
 ---

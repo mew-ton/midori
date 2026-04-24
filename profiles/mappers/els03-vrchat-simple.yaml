@@ -13,12 +13,6 @@
 # スライダーの設計:
 #   to_bits（bits: 3）で float [0,1] を 0–7 の 8段階に量子化してビット分解。
 
-input_devices:
-  yamaha-els03: devices/yamaha-els03/yamaha-els03.yaml
-
-output_devices:
-  vrchat-osc: devices/vrchat-osc/vrchat-osc.yaml
-
 graph:
   nodes:
 
