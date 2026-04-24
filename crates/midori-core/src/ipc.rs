@@ -1,14 +1,19 @@
+use serde::{Deserialize, Serialize};
+
+use crate::pipeline::SignalSpecifier;
 use crate::value::Value;
 
 /// Direction of data flow through the pipeline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Direction {
     Input,
     Output,
 }
 
 /// Log severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum LogLevel {
     Error,
     Warn,
@@ -16,7 +21,8 @@ pub enum LogLevel {
 }
 
 /// Events streamed as JSON Lines from the runtime to the GUI over stdout.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum IpcEvent {
     /// Raw hardware event from a driver (Layer 1 / Layer 5).
     RawEvent {
@@ -30,16 +36,14 @@ pub enum IpcEvent {
     DeviceState {
         direction: Direction,
         device: String,
-        /// Full dot-separated specifier, e.g. `"upper.60.pressed"` or `"rightHand.index.proximal.bend"`.
-        specifier: String,
+        specifier: SignalSpecifier,
         value: Value,
     },
 
     /// Mapper output signal (Layer 3).
     Signal {
         device: String,
-        /// Signal specifier string, e.g. `"upper.60.pressed"`.
-        name: String,
+        specifier: SignalSpecifier,
         value: Value,
     },
 
@@ -61,20 +65,18 @@ pub enum IpcEvent {
 }
 
 /// Reference to a signal in an error-path event.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignalRef {
     pub device: String,
-    /// Full dot-separated specifier string.
-    pub name: String,
+    pub specifier: String,
 }
 
 /// Reference to a component in an error-path event.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentRef {
     pub direction: Direction,
     pub device: String,
-    /// Full dot-separated specifier string.
-    pub specifier: String,
+    pub specifier: SignalSpecifier,
 }
 
 #[cfg(test)]
@@ -97,9 +99,22 @@ mod tests {
         let e = IpcEvent::DeviceState {
             direction: Direction::Input,
             device: "els03".into(),
-            specifier: "upper.60.pressed".into(),
+            specifier: "upper.60.pressed".parse().unwrap(),
             value: Value::Bool(true),
         };
         assert!(matches!(e, IpcEvent::DeviceState { .. }));
+    }
+
+    #[test]
+    fn ipc_event_json_roundtrip() {
+        let e = IpcEvent::DeviceState {
+            direction: Direction::Input,
+            device: "els03".into(),
+            specifier: "upper.60.pressed".parse().unwrap(),
+            value: Value::Bool(true),
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        let decoded: IpcEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(e, decoded);
     }
 }

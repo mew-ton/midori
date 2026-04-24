@@ -1,3 +1,5 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::value::Value;
 
 /// Identifies a value within a component via a dynamic dot-separated path.
@@ -18,10 +20,40 @@ pub struct SignalSpecifier {
     pub path: Vec<String>,
 }
 
+/// Error returned by [`SignalSpecifier::try_new`] and [`str::parse`].
+#[derive(Debug)]
+pub struct SignalSpecifierError;
+
+impl std::fmt::Display for SignalSpecifierError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid signal specifier: expected '<component_id>.<path...>'"
+        )
+    }
+}
+
+impl std::error::Error for SignalSpecifierError {}
+
 impl SignalSpecifier {
-    /// Build from a component id and path segments. `path` must be non-empty.
+    /// Fallible constructor. Returns `Err` when `path` is empty.
+    pub fn try_new(
+        component_id: impl Into<String>,
+        path: Vec<String>,
+    ) -> Result<Self, SignalSpecifierError> {
+        if path.is_empty() {
+            return Err(SignalSpecifierError);
+        }
+        Ok(Self {
+            component_id: component_id.into(),
+            path,
+        })
+    }
+
+    /// Panicking constructor for use-sites where the caller guarantees a non-empty path.
+    /// Panics in debug builds; UB-free but unchecked in release.
     pub fn new(component_id: impl Into<String>, path: Vec<String>) -> Self {
-        assert!(!path.is_empty(), "SignalSpecifier path must not be empty");
+        debug_assert!(!path.is_empty(), "SignalSpecifier path must not be empty");
         Self {
             component_id: component_id.into(),
             path,
@@ -32,16 +64,44 @@ impl SignalSpecifier {
     pub fn leaf(component_id: impl Into<String>, value_name: impl Into<String>) -> Self {
         Self::new(component_id, vec![value_name.into()])
     }
+}
 
-    /// Returns the full dot-separated string representation.
-    #[must_use]
-    pub fn to_dot_string(&self) -> String {
-        format!("{}.{}", self.component_id, self.path.join("."))
+impl std::fmt::Display for SignalSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.component_id, self.path.join("."))
+    }
+}
+
+impl std::str::FromStr for SignalSpecifier {
+    type Err = SignalSpecifierError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, '.');
+        let component_id = parts.next().ok_or(SignalSpecifierError)?.to_owned();
+        let rest = parts.next().ok_or(SignalSpecifierError)?;
+        if rest.is_empty() {
+            return Err(SignalSpecifierError);
+        }
+        let path = rest.split('.').map(str::to_owned).collect();
+        Ok(Self { component_id, path })
+    }
+}
+
+impl Serialize for SignalSpecifier {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SignalSpecifier {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
 /// Normalised device event produced by Layer 2 and consumed by Layer 3 (mapper).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentState {
     pub device_id: String,
     pub specifier: SignalSpecifier,
@@ -49,7 +109,7 @@ pub struct ComponentState {
 }
 
 /// Mapper output produced by Layer 3 and consumed by Layer 4 (output recognition).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Signal {
     pub device_id: String,
     pub specifier: SignalSpecifier,
@@ -64,13 +124,13 @@ mod tests {
     #[test]
     fn specifier_keyboard_key() {
         let s = SignalSpecifier::new("upper", vec!["60".into(), "pressed".into()]);
-        assert_eq!(s.to_dot_string(), "upper.60.pressed");
+        assert_eq!(s.to_string(), "upper.60.pressed");
     }
 
     #[test]
     fn specifier_slider() {
         let s = SignalSpecifier::leaf("expression", "value");
-        assert_eq!(s.to_dot_string(), "expression.value");
+        assert_eq!(s.to_string(), "expression.value");
     }
 
     #[test]
@@ -79,7 +139,19 @@ mod tests {
             "rightHand",
             vec!["index".into(), "proximal".into(), "bend".into()],
         );
-        assert_eq!(s.to_dot_string(), "rightHand.index.proximal.bend");
+        assert_eq!(s.to_string(), "rightHand.index.proximal.bend");
+    }
+
+    #[test]
+    fn specifier_roundtrip() {
+        let original = SignalSpecifier::new("upper", vec!["60".into(), "pressed".into()]);
+        let parsed: SignalSpecifier = original.to_string().parse().unwrap();
+        assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn specifier_try_new_empty_path() {
+        assert!(SignalSpecifier::try_new("upper", vec![]).is_err());
     }
 
     #[test]
