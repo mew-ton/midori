@@ -24,7 +24,7 @@
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
-| [config/02-device-config.md](./config/02-device-config.md) | アダプター 設定仕様（direction / definition / binding / layout） |
+| [config/02-adapter.md](./config/02-adapter.md) | アダプター 設定仕様（direction / definition / binding / layout） |
 | [config/03-mapper.md](./config/03-mapper.md) | 変換グラフ 設定仕様（ノードグラフ・Signal 定義） |
 | [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（入出力デバイス・変換グラフ・接続設定） |
 | [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |

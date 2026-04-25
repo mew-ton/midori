@@ -46,4 +46,4 @@ Layer 4（出力）と同一スキーマ（アダプター）を使用する。`
 
 ## 設定仕様
 
-→ [config/02-device-config.md](../../config/02-device-config.md)
+→ [config/02-adapter.md](../../config/02-adapter.md)

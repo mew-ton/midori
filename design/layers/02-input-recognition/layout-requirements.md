@@ -36,4 +36,4 @@
 | 10 | ブリッジ起動中は ComponentState をリアルタイムで描画に反映できること（Preview） | stdout JSON stream 経由で GUI が受け取る |
 | 11 | ブリッジ停止中は静的表示のみとすること | リアルタイム応答なし |
 
-レイアウトモデル・サンプル・Preview データフロー → [config/02-device-config.md#layout-セクション](../../config/02-device-config.md#layout-セクション)
+レイアウトモデル・サンプル・Preview データフロー → [config/02-adapter.md#layout-セクション](../../config/02-adapter.md#layout-セクション)

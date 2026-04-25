@@ -68,7 +68,7 @@ direction: input   # input | output | any（省略時）
 
 `direction: input` と宣言したファイルをプロファイルの出力側に設定した場合は起動時エラーとなる。逆も同様。
 
-`direction: any` のファイルは、同一プロファイル内で `input.device` と `output.device` の両方に同一ファイルを指定することができる（双方向 MIDI 機器など）。その場合、`binding.input` と `binding.output` が同一ファイルに共存する。
+`direction: any` のファイルは、同一プロファイル内で `inputs[].adapter` と `outputs[].adapter` の両方に同一ファイルを指定することができる（双方向 MIDI 機器など）。その場合、`binding.input` と `binding.output` が同一ファイルに共存する。
 
 ---
 
