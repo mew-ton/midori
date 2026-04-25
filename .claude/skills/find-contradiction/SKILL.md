@@ -29,6 +29,7 @@ profiles/mappers/*.yaml
 | Missing definitions | Terms used but absent from `00-naming.md` |
 | Stack divergence | `03-tech-stack.md` policy vs. actual specs |
 | UI/arch alignment | UI-assumed features defined in architecture |
+| Context-dependent language | Phrases that assume prior knowledge of changes (negating unstated alternatives, history references, delta descriptions) — see `doc-context-free` skill |
 
 ## Classification
 

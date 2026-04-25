@@ -9,6 +9,7 @@
 
 | 用語 | 定義 |
 |---|---|
+| **ワークスペース** | `.midori/workspace.yaml` を持つフォルダ。devices/ / mappers/ / profiles/ を格納する作業単位。プラグインとして公開する場合は `.midori/plugin.yaml` も配置する |
 | **ブリッジ** | 入力を受け取り、変換して出力するランタイムプロセス（CLI バイナリ `midori`） |
 | **デバイス構成** | raw events と ComponentState を相互変換する層の定義。1デバイス = 1ファイル |
 | **変換グラフ** | ComponentState を受け取り計算・変換して Signal を出力するノードグラフ定義 |
@@ -31,9 +32,11 @@
 
 | 用語 | ファイル | 定義 |
 |---|---|---|
+| **ワークスペース設定** | `.midori/workspace.yaml` | ワークスペースのマニフェスト |
+| **プラグインマニフェスト** | `.midori/plugin.yaml` | ワークスペースをプラグインとして公開する場合に配置する。提供する drivers / device_kinds 等を宣言する |
 | **デバイス構成** | `devices/<id>/<id>.yaml` | 1デバイス = 1サブディレクトリ・1ファイル。`direction` / `definition` / `binding` / `layout` の構成。`direction` で入力・出力・両用を識別する |
 | **変換グラフ** | `mappers/*.yaml` | ComponentState を Signal に変換するノードグラフ定義 |
-| **プロファイル** | `profiles/*.yaml` | 実行単位。入力デバイス構成・変換グラフ・出力デバイス構成・実デバイス接続設定を持つ |
+| **プロファイル** | `profiles/*.yaml` | 実行単位。名前・説明・使用デバイス設定・変換グラフへの参照を持つ |
 
 ---
 

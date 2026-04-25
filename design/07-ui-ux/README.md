@@ -11,3 +11,4 @@
 | [07-profile.md](07-profile.md) | プロファイル詳細画面 |
 | [08-preferences.md](08-preferences.md) | Preferences 設定画面 |
 | [09-errors.md](09-errors.md) | エラー・空状態・用語整理 |
+| [10-widgets.md](10-widgets.md) | ウィジェットシステム（プリミティブ・キーボード・配列グリッド・エフェクト） |

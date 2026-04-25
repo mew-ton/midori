@@ -50,7 +50,7 @@ definition の構成から決まるパス文字列。component id・note（keybo
 
 | チェック | エラー |
 |---|---|
-| `device_id` が mapper の `input_devices` / `output_devices` に存在しない | エラー |
+| `device_id` がプロファイルの `inputs[].id` / `outputs[].id` に存在しない | エラー |
 | `component_id` が definition に存在しない | エラー |
 | `value_name` が当該 component の primitive / additionals に存在しない | エラー |
 | keyboard 以外のコンポーネントに note セグメントを使った | エラー |
@@ -62,7 +62,7 @@ definition の構成から決まるパス文字列。component id・note（keybo
 
 ## 変換グラフにおけるポート記法
 
-変換グラフでは、どのデバイスの Signal 指定子かを示すために `input.<device_id>.` / `output.<device_id>.` プレフィックスを付ける。`<device_id>` は mapper の `input_devices` / `output_devices` のキー（= プロファイルの `inputs[].id` / `outputs[].id`）。
+変換グラフでは、どのデバイスの Signal 指定子かを示すために `input.<device_id>.` / `output.<device_id>.` プレフィックスを付ける。`<device_id>` はプロファイルの `inputs[].id` / `outputs[].id` のキー。
 
 ```
 input.<device_id>.<Signal 指定子>    # 入力デバイス構成の ComponentState ポート

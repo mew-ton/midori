@@ -106,7 +106,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       └── mapper.*                 ← 変換グラフ Runtime
 │
 ├── driver-midi/                     ← 公式 MIDI ドライバー（プラグインリポジトリ）
-│   ├── .midori-plugin/
+│   ├── .midori/
 │   │   └── plugin.yaml
 │   └── ...
 ├── driver-osc/                      ← 公式 OSC ドライバー（プラグインリポジトリ）
@@ -138,7 +138,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 
 ```
 <workspace>/
-├── .midori-plugin/        ← このリポジトリ自体をプラグインとして公開する場合のみ
+├── .midori/        ← このリポジトリ自体をプラグインとして公開する場合のみ
 │   └── plugin.yaml
 ├── devices/               ← デバイス構成ファイル
 ├── mappers/               ← 変換グラフファイル
@@ -151,7 +151,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 <app-data-dir>/
 ├── plugins/               ← インストール済みプラグイン（ワークスペースには置かない）
 │   ├── yamaha-stagea/     ← git clone されたプラグイン
-│   │   ├── .midori-plugin/
+│   │   ├── .midori/
 │   │   │   └── plugin.yaml
 │   │   └── devices/
 │   ├── driver-midi/       ← 公式ドライバー（アプリに同梱）
