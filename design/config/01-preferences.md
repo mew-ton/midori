@@ -24,10 +24,10 @@ ui:
 recent:
   workspaces: []          # 最近開いたワークスペースのパス一覧（最大 10 件）
   profiles: []            # 最近使用したプロファイルのパス一覧（最大 10 件）
-  devices: []             # 最近編集したアダプターのパス一覧（最大 10 件）
+  adapters: []            # 最近編集したアダプターのパス一覧（最大 10 件）
   mappers: []             # 最近編集した変換グラフのパス一覧（最大 10 件）
 
-device_preview:           # アダプター編集画面のプレビュータブ用テスト接続キャッシュ
+adapter_preview:          # アダプター編集画面のプレビュータブ用テスト接続キャッシュ
   # "adapters/yamaha-els03.yaml":
   #   connection:
   #     driver: midi
@@ -75,9 +75,9 @@ API キーは keychain または環境変数から取得し、`preferences.yaml`
 | `ui.language` | ❌ | `ja` | UI 言語 |
 | `recent.workspaces` | ❌ | `[]` | 最近開いたワークスペースのパス。GUI が自動更新する |
 | `recent.profiles` | ❌ | `[]` | 最近使用したプロファイルのパス。GUI が自動更新する |
-| `recent.devices` | ❌ | `[]` | 最近編集したアダプターのパス。GUI が自動更新する |
+| `recent.adapters` | ❌ | `[]` | 最近編集したアダプターのパス。GUI が自動更新する |
 | `recent.mappers` | ❌ | `[]` | 最近編集した変換グラフのパス。GUI が自動更新する |
-| `device_preview` | ❌ | `{}` | アダプターファイルパスをキーとしたテスト接続設定のキャッシュ。プレビュータブで使用 |
+| `adapter_preview` | ❌ | `{}` | アダプターファイルパスをキーとしたテスト接続設定のキャッシュ。プレビュータブで使用 |
 | `ai.provider` | ❌ | `claude` | AI プロバイダー |
 | `ai.model` | ❌ | プロバイダーデフォルト | 使用するモデル名 |
 | `ai.*.api_key_env` | ❌ | — | API キーを保持する環境変数名。値そのものは保存しない |

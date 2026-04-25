@@ -168,15 +168,15 @@ OS のフォルダ選択ダイアログで保存先を選び、`.midori/workspac
 
 ## 要素セクション（小）
 
-ワークスペース内の device / driver / adapter_kind をリスト表示する。
+ワークスペース内の adapter / driver / adapter_kind をリスト表示する。
 
 mapper はここに出ない。mapper はプロファイルに紐づく要素であり、プロファイルトップ画面の「グラフを編集」から入る。
 
 ### 要素リスト
 
-各行：名前（`name` フィールド、未設定時はファイル名）・タイプバッジ（`device` / `driver` / `adapter_kind`）・編集・削除。
+各行：名前（`name` フィールド、未設定時はファイル名）・タイプバッジ（`adapter` / `driver` / `adapter_kind`）・編集・削除。
 
-ソート順：タイプ（device → driver → adapter_kind）→ 名前の昇順。
+ソート順：タイプ（adapter → driver → adapter_kind）→ 名前の昇順。
 
 ### アダプターを作る
 
