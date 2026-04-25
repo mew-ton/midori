@@ -30,7 +30,7 @@ L3（宣言された権限以上には動けない）はウィジェットの性
 
 ## generator_ui
 
-`generator_ui` はデバイス構成 YAML を生成するための JS ファイル。Electron の renderer プロセス上で実行される。
+`generator_ui` はアダプター YAML を生成するための JS ファイル。Electron の renderer プロセス上で実行される。
 
 ### contextBridge の公開 API
 

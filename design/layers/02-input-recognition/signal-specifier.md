@@ -65,8 +65,8 @@ definition の構成から決まるパス文字列。component id・note（keybo
 変換グラフでは、どのデバイスの Signal 指定子かを示すために `input.<device_id>.` / `output.<device_id>.` プレフィックスを付ける。`<device_id>` はプロファイルの `inputs[].id` / `outputs[].id` のキー。
 
 ```
-input.<device_id>.<Signal 指定子>    # 入力デバイス構成の ComponentState ポート
-output.<device_id>.<Signal 指定子>  # 出力デバイス構成の Signal ポート
+input.<device_id>.<Signal 指定子>    # 入力アダプターの ComponentState ポート
+output.<device_id>.<Signal 指定子>  # 出力アダプターの Signal ポート
 ```
 
 ```yaml

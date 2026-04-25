@@ -1,6 +1,6 @@
 # コンポーネント型リファレンス
 
-デバイス構成の `definition` で使用できる component type の一覧。入力・出力デバイス構成で共通。
+アダプターの `definition` で使用できる component type の一覧。入力・出力アダプターで共通。
 
 ---
 

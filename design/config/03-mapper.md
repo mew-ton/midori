@@ -2,7 +2,7 @@
 
 ComponentState を Signal に変換する。ノードグラフ形式で定義する。
 
-マッパーファイルは純粋なグラフ定義のみを持つ。どのデバイス構成ファイルを使うかはプロファイル（`profiles/*.yaml`）が宣言し、ランタイムがプロファイルをもとにデバイス構成を解決する。マッパーのポート記法で使う `<device_id>`（例: `input.yamaha-els03.`）はプロファイルの `inputs[].id` / `outputs[].id` に対応する。
+マッパーファイルは純粋なグラフ定義のみを持つ。どのアダプターファイルを使うかはプロファイル（`profiles/*.yaml`）が宣言し、ランタイムがプロファイルをもとにアダプターを解決する。マッパーのポート記法で使う `<device_id>`（例: `input.yamaha-els03.`）はプロファイルの `inputs[].id` / `outputs[].id` に対応する。
 
 ## グラフ構造
 
@@ -117,9 +117,9 @@ graph:
 
 ## Signal の定義
 
-出力ブロックのポートは出力デバイス構成の Signal 指定子で命名する（例: `output.vrchat-default.upper.{note}.pressed`）。
+出力ブロックのポートは出力アダプターの Signal 指定子で命名する（例: `output.vrchat-default.upper.{note}.pressed`）。
 Signal のデータ型には `int` / `float` / `bool` / `pulse` / `static_array<T>` / `dynamic_array<T>` がある。
-出力デバイス構成の `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
+出力アダプターの `binding.output` はこの Signal 指定子を `from.target` で参照してルーティングを定義する。
 
 ---
 

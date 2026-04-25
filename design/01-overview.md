@@ -25,12 +25,12 @@
 コミュニティで公開・共有されるもの
 
   プラグインリポジトリ  ルートに .midori/plugin.yaml を持つ git リポジトリ。
-                        devices/*.yaml / ドライバー / デバイス種別定義 等を提供する。
+                        adapters/*.yaml / ドライバー / アダプター種別定義 等を提供する。
                         → URL を GUI に貼るだけで <app-data-dir>/plugins/ にインストールされる
 
 プライベートで受け渡しされるもの（公開を前提としない）
 
-  ワークスペース        devices/ / mappers/ / profiles/ を含む git リポジトリ。
+  ワークスペース        adapters/ / mappers/ / profiles/ を含む git リポジトリ。
                         楽器プロファイル・アバター設定・マッピングを含む。
                         → リポジトリ単位でクローン・共有する
 

@@ -6,7 +6,7 @@
 
 ### 追加ドライバー
 
-初期実装では MIDI / OSC を双方向でサポートする。VRChat 用の OSC 設定は `osc-vrchat` デバイス種別定義 として提供する。追加ドライバーは将来拡張。
+初期実装では MIDI / OSC を双方向でサポートする。VRChat 用の OSC 設定は `osc-vrchat` アダプター種別定義 として提供する。追加ドライバーは将来拡張。
 
 | ドライバー | 入力 | 出力 |
 |---|---|---|
@@ -18,17 +18,17 @@
 | Audio Spectrum | 将来 | — |
 | Audio Voice | 将来 | — |
 
-`osc-vrchat` は独立ドライバーではなく、`osc` ドライバーを基底とする **デバイス種別定義** として提供する。詳細 → [`10-driver-plugin.md`](10-driver-plugin.md)
+`osc-vrchat` は独立ドライバーではなく、`osc` ドライバーを基底とする **アダプター種別定義** として提供する。詳細 → [`10-driver-plugin.md`](10-driver-plugin.md)
 
 #### HTTP ドライバーのイメージ
 
 HTTP はドライバー固有の I/O モデルを持つ：
 
 **入力（サーバー起動型）**：ブリッジ起動時に HTTP サーバーが指定ポートで立ち上がる。
-デバイス構成 の `definition` は受け付ける API エンドポイントを記述し、`binding` でリクエストボディのフィールドを ComponentState にマッピングする。
+アダプター の `definition` は受け付ける API エンドポイントを記述し、`binding` でリクエストボディのフィールドを ComponentState にマッピングする。
 
 ```yaml
-# 入力 デバイス構成（driver: http）のイメージ
+# 入力 アダプター（driver: http）のイメージ
 definition:
   components:
     - id: note_trigger
@@ -60,7 +60,7 @@ binding:
 **出力（HTTP クライアント型）**：Signal が発生するたびにプロファイルの connection で設定した URL へ JSON body をリクエスト送出する。
 
 ```yaml
-# 出力 デバイス構成（driver: http）のイメージ
+# 出力 アダプター（driver: http）のイメージ
 binding:
   output:
     driver: http
@@ -113,7 +113,7 @@ binding:
 
 同一マイクから複数特徴量が必要な場合は **1 ドライバー多 component 構成**（粒度指標 軸 1）を取る。`audio-voice` が viseme + volume を 1 ドライバーで出すのはこの適用例。
 
-なお同じ audio トランスポートに対して用途違いを `device_kind` で切り替える案は、デバイス種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
+なお同じ audio トランスポートに対して用途違いを `adapter_kind` で切り替える案は、アダプター種別定義がコードを持てない制約（[10-driver-plugin.md](10-driver-plugin.md)）により採用できない。
 
 ##### 設計上の裏付け
 

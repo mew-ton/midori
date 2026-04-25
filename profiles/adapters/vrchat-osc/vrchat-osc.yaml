@@ -3,7 +3,7 @@ metadata:
   category: vrchat-avatar
   spec: |
     エレクトーン演奏を VRChat アバターに同期するための OSC パラメーター構成。
-    このデバイス構成に対応するアバターは、以下のパラメーター命名規則に従って制作されている前提。
+    このアダプターに対応するアバターは、以下のパラメーター命名規則に従って制作されている前提。
 
     ## 鍵盤パラメーター
     upper_key_{note} / lower_key_{note} / pedal_key_{note}（bool）
@@ -243,7 +243,7 @@ binding:
   # ------------------------------------------------------------
   input:
     driver: osc
-    device_kind: osc-vrchat
+    adapter_kind: osc-vrchat
     mappings:
 
       - from:
@@ -297,7 +297,7 @@ binding:
   # ------------------------------------------------------------
   output:
     driver: osc
-    device_kind: osc-vrchat
+    adapter_kind: osc-vrchat
     mappings:
 
       - mirror: upper_key.{note}.pressed
