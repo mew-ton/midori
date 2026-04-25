@@ -102,7 +102,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       ├── main.*                   ← CLI エントリ・引数パース
 │       ├── pipeline.*               ← 5層を束ねる Pipeline
 │       ├── driver_host.*            ← ドライバープロセス管理（起動・共有メモリ・ハートビート）
-│       ├── device_config.*          ← アダプター（入力・出力共通）
+│       ├── adapter.*               ← アダプター（入力・出力共通）
 │       └── mapper.*                 ← 変換グラフ Runtime
 │
 ├── driver-midi/                     ← 公式 MIDI ドライバー（プラグインリポジトリ）
@@ -115,7 +115,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 ├── gui/                             ← GUI アプリ
 │   ├── backend/                     ← ブリッジプロセス起動・ログ中継のみ
 │   └── frontend/                    ← UI
-│       ├── DeviceConfigEditor/
+│       ├── AdapterEditor/
 │       │     ├── DefinitionEditor
 │       │     ├── BindingEditor
 │       │     ├── LayoutEditor
