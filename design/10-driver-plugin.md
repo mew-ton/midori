@@ -347,7 +347,7 @@ Additional Fields はカスタムコードを必要とせず、GUI が標準 HTM
 `additional_fields` の `file` フィールドはパスを保存するだけだが、ファイル内容を変換してデバイス構成 YAML を生成するケース（osc-vrchat 等）は `generator_ui` を使う。
 
 ```yaml
-# .midori/plugin.yaml（device_kinds` エントリ内）
+# .midori/plugin.yaml（device_kinds エントリ内）
 config_widget:
   generator_ui: ../ui/generator.js   # plugin.yaml からの相対パス
 ```
