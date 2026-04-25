@@ -40,7 +40,7 @@ Design documents describe **the current state of the system**. The history of ho
 
 Files passed as arguments, or recently modified documentation:
 
-```
+```text
 design/**/*.md
 design/config/**/*.{md,yaml}
 design/layers/**/*.md

@@ -27,41 +27,42 @@
 
 タイトルバー直下に常設する 1 行のパンくずリストでナビゲーションを提供する。
 
-```
+先頭の `Midori` はアプリ名ラベルとして常時表示するが、リンクとしては作用しない。その次の `Top` がワークスペース選択画面へのリンクとなる。
+
+```text
 ワークスペース選択画面:
-  Midori
+  Midori  Top
 
 ダッシュボード:
-  [workspace-name]
+  Midori  Top  ›  [workspace-name]
 
 デバイス構成編集画面:
-  [workspace-name]  ›  yamaha-els03
+  Midori  Top  ›  [workspace-name]  ›  yamaha-els03
 
 プロファイル詳細画面:
-  [workspace-name]  ›  My Profile
+  Midori  Top  ›  [workspace-name]  ›  My Profile
 
 変換グラフ編集画面（プロファイルから遷移）:
-  [workspace-name]  ›  My Profile  ›  変換グラフ
+  Midori  Top  ›  [workspace-name]  ›  My Profile  ›  変換グラフ
 
 Preferences:
-  [workspace-name]  ›  Preferences
+  Midori  Top  ›  [workspace-name]  ›  Preferences
 ```
 
 各セグメントはクリックでその階層へ戻る。
 
-| クリック対象 | 遷移先 |
-|---|---|
-| `Midori`（最左、常設） | ワークスペース選択画面 |
-| `[workspace-name]` | ダッシュボード |
-| 中間セグメント（例: `My Profile`） | 該当画面 |
-
-`Midori` セグメントは全画面で常に表示し、ワークスペース切り替えの起点とする。
+| セグメント | リンク | 遷移先 |
+|---|---|---|
+| `Midori` | なし（ラベルのみ） | — |
+| `Top` | あり | ワークスペース選択画面 |
+| `[workspace-name]` | あり | ダッシュボード |
+| 中間セグメント（例: `My Profile`） | あり | 該当画面 |
 
 ---
 
 ## ワークスペース切り替え
 
-`Midori` セグメントをクリックするとワークスペース選択画面へ遷移する。現在のワークスペースを「閉じる」概念はなく、別のワークスペースを選ぶことで切り替わる。
+`Top` セグメントをクリックするとワークスペース選択画面へ遷移する。現在のワークスペースを「閉じる」概念はなく、別のワークスペースを選ぶことで切り替わる。
 
 ブリッジが実行中の場合は切り替え前に確認ダイアログを表示する：
 
