@@ -11,7 +11,7 @@
                  │ raw events（デバイスごと）
                  ▼
 ┌────────────────────────────────────────────┐
-│  デバイス構成（入力）× N                   │
+│  アダプター（入力）× N                   │
 │  definition + binding + layout             │  公開配布可能
 │  raw events → ComponentState に正規化      │
 └─────────────────────┬──────────────────────┘
@@ -25,7 +25,7 @@
                       │ Signal（device_id 付き）
                       ▼
 ┌────────────────────────────────────────────┐
-│  デバイス構成（出力）× N                   │
+│  アダプター（出力）× N                   │
 │  definition + binding + layout             │  公開配布可能
 │  Signal → raw events に変換               │
 └──────┬───────────────┬──────────────────────┘
@@ -39,9 +39,9 @@
 
 各層は疎結合。隣接層とのインターフェース（raw events / ComponentState / Signal）が変わらない限り、各層を独立して差し替えられる。
 
-### デバイス構成 の対称性
+### アダプター の対称性
 
-Layer 2（入力）と Layer 4（出力）は **同一スキーマ（デバイス構成）** を共有する。
+Layer 2（入力）と Layer 4（出力）は **同一スキーマ（アダプター）** を共有する。
 binding の方向だけが逆になる。
 
 | | Layer 2（入力） | Layer 4（出力） |
@@ -57,7 +57,7 @@ binding の方向だけが逆になる。
 
 ```
 GUI
-├── デバイス構成 Editor           definition / binding / layout を編集
+├── アダプター Editor           definition / binding / layout を編集
 ├── 変換グラフ Editor              入力ブロック・計算ノード・出力ブロックのノードグラフを編集
 ├── プロファイル詳細
 │     ├── プレビュータブ          Preview（入力）/ Monitor（出力）のリアルタイム表示
@@ -84,9 +84,9 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 | 層 | 初回実装 | 将来の拡張例 |
 |---|---|---|
 | 入力ドライバー | `midi`, `osc`（プラグイン） | `ble-heart-rate`, `keyboard` 等 |
-| デバイス構成（入力） | MIDI / OSC binding 構文（`osc-vrchat` デバイス種別定義 含む） | ドライバーごとに追加 |
+| アダプター（入力） | MIDI / OSC binding 構文（`osc-vrchat` アダプター種別定義 含む） | ドライバーごとに追加 |
 | 変換グラフ | 宣言的トランスフォームグラフ | — |
-| デバイス構成（出力） | MIDI / OSC binding 構文（`osc-vrchat` デバイス種別定義 含む） | 追加ドライバーごとに追加 |
+| アダプター（出力） | MIDI / OSC binding 構文（`osc-vrchat` アダプター種別定義 含む） | 追加ドライバーごとに追加 |
 | 出力ドライバー | `osc`, `midi`（プラグイン） | `websocket`, `serial` 等 |
 
 ---
@@ -102,7 +102,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       ├── main.*                   ← CLI エントリ・引数パース
 │       ├── pipeline.*               ← 5層を束ねる Pipeline
 │       ├── driver_host.*            ← ドライバープロセス管理（起動・共有メモリ・ハートビート）
-│       ├── device_config.*          ← デバイス構成（入力・出力共通）
+│       ├── adapter.*               ← アダプター（入力・出力共通）
 │       └── mapper.*                 ← 変換グラフ Runtime
 │
 ├── driver-midi/                     ← 公式 MIDI ドライバー（プラグインリポジトリ）
@@ -115,7 +115,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 ├── gui/                             ← GUI アプリ
 │   ├── backend/                     ← ブリッジプロセス起動・ログ中継のみ
 │   └── frontend/                    ← UI
-│       ├── DeviceConfigEditor/
+│       ├── AdapterEditor/
 │       │     ├── DefinitionEditor
 │       │     ├── BindingEditor
 │       │     ├── LayoutEditor
@@ -125,7 +125,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │       └── PipelineMonitor/
 │
 └── profiles/                        ← 配布用サンプルワークスペース（git リポジトリ）
-    ├── devices/
+    ├── adapters/
     │   ├── yamaha-els03/
     │   │   └── yamaha-els03.yaml
     │   └── vrchat-osc/
@@ -140,7 +140,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 <workspace>/
 ├── .midori/        ← このリポジトリ自体をプラグインとして公開する場合のみ
 │   └── plugin.yaml
-├── devices/               ← デバイス構成ファイル
+├── adapters/               ← アダプターファイル
 ├── mappers/               ← 変換グラフファイル
 └── profiles/              ← プロファイルファイル
 ```
@@ -153,7 +153,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │   ├── yamaha-stagea/     ← git clone されたプラグイン
 │   │   ├── .midori/
 │   │   │   └── plugin.yaml
-│   │   └── devices/
+│   │   └── adapters/
 │   ├── driver-midi/       ← 公式ドライバー（アプリに同梱）
 │   └── driver-osc/
 └── preferences.yaml       ← UI 設定・最近使用したファイル・AI 設定

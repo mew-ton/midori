@@ -20,8 +20,8 @@
 | 変換グラフのポートが参照する device_id がプロファイルの `inputs[].id` / `outputs[].id` に存在しない | Layer 3 |
 | 変換グラフにサイクル（循環接続）が存在する | Layer 3 |
 | プロファイルの `inputs[].id` / `outputs[].id` に重複がある | プロファイル読み込み |
-| `direction: output` のデバイス構成をプロファイルの入力側に設定している | Layer 2 |
-| `direction: input` のデバイス構成をプロファイルの出力側に設定している | Layer 4 |
+| `direction: output` のアダプターをプロファイルの入力側に設定している | Layer 2 |
+| `direction: input` のアダプターをプロファイルの出力側に設定している | Layer 4 |
 
 ログ出力例：
 
@@ -37,7 +37,7 @@
 
 | 例 | 検出層 |
 |---|---|
-| プロファイルの `inputs[].device` / `outputs[].device` が参照するデバイス構成ファイルのコンポーネント ID と、変換グラフのポートが参照する Signal 指定子に不一致がある（互換コンポーネントが存在すれば動作は続行） | Layer 3 |
+| プロファイルの `inputs[].adapter` / `outputs[].adapter` が参照するアダプターファイルのコンポーネント ID と、変換グラフのポートが参照する Signal 指定子に不一致がある（互換コンポーネントが存在すれば動作は続行） | Layer 3 |
 
 ログ出力例：
 

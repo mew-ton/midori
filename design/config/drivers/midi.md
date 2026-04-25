@@ -9,7 +9,7 @@
 | `input` | ✅ | MIDI 受信（特定デバイスが送信しない場合は `direction: output` で無効化） |
 | `output` | ✅ | MIDI 送信 |
 
-デバイス構成の `direction` フィールドで有効にする方向を制限できる（例: `direction: input` にすると `binding.input` のみ有効）。
+アダプターの `direction` フィールドで有効にする方向を制限できる（例: `direction: input` にすると `binding.input` のみ有効）。
 
 ---
 
@@ -178,7 +178,7 @@
 
 ### 例
 
-同一チャンネル・同一 note に対して `noteOn` を出力する `from.target` は1エントリのみ有効。複数の `from.target` が同じ note への `noteOn` を出力しようとした場合は validation error。どの Signal 値を noteOn のトリガーとするかはデバイス構成の definition で確定する（pressed か velocity かのどちらかが定義される）。
+同一チャンネル・同一 note に対して `noteOn` を出力する `from.target` は1エントリのみ有効。複数の `from.target` が同じ note への `noteOn` を出力しようとした場合は validation error。どの Signal 値を noteOn のトリガーとするかはアダプターの definition で確定する（pressed か velocity かのどちらかが定義される）。
 
 ```yaml
 # パターン1: pressed → noteOn（velocity は additionals に velocity がない場合）

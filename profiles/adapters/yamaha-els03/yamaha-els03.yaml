@@ -4,7 +4,7 @@ metadata:
   model: ELS-03
   category: electone
   spec: |
-    Yamaha STAGEA ELS-03 シリーズ（ELS-03G / ELS-03X / ELS-03XR / ELS-03XF）の入力デバイス構成。
+    Yamaha STAGEA ELS-03 シリーズ（ELS-03G / ELS-03X / ELS-03XR / ELS-03XF）の入力アダプター。
     MIDI モード: Electone-EL Mode。octave_offset: -1（Yamaha 表記: C3 = note 60）。
 
     ## 物理構造と操作

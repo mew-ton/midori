@@ -13,7 +13,7 @@ Scan all design docs and sample YAML. Return findings classified as **immediate-
 design/**/*.md
 design/config/**/*.{md,yaml}
 design/layers/**/*.md
-profiles/devices/**/*.yaml
+profiles/adapters/**/*.yaml
 profiles/mappers/*.yaml
 ```
 
@@ -24,7 +24,7 @@ profiles/mappers/*.yaml
 | Broken links | Markdown links point to existing files |
 | Naming drift | Same concept under different names |
 | Schema consistency | `profiles/` YAML matches `design/config/` spec |
-| Stale field names | Past renames fully propagated (e.g. `config_type→device_kind`) |
+| Stale field names | Past renames fully propagated (e.g. `config_type→adapter_kind`) |
 | Contradicting statements | Different explanations for the same fact |
 | Missing definitions | Terms used but absent from `00-naming.md` |
 | Stack divergence | `03-tech-stack.md` policy vs. actual specs |

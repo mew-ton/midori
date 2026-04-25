@@ -23,8 +23,8 @@
 
 component type の一覧・primitive value・additionals の仕様 → [config/00-component-types.md](../../config/00-component-types.md)
 
-設定仕様（YAML 記法・フィールド定義・サンプル）→ [config/02-device-config.md#definition-セクション](../../config/02-device-config.md#definition-セクション)
+設定仕様（YAML 記法・フィールド定義・サンプル）→ [config/02-adapter.md#definition-セクション](../../config/02-adapter.md#definition-セクション)
 
 ---
 
-`key_range` 音名記法・`octave_offset` 仕様 → [config/02-device-config.md#definition-セクション](../../config/02-device-config.md#definition-セクション)
+`key_range` 音名記法・`octave_offset` 仕様 → [config/02-adapter.md#definition-セクション](../../config/02-adapter.md#definition-セクション)

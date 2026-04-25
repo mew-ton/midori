@@ -1,5 +1,8 @@
 {
   "worktree": {
     "symlinkDirectories": ["node_modules", "target"]
+  },
+  "permissions": {
+    "deny": ["Bash(gh pr merge*)"]
   }
 }

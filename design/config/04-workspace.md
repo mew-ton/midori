@@ -30,7 +30,7 @@ display_name: Yamaha STAGEA ELS-03
 version: 1.0.0
 author: someone
 description: |
-  ELS-03 シリーズ用デバイス構成。
+  ELS-03 シリーズ用アダプター。
 ```
 
 ## フィールド
@@ -43,5 +43,5 @@ description: |
 | `author` | ❌ | 作者名 |
 | `description` | ❌ | プラグインの説明 |
 | `drivers` | ❌ | 提供するドライバーの一覧 |
-| `device_kinds` | ❌ | 提供するデバイス種別定義の一覧 |
+| `adapter_kinds` | ❌ | 提供するアダプター種別定義の一覧 |
 | `render_components` | ❌ | 提供する描画コンポーネントの一覧 |
