@@ -5,6 +5,7 @@
 //! lives in this crate (the layout itself is defined in `midori_core::shm`).
 
 pub mod driver;
+pub mod ffi;
 pub mod spsc;
 
 pub use midori_core as core;
