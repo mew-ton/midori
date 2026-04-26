@@ -8,6 +8,9 @@ repository = "https://github.com/mew-ton/midori"
 
 [dependencies]
 midori-core = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+signal-hook = "0.3"
 
 # midori-sdk は SPSC リングバッファ実装で UnsafeCell を扱うため、
 # workspace の `unsafe_code = "forbid"` をクレート単位で `deny` に緩める。
