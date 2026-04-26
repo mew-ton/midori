@@ -47,14 +47,6 @@ enum HelloTag {
     Hello,
 }
 
-/// Bridge → Driver のハンドシェイク応答（stdin 1 行目）。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct HelloAck {
-    pub compatible: bool,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-
 /// Bridge → Driver の制御コマンド（ハンドシェイク完了後の stdin）。
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -74,24 +66,22 @@ pub enum ControlCommand {
 
 /// Bridge → Driver で受信しうる stdin メッセージの内訳。
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum BridgeMessage {
-    #[serde(rename = "hello_ack")]
     HelloAck {
         compatible: bool,
         #[serde(default)]
         reason: Option<String>,
     },
-    #[serde(rename = "connect")]
     Connect {
         device: String,
         #[serde(default)]
         config: serde_json::Value,
     },
-    #[serde(rename = "disconnect")]
     Disconnect,
-    #[serde(rename = "configure")]
-    Configure { config: serde_json::Value },
+    Configure {
+        config: serde_json::Value,
+    },
 }
 
 impl BridgeMessage {
@@ -243,48 +233,62 @@ where
     I: IntoIterator<Item = std::io::Result<String>>,
     W: Write,
 {
-    write_hello(out, sdk_version)?;
+    // ハンドシェイク + コマンドループ本体。エラーで早期 return しても
+    // クロージャを抜けるだけで、後続の shutdown 呼び出しはスキップされない。
+    let main_result = (|| -> Result<(), ProtocolError> {
+        write_hello(out, sdk_version)?;
 
-    let mut iter = lines.into_iter();
+        let mut iter = lines.into_iter();
 
-    // 最初の 1 行は必ず hello_ack
-    let first = iter.next().ok_or(ProtocolError::HandshakeMissing)??;
-    match parse_bridge_message(&first)? {
-        BridgeMessage::HelloAck {
-            compatible: false,
-            reason,
-        } => return Err(ProtocolError::Incompatible(reason)),
-        BridgeMessage::HelloAck {
-            compatible: true, ..
-        } => {}
-        _ => return Err(ProtocolError::HandshakeOutOfOrder),
-    }
-
-    // 以降はコマンドループ
-    for line in iter {
-        if shutdown.load(Ordering::Acquire) {
-            break;
+        // 最初の 1 行は必ず hello_ack
+        let first = iter.next().ok_or(ProtocolError::HandshakeMissing)??;
+        match parse_bridge_message(&first)? {
+            BridgeMessage::HelloAck {
+                compatible: false,
+                reason,
+            } => return Err(ProtocolError::Incompatible(reason)),
+            BridgeMessage::HelloAck {
+                compatible: true, ..
+            } => {}
+            _ => return Err(ProtocolError::HandshakeOutOfOrder),
         }
-        let line = line?;
-        let message = parse_bridge_message(&line)?;
-        if let Some(cmd) = message.into_command() {
-            driver.handle_command(cmd).map_err(ProtocolError::Driver)?;
-        }
-        // hello_ack が再度来るのは仕様外だが、エラーにせず無視する。
-    }
 
-    driver.shutdown().map_err(ProtocolError::Driver)?;
-    Ok(())
+        // 以降はコマンドループ
+        for line in iter {
+            if shutdown.load(Ordering::Acquire) {
+                break;
+            }
+            let line = line?;
+            let message = parse_bridge_message(&line)?;
+            if let Some(cmd) = message.into_command() {
+                driver.handle_command(cmd).map_err(ProtocolError::Driver)?;
+            }
+            // hello_ack が再度来るのは仕様外だが、エラーにせず無視する。
+        }
+
+        Ok(())
+    })();
+
+    // ハンドシェイク前のエラーでも、Driver::new 等で確保された資源を解放させるため
+    // shutdown は無条件で呼び出す。元のエラーを優先しつつ、shutdown 単独の失敗も報告する。
+    let shutdown_result = driver.shutdown().map_err(ProtocolError::Driver);
+    match (main_result, shutdown_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(e), _) | (Ok(()), Err(e)) => Err(e),
+    }
 }
 
 /// `<driver>` バイナリのエントリポイント。`fn main()` から呼び出す。
 ///
 /// argv を見て `list` / `start` をディスパッチし、`start` ではシグナル
 /// ハンドラを設定し stdin リーダースレッドを起動して [`run_protocol`] を
-/// 駆動する。`sdk_version` には呼び出し元クレートで `env!("CARGO_PKG_VERSION")`
-/// を渡すのが基本だが、本 SDK 自身のバージョンを埋め込みたければ
-/// `midori_sdk::driver::SDK_VERSION` を使う。
-pub fn run<D: Driver>(mut driver: D, sdk_version: &str) -> ExitCode {
+/// 駆動する。
+///
+/// `start` 時に Bridge へ送る `sdk_version` には常に SDK 自身のバージョン
+/// （[`SDK_VERSION`]）を埋め込む。これは Bridge 側の互換性検証
+/// （`design/10-driver-plugin.md` の「バージョン互換性」）に使われる値で、
+/// 各ドライバークレート自身のバージョンとは独立している。
+pub fn run<D: Driver>(mut driver: D) -> ExitCode {
     let mut args = std::env::args();
     let _bin = args.next();
     match args.next().as_deref() {
@@ -295,7 +299,7 @@ pub fn run<D: Driver>(mut driver: D, sdk_version: &str) -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Some("start") => exec_start(&mut driver, sdk_version),
+        Some("start") => exec_start(&mut driver),
         Some(other) => {
             eprintln!("midori-sdk: unknown subcommand: {other}");
             print_usage();
@@ -309,7 +313,13 @@ pub fn run<D: Driver>(mut driver: D, sdk_version: &str) -> ExitCode {
 }
 
 /// 本 SDK クレート自身のバージョン（`<package>.version`）。
-/// ドライバー作者が `run(driver, SDK_VERSION)` の形で利用できるよう公開する。
+///
+/// [`run`] が `<driver> start` 時に Bridge へ送る `hello.sdk_version` の値として
+/// 自動で使われる。Bridge はこのバージョン文字列で SDK 互換性を検証する
+/// （`design/10-driver-plugin.md` の「バージョン互換性」を参照）。
+///
+/// 互換性検証は SDK のバージョンに対して行うため、ドライバークレート側の
+/// `CARGO_PKG_VERSION` ではなく必ずこの値を使用する。
 pub const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn exec_list<D: Driver>(driver: &mut D) -> std::io::Result<()> {
@@ -318,7 +328,7 @@ fn exec_list<D: Driver>(driver: &mut D) -> std::io::Result<()> {
     write_device_list(driver, &mut out)
 }
 
-fn exec_start<D: Driver>(driver: &mut D, sdk_version: &str) -> ExitCode {
+fn exec_start<D: Driver>(driver: &mut D) -> ExitCode {
     let shutdown = Arc::new(AtomicBool::new(false));
     if let Err(err) = register_termination_signals(&shutdown) {
         eprintln!("midori-sdk: failed to install signal handlers: {err}");
@@ -329,7 +339,7 @@ fn exec_start<D: Driver>(driver: &mut D, sdk_version: &str) -> ExitCode {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
 
-    match run_protocol(driver, lines, &mut out, sdk_version, &shutdown) {
+    match run_protocol(driver, lines, &mut out, SDK_VERSION, &shutdown) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("midori-sdk: protocol error: {err}");
@@ -549,7 +559,8 @@ mod tests {
             }
             other => panic!("unexpected: {other:?}"),
         }
-        assert!(!driver.shutdown_called);
+        // ハンドシェイク前のエラーでもコンストラクタで確保した資源解放が走るよう shutdown を保証する
+        assert!(driver.shutdown_called);
     }
 
     #[test]
@@ -561,6 +572,7 @@ mod tests {
         let lines = lines_from(&[r#"{"type":"connect","device":"x"}"#]);
         let err = run_protocol(&mut driver, lines, &mut out, "1.0.0", &shutdown).unwrap_err();
         assert!(matches!(err, ProtocolError::HandshakeOutOfOrder));
+        assert!(driver.shutdown_called);
     }
 
     #[test]
@@ -572,6 +584,40 @@ mod tests {
         let lines: Vec<std::io::Result<String>> = vec![];
         let err = run_protocol(&mut driver, lines, &mut out, "1.0.0", &shutdown).unwrap_err();
         assert!(matches!(err, ProtocolError::HandshakeMissing));
+        assert!(driver.shutdown_called);
+    }
+
+    #[test]
+    fn it_should_call_shutdown_when_command_handler_returns_error() {
+        struct FailingDriver {
+            shutdown_called: bool,
+        }
+        impl Driver for FailingDriver {
+            fn list_devices(&mut self) -> Vec<DeviceEntry> {
+                Vec::new()
+            }
+            fn handle_command(&mut self, _: ControlCommand) -> Result<(), DriverError> {
+                Err(DriverError::new("boom"))
+            }
+            fn shutdown(&mut self) -> Result<(), DriverError> {
+                self.shutdown_called = true;
+                Ok(())
+            }
+        }
+
+        let mut driver = FailingDriver {
+            shutdown_called: false,
+        };
+        let mut out = Vec::new();
+        let shutdown = Arc::new(AtomicBool::new(false));
+
+        let lines = lines_from(&[
+            r#"{"type":"hello_ack","compatible":true}"#,
+            r#"{"type":"connect","device":"x"}"#,
+        ]);
+        let err = run_protocol(&mut driver, lines, &mut out, "1.0.0", &shutdown).unwrap_err();
+        assert!(matches!(err, ProtocolError::Driver(_)));
+        assert!(driver.shutdown_called);
     }
 
     #[test]

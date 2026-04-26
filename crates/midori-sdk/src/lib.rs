@@ -14,7 +14,7 @@ pub use midori_core::pipeline::*;
 pub use midori_core::shm::*;
 pub use midori_core::value::*;
 
-pub use driver::{ControlCommand, DeviceEntry, Driver, DriverError, ProtocolError};
+pub use driver::{ControlCommand, DeviceEntry, Driver, DriverError, ProtocolError, SDK_VERSION};
 pub use spsc::{Consumer, Full, Producer, SpscStorage};
 
 #[cfg(test)]
