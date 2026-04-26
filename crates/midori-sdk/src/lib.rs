@@ -4,6 +4,7 @@
 //! on `midori-sdk` alone. The shared-memory SPSC ring buffer implementation
 //! lives in this crate (the layout itself is defined in `midori_core::shm`).
 
+pub mod driver;
 pub mod spsc;
 
 pub use midori_core as core;
@@ -13,6 +14,7 @@ pub use midori_core::pipeline::*;
 pub use midori_core::shm::*;
 pub use midori_core::value::*;
 
+pub use driver::{ControlCommand, DeviceInfo, Driver, DriverError, ProtocolError};
 pub use spsc::{Consumer, Full, Producer, SpscStorage};
 
 #[cfg(test)]
