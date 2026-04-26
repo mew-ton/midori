@@ -60,6 +60,9 @@ midori_sdk_spsc_init(storage);
 midori_sdk_spsc_push(storage, &slot);
 // Consumer 側
 midori_sdk_spsc_pop(storage, &out_slot);
+
+// 使い終わったら必ず解放する（aligned_alloc に対応する free）
+free(storage);
 ```
 
 ヘッダの `RingSlot` は `typedef struct RingSlot RingSlot;` の forward 宣言のみで、

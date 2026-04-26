@@ -26,4 +26,8 @@ fn main() {
     println!("cargo:rerun-if-changed=src/spsc.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rerun-if-changed=build.rs");
+    // cbindgen.toml の `parse_deps = true` / `include = ["midori-core"]` で
+    // midori-core 内の `#[repr(C)]` 構造体を取り込むため、依存先のソース変更でも
+    // ヘッダを再生成する。
+    println!("cargo:rerun-if-changed=../midori-core/src");
 }

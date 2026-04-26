@@ -74,7 +74,8 @@ pub unsafe extern "C" fn midori_sdk_spsc_init(storage: *mut c_void) {
 /// # Safety
 ///
 /// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指すこと
-/// - `slot` は有効な [`RingSlot`] を指すこと
+/// - `slot` は有効な [`RingSlot`] を指すこと（読み取りは
+///   [`std::ptr::read_unaligned`] を使うためアラインメントは不問）
 /// - 同時に 1 スレッドからのみ呼ばれること（SPSC 生産者規律）
 #[allow(unsafe_code)]
 #[no_mangle]
@@ -83,7 +84,9 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(storage: *const c_void, slot: *con
         return 0;
     }
     let storage = &*storage.cast::<SpscStorage>();
-    let slot = *slot;
+    // C 側で `#pragma pack` 等によりパックされたポインタを渡されても UB を
+    // 起こさないよう unaligned read を採用する。
+    let slot = std::ptr::read_unaligned(slot);
     u8::from(spsc::try_push(storage, slot).is_ok())
 }
 
@@ -96,7 +99,8 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(storage: *const c_void, slot: *con
 /// # Safety
 ///
 /// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指すこと
-/// - `out_slot` は書き込み可能な [`RingSlot`] を指すこと
+/// - `out_slot` は書き込み可能な [`RingSlot`] を指すこと（書き込みは
+///   [`std::ptr::write_unaligned`] を使うためアラインメントは不問）
 /// - 同時に 1 スレッドからのみ呼ばれること（SPSC 消費者規律）
 #[allow(unsafe_code)]
 #[no_mangle]
@@ -109,7 +113,8 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
     }
     let storage = &*storage.cast::<SpscStorage>();
     if let Some(slot) = spsc::try_pop(storage) {
-        out_slot.write(slot);
+        // push と同じ理由（C 側パック構造体）で unaligned write を採用。
+        std::ptr::write_unaligned(out_slot, slot);
         1
     } else {
         0
