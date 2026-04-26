@@ -28,6 +28,7 @@
 | [config/03-mapper.md](./config/03-mapper.md) | 変換グラフ 設定仕様（ノードグラフ・Signal 定義） |
 | [config/05-profile.md](./config/05-profile.md) | プロファイル設定仕様（入出力デバイス・変換グラフ・接続設定） |
 | [config/syntax/02-value-types.md](./config/syntax/02-value-types.md) | 値型リファレンス（bool / pulse / int / float / array） |
+| [config/syntax/03-storage-model.md](./config/syntax/03-storage-model.md) | 値の格納モデル（スキーマ層と実装層の二層・新規 primitive 追加コスト） |
 | [config/syntax/01-expr.md](./config/syntax/01-expr.md) | 式言語仕様（set.expr — SysEx 複数バイト計算） |
 | [config/drivers/midi.md](./config/drivers/midi.md) | ドライバー仕様: MIDI（binding.input / binding.output） |
 | [config/drivers/osc.md](./config/drivers/osc.md) | ドライバー仕様: OSC（binding.input / binding.output） |
