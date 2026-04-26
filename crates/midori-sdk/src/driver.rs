@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 /// `value` はドライバー固有の識別子（`start` 時の `Connect` コマンドで参照される）、
 /// `label` はユーザー表示名。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceInfo {
+pub struct DeviceEntry {
     pub value: String,
     pub label: String,
 }
@@ -111,7 +111,7 @@ impl BridgeMessage {
 /// （接続ハンドル・スレッドハンドル等）を保持できる。
 pub trait Driver {
     /// `<driver> list` で返すデバイス一覧。
-    fn list_devices(&mut self) -> Vec<DeviceInfo>;
+    fn list_devices(&mut self) -> Vec<DeviceEntry>;
 
     /// 制御コマンドのディスパッチ先。
     /// 戻り値の `Err` は致命的とみなし、CLI を終了させる。
@@ -397,13 +397,13 @@ mod tests {
     use std::io::Cursor;
 
     struct StubDriver {
-        devices: Vec<DeviceInfo>,
+        devices: Vec<DeviceEntry>,
         commands: Vec<ControlCommand>,
         shutdown_called: bool,
     }
 
     impl StubDriver {
-        fn new(devices: Vec<DeviceInfo>) -> Self {
+        fn new(devices: Vec<DeviceEntry>) -> Self {
             Self {
                 devices,
                 commands: Vec::new(),
@@ -413,7 +413,7 @@ mod tests {
     }
 
     impl Driver for StubDriver {
-        fn list_devices(&mut self) -> Vec<DeviceInfo> {
+        fn list_devices(&mut self) -> Vec<DeviceEntry> {
             self.devices.clone()
         }
 
@@ -435,11 +435,11 @@ mod tests {
     #[test]
     fn it_should_write_device_list_as_json_array() {
         let mut driver = StubDriver::new(vec![
-            DeviceInfo {
+            DeviceEntry {
                 value: "ELS-03 Series".into(),
                 label: "Yamaha ELS-03".into(),
             },
-            DeviceInfo {
+            DeviceEntry {
                 value: "IAC Driver Bus 1".into(),
                 label: "IAC Driver".into(),
             },
