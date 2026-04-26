@@ -9,5 +9,16 @@ repository = "https://github.com/mew-ton/midori"
 [dependencies]
 midori-core = { workspace = true }
 
-[lints]
-workspace = true
+# midori-sdk は SPSC リングバッファ実装で UnsafeCell を扱うため、
+# workspace の `unsafe_code = "forbid"` をクレート単位で `deny` に緩める。
+# unsafe を使う箇所には個別に `#[allow(unsafe_code)]` を付け、SAFETY コメントで根拠を示す。
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all         = { level = "warn", priority = -1 }
+pedantic    = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
