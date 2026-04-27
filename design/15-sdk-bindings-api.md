@@ -21,7 +21,7 @@
 
 ## 3 レイヤーモデル（L1 / L2 / L3）
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ L3  エンドユーザー API（言語ごとに自然な形）            │
 │     - Python: class Driver, async iterator, raise       │
@@ -148,6 +148,11 @@ typedef struct midori_device_entry {
 } midori_device_entry_t;
 
 typedef struct midori_driver_callbacks {
+    /* 構造体サイズ。L2 が sizeof(midori_driver_callbacks_t) を必ず代入する。
+       L1 はこの値を見て、自分が知らない末尾フィールドへのアクセスを抑止する。
+       詳細は「C ABI と struct_size」節を参照 */
+    size_t struct_size;
+
     /* devices に out_count 個のエントリを書き、書いた数を返す */
     size_t (*list_devices)(void* user, midori_device_entry_t* devices, size_t cap);
 
@@ -158,9 +163,23 @@ typedef struct midori_driver_callbacks {
     int (*on_shutdown)(void* user);
 } midori_driver_callbacks_t;
 
+/* オプション。NULL なら全てデフォルト値 */
+typedef struct midori_run_options {
+    size_t struct_size;
+    /* 0=L1 が SIGTERM/SIGINT を捕捉する（デフォルト・スタンドアロン用途）
+       1=L1 はシグナルを触らない。ホスト側で midori_sdk_trigger_shutdown を呼ぶ */
+    int disable_signal_handlers;
+} midori_run_options_t;
+
 /* main() からこれを呼ぶだけで <driver> list/start CLI が完成する */
 int midori_sdk_run(int argc, char** argv,
-                   const midori_driver_callbacks_t* cb, void* user);
+                   const midori_driver_callbacks_t* cb, void* user,
+                   const midori_run_options_t* opts /* nullable */);
+
+/* シグナルハンドラを使わない埋め込み環境（GUI 内ランタイム等）から
+   on_shutdown を起動するための明示 API。midori_sdk_run の中で
+   コマンドループに「shutdown 要求」を立てる。べき等 */
+void midori_sdk_trigger_shutdown(void);
 
 /* イベント送出。スレッドセーフ。0=リング満杯 / 1=成功 */
 int midori_sdk_emit_int(const char* device_id, const char* specifier, int64_t v);
@@ -277,8 +296,13 @@ static void poll_loop(void) {
 }
 
 int main(int argc, char** argv) {
-    midori_driver_callbacks_t cb = { list_devices, on_connect, NULL, NULL, NULL };
-    return midori_sdk_run(argc, argv, &cb, NULL);
+    midori_driver_callbacks_t cb = {
+        .struct_size = sizeof(midori_driver_callbacks_t),
+        .list_devices = list_devices,
+        .on_connect = on_connect,
+        /* on_disconnect / on_configure / on_shutdown は NULL のまま（未対応） */
+    };
+    return midori_sdk_run(argc, argv, &cb, NULL, /* opts */ NULL);
 }
 ```
 
@@ -298,7 +322,7 @@ int main(int argc, char** argv) {
 
 ## ライフサイクルとハンドシェイク
 
-```
+```text
 [GUI/Bridge]                    [Driver L3]                  [SDK L1]
      │                               │                            │
      │  spawn <driver> start         │                            │
@@ -338,7 +362,7 @@ int main(int argc, char** argv) {
 | `connect` / `disconnect` / `configure` のディスパッチ | L1 → L2 → L3 | L3 は受け取るだけ |
 | イベント送出（共有メモリ） | L3 → L1 | L2 は型変換のみ |
 | ログ出力（stdout 非 JSON 行） | L3 → L1 | `midori_sdk_log(level, message)` |
-| シグナルハンドラ | L1 | SIGTERM / SIGINT で `on_shutdown` を呼んでから return |
+| シグナルハンドラ | L1（opt-out 可） | デフォルト: SIGTERM / SIGINT で `on_shutdown` を呼んでから return。`disable_signal_handlers=1` を指定するとホストから `midori_sdk_trigger_shutdown()` で起動 |
 
 ---
 
@@ -355,6 +379,8 @@ int main(int argc, char** argv) {
 
 `emit_*` はすべての言語で **同期・スレッドセーフ** とする。SPSC は単一プロデューサーのため、L1 内部に Mutex を 1 つ持って protect する。複数スレッドからの同時 emit は順序保証なし（L1 は到着順で push する）。
 
+**ただし Node.js のみ例外**: `emitFloat` などは **JS メインスレッドからの呼び出しのみサポート**する（`worker_threads` の Worker から直接呼ぶことは未サポート）。napi-rs の制約と、Worker から呼ぶ場合に必要な `ThreadsafeFunction` ベースの追加 API が L1 の単一 emit ハンドル前提と整合しないため。Worker からイベントを送りたい場合は、メインスレッド側に `MessageChannel` 等で転送してから `emitFloat` を呼ぶ運用とする。Python（threading / native thread）と C（pthread）は任意のスレッドから呼んで安全。
+
 > Note: SPSC の「単一プロデューサー」規律は **共有メモリへの書き込み権を持つのが Driver プロセス 1 つだけ** という意味。Driver プロセス内で複数スレッドから emit したい場合は L1 内 Mutex で直列化する。これは性能より安全側に倒した妥協で、リアルタイム要件を満たさないなら将来 thread-local バッファ + ドレインに置き換える（L1 ABI 変更なしで実装差し替え可能）。
 
 ---
@@ -370,7 +396,7 @@ int main(int argc, char** argv) {
 
 ### エラー伝播経路
 
-```
+```text
 L3 のコールバック内で発生したエラー
     ↓ L2 が言語固有のエラー → 共通の C 文字列に変換
     ↓ L1 が IpcEvent::Log{level: Error, layer: "driver", message} として stdout に書き出す
@@ -445,8 +471,11 @@ uint8_t midori_sdk_spsc_pop(const void* storage, RingSlot* out_slot);
 /* バージョン情報 */
 const char* midori_sdk_version(void);
 
-/* CLI ランナー（list / start を内部でディスパッチ） */
+/* CLI ランナー（list / start を内部でディスパッチ）
+   コールバック構造体・ランオプションともに先頭に struct_size を持つ。
+   詳細は「C ABI と struct_size」節 */
 typedef struct midori_driver_callbacks {
+    size_t struct_size;  /* L2 が sizeof(midori_driver_callbacks_t) を代入 */
     size_t (*list_devices)(void* user, midori_device_entry_t* devices, size_t cap);
     int (*on_connect)(void* user, const char* device, const char* config_json);
     int (*on_disconnect)(void* user);
@@ -454,8 +483,17 @@ typedef struct midori_driver_callbacks {
     int (*on_shutdown)(void* user);
 } midori_driver_callbacks_t;
 
+typedef struct midori_run_options {
+    size_t struct_size;
+    int disable_signal_handlers;  /* 1 で SIGTERM/SIGINT を触らない */
+} midori_run_options_t;
+
 int midori_sdk_run(int argc, char** argv,
-                   const midori_driver_callbacks_t* cb, void* user);
+                   const midori_driver_callbacks_t* cb, void* user,
+                   const midori_run_options_t* opts /* nullable */);
+
+/* 埋め込みホストから on_shutdown を起動する明示 API（べき等） */
+void midori_sdk_trigger_shutdown(void);
 
 /* イベント送出（内部で SPSC ハンドルを保持） */
 int midori_sdk_emit_int  (const char* device_id, const char* specifier, int64_t v);
@@ -478,7 +516,27 @@ const char* midori_sdk_last_error(void);
 - **文字列はすべて UTF-8 NUL 終端。** L1 → L2 でコピーが発生する経路があるので、ホットパスでは長い specifier を避ける運用 docs を別途用意する（`device_id <= 63B`、`specifier <= 127B` の `RingSlot` 制約も明記）
 - **`config_json` は L1 が文字列のまま L2/L3 に渡す。** JSON のパースは言語側で行う（Python なら `json.loads`、Node なら `JSON.parse`）。L1 が型を持たないことで、ドライバー固有の `config` スキーマ拡張が L1 ABI 変更を要求しない
 - **`list_devices` のメモリ:** ドライバーが返す `value` / `label` ポインタは **コールバック return まで有効** であればよい。L1 がコールバック内で JSON にシリアライズし stdout に書き出す
-- **`midori_sdk_run` のシグナル処理:** L1 内部で SIGTERM / SIGINT を捕捉し、`on_shutdown` を呼んでから return する（既存の Rust `run()` と同じ動作）
+- **シグナル処理は opt-out 可能。** `midori_sdk_run` はデフォルトで SIGTERM / SIGINT を捕捉して `on_shutdown` を呼んでから return する（スタンドアロンドライバー用途）。ただし `midori_run_options_t::disable_signal_handlers = 1` を渡すと L1 はシグナルに触らず、ホスト（GUI 内ランタイム埋め込み等）が `midori_sdk_trigger_shutdown()` を呼んでループを終了させる。**L1 は OS シグナルを「黙って奪わない」** ことで、ホストランタイムの既存シグナル制御と衝突しないようにする
+
+### C ABI と `struct_size`
+
+C 側に公開する **コールバック構造体（`midori_driver_callbacks_t`）と オプション構造体（`midori_run_options_t`）はすべて先頭に `size_t struct_size` を持つ。** L2 は `struct_size = sizeof(midori_driver_callbacks_t)` を構築時に必ず代入する。L1 はこの値を見て、自分が知る最も新しいフィールドが `struct_size` の範囲内に含まれるか確認する。
+
+```c
+// L1 側の擬似コード
+if (cb->struct_size < offsetof(midori_driver_callbacks_t, on_configure)
+                      + sizeof(cb->on_configure)) {
+    // 古いヘッダで作られた構造体。on_configure は読まない（古い L2 の場合は NULL ガード相当）
+}
+```
+
+これにより:
+
+- **構造体末尾への新フィールド追加は semver minor で行える**（旧バイナリは `struct_size` で守られる）
+- 旧 L2 が `struct_size` を 0 のまま送る危険を避けるため、L1 は `struct_size == 0` を **不正値としてエラー return** する
+- L2 ラッパー（PyO3 / napi-rs）は単純に `mem::size_of` を入れるだけなのでミスしにくい
+
+`#[non_exhaustive]` を Rust 側 `ControlCommand` に付ける効果（バリアント追加が非破壊）と、`struct_size` を構造体に付ける効果（フィールド追加が非破壊）は別物だが、両方を組み合わせることで「Rust 側 + L1 ABI ともに新コマンド追加が semver minor」となる。
 
 ---
 
@@ -498,9 +556,9 @@ const char* midori_sdk_last_error(void);
 将来 `ControlCommand` に新 variant を足すときの手順:
 
 1. Rust 側で `ControlCommand` に variant を追加（`#[non_exhaustive]` のため非破壊）
-2. L1 に対応する関数ポインタを `midori_driver_callbacks_t` に追加（**破壊変更**: 構造体拡張なので semver major）
-3. L2 がそれを各言語の慣用形に変換
-4. 古いドライバーは新 variant を `NULL` のまま放置でよい（L1 が `NULL` を「未対応」として扱う規約を持たせる）
+2. L1 に対応する関数ポインタを `midori_driver_callbacks_t` の **末尾** に追加（`struct_size` ガードで旧バイナリは新フィールドを読まれないため、**semver minor**）
+3. L2 がそれを各言語の慣用形に変換し、新フィールドへのポインタを `NULL` または実装関数で埋める
+4. 旧ヘッダでビルドされたドライバーは新 variant の関数ポインタが構造体に存在しないが、L1 は `struct_size` で範囲外を判定して呼び出さない
 
 ---
 
