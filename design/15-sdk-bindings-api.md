@@ -172,13 +172,17 @@ typedef struct midori_run_options {
 } midori_run_options_t;
 
 /* main() からこれを呼ぶだけで <driver> list/start CLI が完成する */
+/* プロセス内で同時にアクティブにできるのは 1 インスタンスのみ。
+   2 回目以降の呼び出しは即 -6 (AlreadyRunning) を返す。詳細は
+   「実行インスタンス制約」節 */
 int midori_sdk_run(int argc, char** argv,
                    const midori_driver_callbacks_t* cb, void* user,
                    const midori_run_options_t* opts /* nullable */);
 
 /* シグナルハンドラを使わない埋め込み環境（GUI 内ランタイム等）から
-   on_shutdown を起動するための明示 API。midori_sdk_run の中で
-   コマンドループに「shutdown 要求」を立てる。べき等 */
+   on_shutdown を起動するための明示 API。現在アクティブな唯一の
+   midori_sdk_run インスタンスに「shutdown 要求」を立てる。べき等。
+   アクティブインスタンスがない場合は何もしない */
 void midori_sdk_trigger_shutdown(void);
 
 /* イベント送出（同期・スレッドセーフ）。
@@ -403,9 +407,16 @@ int main(int argc, char** argv) {
 
 **共通方針:** L1 は **コールバック**を唯一のディスパッチ方式とする。L2 が必要に応じて async / iterator に変換する。
 
-`emit_event` はすべての言語で **同期・スレッドセーフ** とする。SPSC は単一プロデューサーのため、L1 内部に Mutex を 1 つ持って protect する。複数スレッドからの同時 emit は順序保証なし（L1 は到着順で push する）。
+`emit_event` は **同期** で、各言語の呼び出し可能スレッドは下表の通り。SPSC は単一プロデューサーのため、L1 内部に Mutex を 1 つ持って protect する。複数スレッドからの同時 emit は順序保証なし（L1 は到着順で push する）。
 
-**ただし Node.js のみ例外**: `emitEvent` は **JS メインスレッドからの呼び出しのみサポート**する（`worker_threads` の Worker から直接呼ぶことは未サポート）。napi-rs の制約と、Worker から呼ぶ場合に必要な `ThreadsafeFunction` ベースの追加 API が L1 の単一 emit ハンドル前提と整合しないため。Worker からイベントを送りたい場合は、メインスレッド側に `MessageChannel` 等で転送してから `emitEvent` を呼ぶ運用とする。Python（threading / native thread）と C（pthread）は任意のスレッドから呼んで安全。
+| 言語 | `emit_event` を呼べるスレッド | 理由 |
+|---|---|---|
+| Rust | 任意のスレッド（`Send` 安全） | L1 内 Mutex で直列化 |
+| C | 任意のスレッド（`pthread` 等） | 同上 |
+| Python | 任意のスレッド（`threading` / native thread） | 同上。msgpack encode 後に GIL 解放 |
+| **Node.js** | **JS メインスレッドのみ** | napi-rs の制約と、`worker_threads` の Worker から呼ぶには `ThreadsafeFunction` ベースの追加 API が必要。L1 の単一 emit ハンドル前提と整合しないため未サポート |
+
+Node.js の Worker からイベントを送りたい場合は、メインスレッド側に `MessageChannel` / `parentPort.postMessage` 等で転送してから `emitEvent` を呼ぶ運用とする（L2 では関与しない）。
 
 > Note: SPSC の「単一プロデューサー」規律は **共有メモリへの書き込み権を持つのが Driver プロセス 1 つだけ** という意味。Driver プロセス内で複数スレッドから emit したい場合は L1 内 Mutex で直列化する。これは性能より安全側に倒した妥協で、リアルタイム要件を満たさないなら将来 thread-local バッファ + ドレインに置き換える（L1 ABI 変更なしで実装差し替え可能）。
 
@@ -438,6 +449,8 @@ Bridge がプロセス終了を検知して再起動 / 停止
 | stdin EOF before `hello_ack` | `-3`（HandshakeMissing） | `MidoriHandshakeError` | `MidoriHandshakeError` |
 | stdin パース失敗 | `-4`（ProtocolParseError） | `MidoriProtocolError` | `MidoriProtocolError` |
 | L3 コールバックがエラーを返した | `-5`（DriverError） | `MidoriDriverError`（元例外を `__cause__` で保持） | `MidoriDriverError`（`cause` を保持） |
+| 既にアクティブな `midori_sdk_run` がある状態で 2 回目を呼んだ | `-6`（AlreadyRunning） | `MidoriAlreadyRunningError` | `MidoriAlreadyRunningError` |
+| アクティブインスタンスなしで `emit_event` 等が呼ばれた | `-7`（NotRunning） | `MidoriNotRunningError` | `MidoriNotRunningError` |
 
 **`emit_event` の戻り値:** 1=成功、0=リング満杯（ドロップされた）、負値=不正引数 / payload size 超過。リング満杯は **エラーではなく back-pressure シグナル** として扱う。L3 はドロップ件数をログに出すだけでよい（再送ロジックは持たない方が単純）。
 
@@ -606,6 +619,23 @@ pub struct RingSlot {
 side channel の設計（mmap 領域サイズ・割り当て・ガベージ）は **本設計のスコープ外**。別 Issue で扱う。本書では「SPSC スロット側に side_offset/side_len の枠を確保する」までを決める。
 
 **この RingSlot 変更は midori-core の破壊変更**であり、MEW-37 で実装した SPSC FFI（`midori_sdk_spsc_*`）も影響を受ける。後続 Issue（後述）で扱う。
+
+### 実行インスタンス制約
+
+L1 内部で SPSC ハンドル・シグナルハンドラ登録・shutdown 要求フラグなどのプロセスグローバル状態を 1 個保持するため、**同一プロセス内で同時にアクティブにできる `midori_sdk_run` は 1 インスタンスのみ** とする。
+
+| 操作 | 振る舞い |
+|---|---|
+| 1 回目の `midori_sdk_run` | 通常通り実行 |
+| 2 回目以降の `midori_sdk_run`（前回が終了する前） | 即 `-6`（`AlreadyRunning`）を返す。L1 状態は触らない |
+| `midori_sdk_trigger_shutdown()` | 現在アクティブな唯一のインスタンスに作用。アクティブインスタンスがなければ no-op |
+| `midori_sdk_emit_event()` | アクティブインスタンスがない状態で呼ばれた場合は `-7`（`NotRunning`）を返す |
+
+埋め込みホスト（GUI / ランタイム）は、自プロセス内で 2 つ以上のドライバーを並走させたい場合 **別プロセスにする**。これは `design/10-driver-plugin.md` の「ドライバーは外部プロセスで動作する」原則と整合する。
+
+#### 将来の拡張余地
+
+将来「同一プロセス内で複数ドライバーを並走」の要求が出たら、`midori_sdk_run` が `midori_run_handle_t*` を返す別 ABI（`midori_sdk_run_v2`）を追加し、`midori_sdk_trigger_shutdown(handle)` / `midori_sdk_emit_event(handle, ...)` のように handle 引数を取る形へ拡張できる。**現 ABI は維持** したまま並列導入できる設計。本書ではこれ以上踏み込まない。
 
 ### C ABI と `struct_size`
 
