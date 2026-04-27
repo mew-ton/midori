@@ -22,12 +22,12 @@
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use midori_core::shm::{RingSlot, ShmHeader, DEVICE_ID_MAX, RING_CAPACITY, SPECIFIER_MAX};
+use midori_core::shm::{RingSlot, ShmHeader, PAYLOAD_INLINE_MAX, RING_CAPACITY};
 
 /// 共有メモリ上に置かれることを意図した SPSC リングバッファのストレージ。
 ///
-/// `#[repr(C)]` により mmap 可能な固定レイアウトを保証する。FFI（MEW-37）
-/// で他言語からも同レイアウトでアクセスする予定。
+/// `#[repr(C)]` により mmap 可能な固定レイアウトを保証し、C FFI 経由で他言語
+/// からも同レイアウトでアクセスできる。
 #[repr(C)]
 pub struct SpscStorage {
     header: ShmHeader,
@@ -115,10 +115,14 @@ impl std::error::Error for Full {}
 
 /// 生産者の push 処理本体。`Producer::push` と FFI からの両方で呼ばれる。
 ///
+/// `slot` は `&RingSlot` を受け取り内部でコピーする。新レイアウト
+/// （`PAYLOAD_INLINE_MAX = 240` 込みで 264 byte 固定）の値渡しはスタックを
+/// 無駄に消費するため。
+///
 /// 呼び出し側は SPSC 規律（任意の時刻に生産者は 1 つだけ）を守ること。
 /// Rust API では [`SpscStorage::split`] が型レベルで保証する。FFI からの
 /// 呼び出しでは C 側が規律を守る責務を負う。
-pub(crate) fn try_push(storage: &SpscStorage, slot: RingSlot) -> Result<(), Full> {
+pub(crate) fn try_push(storage: &SpscStorage, slot: &RingSlot) -> Result<(), Full> {
     let header = &storage.header;
     // 自プロセス内の生産者専用インデックスは Relaxed で十分（書き手は自分だけ）。
     let write = header.write_index.load(Ordering::Relaxed);
@@ -136,7 +140,7 @@ pub(crate) fn try_push(storage: &SpscStorage, slot: RingSlot) -> Result<(), Full
     // よって同一スロットへの同時アクセスは発生しない。
     #[allow(unsafe_code)]
     unsafe {
-        *storage.slots[idx].get() = slot;
+        *storage.slots[idx].get() = *slot;
     }
     // スロット書き込みより後に必ず観測されるよう Release で公開する。
     header
@@ -178,7 +182,7 @@ pub struct Producer<'a> {
 
 impl Producer<'_> {
     /// スロットを末尾に追加する。バッファが満杯なら [`Full`] を返す。
-    pub fn push(&mut self, slot: RingSlot) -> Result<(), Full> {
+    pub fn push(&mut self, slot: &RingSlot) -> Result<(), Full> {
         try_push(self.storage, slot)
     }
 }
@@ -197,47 +201,57 @@ impl Consumer<'_> {
 
 const EMPTY_SLOT: RingSlot = RingSlot {
     occupied: 0,
-    value_tag: 0,
-    _pad: [0; 6],
-    device_id: [0; DEVICE_ID_MAX + 1],
-    specifier: [0; SPECIFIER_MAX + 1],
-    value_i64: 0,
-    value_f64: 0.0,
+    _pad: [0; 3],
+    payload_len: 0,
+    side_offset: 0,
+    side_len: 0,
+    _pad2: [0; 4],
+    payload: [0; PAYLOAD_INLINE_MAX],
 };
 
 #[cfg(test)]
-#[allow(clippy::cast_possible_wrap, clippy::items_after_statements)]
+#[allow(clippy::cast_possible_truncation, clippy::items_after_statements)]
 mod tests {
     use super::*;
-    use midori_core::shm::value_tag;
 
-    const THREAD_TEST_COUNT: i64 = 10_000;
+    const THREAD_TEST_COUNT: usize = 10_000;
 
-    fn slot_with_int(n: i64) -> RingSlot {
+    /// inline payload に「seq の下位バイトを 4 byte little-endian で詰めた」
+    /// テスト用 [`RingSlot`] を作る。msgpack そのものではなく、test 用にバイト列の
+    /// ラウンドトリップだけを確認するためのプレースホルダ。
+    fn slot_with_seq(seq: u32) -> RingSlot {
         let mut s = EMPTY_SLOT;
         s.occupied = 1;
-        s.value_tag = value_tag::INT;
-        s.value_i64 = n;
+        s.payload_len = 4;
+        s.payload[..4].copy_from_slice(&seq.to_le_bytes());
         s
+    }
+
+    fn read_seq(slot: &RingSlot) -> u32 {
+        assert_eq!(slot.occupied, 1);
+        assert_eq!(slot.payload_len, 4);
+        let mut buf = [0u8; 4];
+        buf.copy_from_slice(&slot.payload[..4]);
+        u32::from_le_bytes(buf)
     }
 
     #[test]
     fn it_should_return_none_when_consumer_pops_empty_buffer() {
         let mut storage = SpscStorage::new();
         let (_p, mut c) = storage.split();
-        assert_eq!(c.pop().map(|s| s.value_i64), None);
+        assert!(c.pop().is_none());
     }
 
     #[test]
     fn it_should_pop_pushed_slots_in_fifo_order() {
         let mut storage = SpscStorage::new();
         let (mut p, mut c) = storage.split();
-        p.push(slot_with_int(1)).unwrap();
-        p.push(slot_with_int(2)).unwrap();
-        p.push(slot_with_int(3)).unwrap();
-        assert_eq!(c.pop().unwrap().value_i64, 1);
-        assert_eq!(c.pop().unwrap().value_i64, 2);
-        assert_eq!(c.pop().unwrap().value_i64, 3);
+        p.push(&slot_with_seq(1)).unwrap();
+        p.push(&slot_with_seq(2)).unwrap();
+        p.push(&slot_with_seq(3)).unwrap();
+        assert_eq!(read_seq(&c.pop().unwrap()), 1);
+        assert_eq!(read_seq(&c.pop().unwrap()), 2);
+        assert_eq!(read_seq(&c.pop().unwrap()), 3);
         assert!(c.pop().is_none());
     }
 
@@ -246,9 +260,9 @@ mod tests {
         let mut storage = SpscStorage::new();
         let (mut p, _c) = storage.split();
         for i in 0..RING_CAPACITY {
-            p.push(slot_with_int(i as i64)).unwrap();
+            p.push(&slot_with_seq(i as u32)).unwrap();
         }
-        assert_eq!(p.push(slot_with_int(-1)), Err(Full));
+        assert_eq!(p.push(&slot_with_seq(u32::MAX)), Err(Full));
     }
 
     #[test]
@@ -256,10 +270,10 @@ mod tests {
         let mut storage = SpscStorage::new();
         let (mut p, mut c) = storage.split();
         // 3 周分書いて読む。インデックスは 3 * RING_CAPACITY まで進む。
-        let total = (RING_CAPACITY * 3) as i64;
+        let total = RING_CAPACITY * 3;
         for i in 0..total {
-            p.push(slot_with_int(i)).unwrap();
-            assert_eq!(c.pop().unwrap().value_i64, i);
+            p.push(&slot_with_seq(i as u32)).unwrap();
+            assert_eq!(read_seq(&c.pop().unwrap()), i as u32);
         }
     }
 
@@ -269,17 +283,65 @@ mod tests {
         let (mut p, mut c) = storage.split();
         // 一度満杯にし、全部抜き、再度満杯にできる
         for i in 0..RING_CAPACITY {
-            p.push(slot_with_int(i as i64)).unwrap();
+            p.push(&slot_with_seq(i as u32)).unwrap();
         }
         for i in 0..RING_CAPACITY {
-            assert_eq!(c.pop().unwrap().value_i64, i as i64);
+            assert_eq!(read_seq(&c.pop().unwrap()), i as u32);
         }
         for i in 0..RING_CAPACITY {
-            p.push(slot_with_int((i + 1000) as i64)).unwrap();
+            p.push(&slot_with_seq((i + 1000) as u32)).unwrap();
         }
         for i in 0..RING_CAPACITY {
-            assert_eq!(c.pop().unwrap().value_i64, (i + 1000) as i64);
+            assert_eq!(read_seq(&c.pop().unwrap()), (i + 1000) as u32);
         }
+    }
+
+    #[test]
+    fn it_should_round_trip_inline_payload_at_max_capacity() {
+        // payload_len <= PAYLOAD_INLINE_MAX のラウンドトリップ（バイト列が一致）
+        let mut storage = SpscStorage::new();
+        let (mut p, mut c) = storage.split();
+
+        let mut slot = EMPTY_SLOT;
+        slot.occupied = 1;
+        slot.payload_len = PAYLOAD_INLINE_MAX as u32;
+        for (i, byte) in slot.payload.iter_mut().enumerate() {
+            *byte = (i % 251) as u8;
+        }
+        p.push(&slot).unwrap();
+
+        let popped = c.pop().expect("slot should be available");
+        assert_eq!(popped.occupied, 1);
+        assert_eq!(popped.payload_len as usize, PAYLOAD_INLINE_MAX);
+        for (i, byte) in popped.payload.iter().enumerate() {
+            assert_eq!(*byte, (i % 251) as u8, "byte at {i} mismatched");
+        }
+        // side channel は使用していない
+        assert_eq!(popped.side_offset, 0);
+        assert_eq!(popped.side_len, 0);
+    }
+
+    #[test]
+    fn it_should_carry_side_channel_offsets_when_inline_is_unused() {
+        // payload_len > PAYLOAD_INLINE_MAX 相当のケース: payload_len=0 で
+        // side_offset/side_len のみが立ち、inline payload 領域は使われない。
+        // 本テストは RingSlot フィールドのセマンティクスのみを検証する
+        // （side channel 本体の確保は本クレートのスコープ外）。
+        let mut storage = SpscStorage::new();
+        let (mut p, mut c) = storage.split();
+
+        let mut slot = EMPTY_SLOT;
+        slot.occupied = 1;
+        slot.payload_len = 0;
+        slot.side_offset = 4096;
+        slot.side_len = 1024;
+        p.push(&slot).unwrap();
+
+        let popped = c.pop().expect("slot should be available");
+        assert_eq!(popped.occupied, 1);
+        assert_eq!(popped.payload_len, 0);
+        assert_eq!(popped.side_offset, 4096);
+        assert_eq!(popped.side_len, 1024);
     }
 
     #[test]
@@ -289,9 +351,9 @@ mod tests {
 
         std::thread::scope(|s| {
             s.spawn(move || {
-                let mut sent = 0_i64;
-                while sent < THREAD_TEST_COUNT {
-                    if p.push(slot_with_int(sent)).is_ok() {
+                let mut sent: u32 = 0;
+                while (sent as usize) < THREAD_TEST_COUNT {
+                    if p.push(&slot_with_seq(sent)).is_ok() {
                         sent += 1;
                     } else {
                         std::thread::yield_now();
@@ -299,10 +361,10 @@ mod tests {
                 }
             });
             s.spawn(move || {
-                let mut expected = 0_i64;
-                while expected < THREAD_TEST_COUNT {
+                let mut expected: u32 = 0;
+                while (expected as usize) < THREAD_TEST_COUNT {
                     if let Some(slot) = c.pop() {
-                        assert_eq!(slot.value_i64, expected);
+                        assert_eq!(read_seq(&slot), expected);
                         expected += 1;
                     } else {
                         std::thread::yield_now();

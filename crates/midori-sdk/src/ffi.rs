@@ -88,7 +88,7 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(storage: *const c_void, slot: *con
     // C 側で `#pragma pack` 等によりパックされたポインタを渡されても UB を
     // 起こさないよう unaligned read を採用する。
     let slot = std::ptr::read_unaligned(slot);
-    u8::from(spsc::try_push(storage, slot).is_ok())
+    u8::from(spsc::try_push(storage, &slot).is_ok())
 }
 
 /// スロットを 1 つ pop する。
@@ -123,17 +123,27 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
 }
 
 #[cfg(test)]
-#[allow(unsafe_code)]
+#[allow(unsafe_code, clippy::cast_possible_truncation)]
 mod tests {
     use super::*;
-    use midori_core::shm::value_tag;
+    use midori_core::shm::{ShmHeader, PAYLOAD_INLINE_MAX, RING_CAPACITY};
 
-    fn slot_with_int(n: i64) -> RingSlot {
+    /// inline payload に 4 byte の little-endian シーケンス番号を詰めた
+    /// テスト用 [`RingSlot`] を作る。
+    fn slot_with_seq(seq: u32) -> RingSlot {
         let mut s: RingSlot = unsafe { std::mem::zeroed() };
         s.occupied = 1;
-        s.value_tag = value_tag::INT;
-        s.value_i64 = n;
+        s.payload_len = 4;
+        s.payload[..4].copy_from_slice(&seq.to_le_bytes());
         s
+    }
+
+    fn read_seq(slot: &RingSlot) -> u32 {
+        assert_eq!(slot.occupied, 1);
+        assert_eq!(slot.payload_len, 4);
+        let mut buf = [0u8; 4];
+        buf.copy_from_slice(&slot.payload[..4]);
+        u32::from_le_bytes(buf)
     }
 
     /// FFI 経由で確保→初期化→push→pop が成立することを検証する結合テスト。
@@ -154,7 +164,7 @@ mod tests {
             midori_sdk_spsc_init(raw.cast::<c_void>());
         }
 
-        let pushed = slot_with_int(42);
+        let pushed = slot_with_seq(42);
         let ok = unsafe {
             midori_sdk_spsc_push(
                 raw.cast::<c_void>(),
@@ -167,8 +177,7 @@ mod tests {
         let ok =
             unsafe { midori_sdk_spsc_pop(raw.cast::<c_void>(), std::ptr::from_mut(&mut popped)) };
         assert_eq!(ok, 1);
-        assert_eq!(popped.value_i64, 42);
-        assert_eq!(popped.value_tag, value_tag::INT);
+        assert_eq!(read_seq(&popped), 42);
 
         // 空状態では pop が 0 を返す
         let ok =
@@ -181,10 +190,98 @@ mod tests {
         }
     }
 
+    /// `payload_len` = [`PAYLOAD_INLINE_MAX`] 上限ぴったりで FFI 経由のラウンドトリップを検証。
+    #[test]
+    fn it_should_round_trip_inline_payload_at_max_through_ffi() {
+        let layout = std::alloc::Layout::from_size_align(
+            midori_sdk_spsc_storage_size(),
+            midori_sdk_spsc_storage_alignment(),
+        )
+        .expect("valid layout");
+        // SAFETY: layout は size/alignment 共に正で、後で同じ layout で dealloc する
+        let raw = unsafe { std::alloc::alloc(layout) };
+        assert!(!raw.is_null());
+        unsafe { midori_sdk_spsc_init(raw.cast::<c_void>()) };
+
+        let mut pushed: RingSlot = unsafe { std::mem::zeroed() };
+        pushed.occupied = 1;
+        pushed.payload_len = PAYLOAD_INLINE_MAX as u32;
+        for (i, byte) in pushed.payload.iter_mut().enumerate() {
+            *byte = (i % 251) as u8;
+        }
+
+        let ok = unsafe {
+            midori_sdk_spsc_push(
+                raw.cast::<c_void>(),
+                std::ptr::from_ref::<RingSlot>(&pushed),
+            )
+        };
+        assert_eq!(ok, 1);
+
+        let mut popped: RingSlot = unsafe { std::mem::zeroed() };
+        let ok =
+            unsafe { midori_sdk_spsc_pop(raw.cast::<c_void>(), std::ptr::from_mut(&mut popped)) };
+        assert_eq!(ok, 1);
+        assert_eq!(popped.occupied, 1);
+        assert_eq!(popped.payload_len as usize, PAYLOAD_INLINE_MAX);
+        for (i, byte) in popped.payload.iter().enumerate() {
+            assert_eq!(*byte, (i % 251) as u8, "byte at {i} mismatched");
+        }
+        // side channel は未使用
+        assert_eq!(popped.side_offset, 0);
+        assert_eq!(popped.side_len, 0);
+
+        // SAFETY: 同じ layout で dealloc
+        unsafe { std::alloc::dealloc(raw, layout) };
+    }
+
+    /// `payload_len` > [`PAYLOAD_INLINE_MAX`] 相当のケース: `payload_len` = 0 で
+    /// `side_offset` / `side_len` のみ立てたスロットがそのまま運ばれることを検証。
+    /// 本テストは FFI 経由のフィールド輸送のみを確認する（side channel 本体の
+    /// 確保は本クレートのスコープ外）。
+    #[test]
+    fn it_should_carry_side_channel_offsets_through_ffi() {
+        let layout = std::alloc::Layout::from_size_align(
+            midori_sdk_spsc_storage_size(),
+            midori_sdk_spsc_storage_alignment(),
+        )
+        .expect("valid layout");
+        // SAFETY: layout は size/alignment 共に正で、後で同じ layout で dealloc する
+        let raw = unsafe { std::alloc::alloc(layout) };
+        assert!(!raw.is_null());
+        unsafe { midori_sdk_spsc_init(raw.cast::<c_void>()) };
+
+        let mut pushed: RingSlot = unsafe { std::mem::zeroed() };
+        pushed.occupied = 1;
+        pushed.payload_len = 0;
+        pushed.side_offset = 4096;
+        pushed.side_len = 1024;
+
+        let ok = unsafe {
+            midori_sdk_spsc_push(
+                raw.cast::<c_void>(),
+                std::ptr::from_ref::<RingSlot>(&pushed),
+            )
+        };
+        assert_eq!(ok, 1);
+
+        let mut popped: RingSlot = unsafe { std::mem::zeroed() };
+        let ok =
+            unsafe { midori_sdk_spsc_pop(raw.cast::<c_void>(), std::ptr::from_mut(&mut popped)) };
+        assert_eq!(ok, 1);
+        assert_eq!(popped.occupied, 1);
+        assert_eq!(popped.payload_len, 0);
+        assert_eq!(popped.side_offset, 4096);
+        assert_eq!(popped.side_len, 1024);
+
+        // SAFETY: 同じ layout で dealloc
+        unsafe { std::alloc::dealloc(raw, layout) };
+    }
+
     #[test]
     fn it_should_return_zero_when_called_with_null_pointers() {
         let mut slot: RingSlot = unsafe { std::mem::zeroed() };
-        let dummy_slot = slot_with_int(1);
+        let dummy_slot = slot_with_seq(1);
         let nul = std::ptr::null::<c_void>();
 
         // storage が NULL のケース
@@ -222,8 +319,8 @@ mod tests {
         unsafe { std::alloc::dealloc(raw, layout) };
     }
 
-    /// `build.rs` が生成した C ヘッダに想定の関数宣言が含まれていることを検証する。
-    /// ヘッダ生成自体（`cargo build` で発火）はビルド時にチェック済み。
+    /// `build.rs` が生成した C ヘッダに想定の関数宣言と新 [`RingSlot`] フィールドが
+    /// 含まれていることを検証する。ヘッダ生成自体は `cargo build` 時にチェック済み。
     #[test]
     fn it_should_generate_c_header_with_expected_ffi_symbols() {
         const GENERATED_HEADER: &str = include_str!(concat!(env!("OUT_DIR"), "/midori_sdk.h"));
@@ -234,6 +331,12 @@ mod tests {
         assert!(GENERATED_HEADER.contains("midori_sdk_spsc_push"));
         assert!(GENERATED_HEADER.contains("midori_sdk_spsc_pop"));
         assert!(GENERATED_HEADER.contains("RingSlot"));
+        // 新レイアウトのフィールドがヘッダに公開されていること
+        assert!(GENERATED_HEADER.contains("payload_len"));
+        assert!(GENERATED_HEADER.contains("side_offset"));
+        assert!(GENERATED_HEADER.contains("side_len"));
+        assert!(GENERATED_HEADER.contains("payload"));
+        assert!(GENERATED_HEADER.contains("PAYLOAD_INLINE_MAX"));
     }
 
     #[test]
@@ -242,7 +345,10 @@ mod tests {
         let align = midori_sdk_spsc_storage_alignment();
         assert!(size > 0);
         assert!(align.is_power_of_two());
-        // SpscStorage の中身は ShmHeader (16 byte) + 256 個の RingSlot
-        assert!(size >= 16 + 256 * std::mem::size_of::<RingSlot>());
+        // SpscStorage の中身は ShmHeader + RING_CAPACITY 個の RingSlot
+        assert!(
+            size >= std::mem::size_of::<ShmHeader>()
+                + RING_CAPACITY * std::mem::size_of::<RingSlot>()
+        );
     }
 }

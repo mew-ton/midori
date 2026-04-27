@@ -60,8 +60,6 @@ mod tests {
     #[test]
     fn it_should_expose_shm_layout_at_top_level() {
         let _ = RING_CAPACITY;
-        let _ = DEVICE_ID_MAX;
-        let _ = SPECIFIER_MAX;
-        let _: u8 = value_tag::PULSE;
+        let _ = PAYLOAD_INLINE_MAX;
     }
 }
