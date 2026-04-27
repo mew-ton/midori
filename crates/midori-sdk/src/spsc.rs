@@ -55,6 +55,37 @@ impl SpscStorage {
         }
     }
 
+    /// 確保済みの領域に SPSC ストレージを **その場で** 初期化する。
+    ///
+    /// `Self::new()` と異なり、`SpscStorage` 全体（~75 KB）を呼び出し側スタック上に
+    /// 一時生成しない。FFI 経由で C 側が用意した領域へ書き込む経路（小さなスレッド
+    /// スタックや組込み環境）でのオーバーフローを避けるために用意する。
+    ///
+    /// インデックス管理の不変条件（`read..write` 範囲のスロットだけが読まれる）に
+    /// より、`slots` 配列は未初期化のままで安全。`header` のみ Atomic を 0 で書く。
+    ///
+    /// # Safety
+    ///
+    /// `ptr` は以下を満たすこと:
+    /// - 非 NULL
+    /// - `size_of::<SpscStorage>()` バイト以上の書き込み可能領域を指す
+    /// - `align_of::<SpscStorage>()` のアラインメントを満たす
+    /// - 呼び出し時点で生存する Producer/Consumer がない
+    #[allow(unsafe_code)]
+    pub unsafe fn init_in_place(ptr: *mut Self) {
+        // SAFETY: 呼び出し側契約により ptr は SpscStorage 全体を覆う書き込み可能
+        // 領域を指し、適切にアラインされている。`header` フィールドへの addr_of_mut!
+        // は未初期化のフィールドに対しても合法。ShmHeader は 16 バイトなのでスタック
+        // 経由で書いても問題ない。
+        let header_ptr = std::ptr::addr_of_mut!((*ptr).header);
+        header_ptr.write(ShmHeader {
+            write_index: AtomicU64::new(0),
+            read_index: AtomicU64::new(0),
+        });
+        // `slots` は意図的に未初期化のまま残す。pop は read < write の不変条件で
+        // 守られているため、未書込みのスロットを読むことはない。
+    }
+
     /// SPSC 規律に従って Producer / Consumer のペアに分割する。
     ///
     /// `&mut self` を取るため、ペアが生存する間は再分割が型レベルで禁止される。
@@ -82,6 +113,64 @@ impl std::fmt::Display for Full {
 
 impl std::error::Error for Full {}
 
+/// 生産者の push 処理本体。`Producer::push` と FFI からの両方で呼ばれる。
+///
+/// 呼び出し側は SPSC 規律（任意の時刻に生産者は 1 つだけ）を守ること。
+/// Rust API では [`SpscStorage::split`] が型レベルで保証する。FFI からの
+/// 呼び出しでは C 側が規律を守る責務を負う。
+pub(crate) fn try_push(storage: &SpscStorage, slot: RingSlot) -> Result<(), Full> {
+    let header = &storage.header;
+    // 自プロセス内の生産者専用インデックスは Relaxed で十分（書き手は自分だけ）。
+    let write = header.write_index.load(Ordering::Relaxed);
+    // 消費者の進捗を Acquire で取得し、満杯判定の根拠とする。
+    let read = header.read_index.load(Ordering::Acquire);
+    if write.wrapping_sub(read) >= RING_CAPACITY as u64 {
+        return Err(Full);
+    }
+    // `as usize` は 32-bit ターゲットで上位ビットを落とすが、
+    // `RING_CAPACITY` は 2 のべき乗のため `% RING_CAPACITY` でその差は消える。
+    #[allow(clippy::cast_possible_truncation)]
+    let idx = (write as usize) % RING_CAPACITY;
+    // SAFETY: SPSC 規律により消費者は `slots[read % CAP]` までしか読まず、
+    // ここで書く `slots[write % CAP]` は満杯判定により消費者の追跡範囲外。
+    // よって同一スロットへの同時アクセスは発生しない。
+    #[allow(unsafe_code)]
+    unsafe {
+        *storage.slots[idx].get() = slot;
+    }
+    // スロット書き込みより後に必ず観測されるよう Release で公開する。
+    header
+        .write_index
+        .store(write.wrapping_add(1), Ordering::Release);
+    Ok(())
+}
+
+/// 消費者の pop 処理本体。`Consumer::pop` と FFI からの両方で呼ばれる。
+///
+/// 呼び出し側は SPSC 規律（任意の時刻に消費者は 1 つだけ）を守ること。
+pub(crate) fn try_pop(storage: &SpscStorage) -> Option<RingSlot> {
+    let header = &storage.header;
+    // 自プロセス内の消費者専用インデックスは Relaxed で十分。
+    let read = header.read_index.load(Ordering::Relaxed);
+    // 生産者の進捗を Acquire で取得（対応する Release はスロット書き込みの後）。
+    let write = header.write_index.load(Ordering::Acquire);
+    if read == write {
+        return None;
+    }
+    // 同上: 2 のべき乗での剰余に守られているのでターゲット間で結果は同じ。
+    #[allow(clippy::cast_possible_truncation)]
+    let idx = (read as usize) % RING_CAPACITY;
+    // SAFETY: SPSC 規律により生産者は `slots[write % CAP]` までしか書かず、
+    // ここで読む `slots[read % CAP]` は read < write の不変条件より既に
+    // 書き込みが完了している。Acquire ロードによりその書き込みが可視。
+    #[allow(unsafe_code)]
+    let slot = unsafe { *storage.slots[idx].get() };
+    header
+        .read_index
+        .store(read.wrapping_add(1), Ordering::Release);
+    Some(slot)
+}
+
 /// 単一の生産者ハンドル。`push` のみを提供する。
 pub struct Producer<'a> {
     storage: &'a SpscStorage,
@@ -90,30 +179,7 @@ pub struct Producer<'a> {
 impl Producer<'_> {
     /// スロットを末尾に追加する。バッファが満杯なら [`Full`] を返す。
     pub fn push(&mut self, slot: RingSlot) -> Result<(), Full> {
-        let header = &self.storage.header;
-        // 自プロセス内の生産者専用インデックスは Relaxed で十分（書き手は自分だけ）。
-        let write = header.write_index.load(Ordering::Relaxed);
-        // 消費者の進捗を Acquire で取得し、満杯判定の根拠とする。
-        let read = header.read_index.load(Ordering::Acquire);
-        if write.wrapping_sub(read) >= RING_CAPACITY as u64 {
-            return Err(Full);
-        }
-        // `as usize` は 32-bit ターゲットで上位ビットを落とすが、
-        // `RING_CAPACITY` は 2 のべき乗のため `% RING_CAPACITY` でその差は消える。
-        #[allow(clippy::cast_possible_truncation)]
-        let idx = (write as usize) % RING_CAPACITY;
-        // SAFETY: SPSC 規律により消費者は `slots[read % CAP]` までしか読まず、
-        // ここで書く `slots[write % CAP]` は満杯判定により消費者の追跡範囲外。
-        // よって同一スロットへの同時アクセスは発生しない。
-        #[allow(unsafe_code)]
-        unsafe {
-            *self.storage.slots[idx].get() = slot;
-        }
-        // スロット書き込みより後に必ず観測されるよう Release で公開する。
-        header
-            .write_index
-            .store(write.wrapping_add(1), Ordering::Release);
-        Ok(())
+        try_push(self.storage, slot)
     }
 }
 
@@ -125,26 +191,7 @@ pub struct Consumer<'a> {
 impl Consumer<'_> {
     /// 先頭スロットを取り出す。バッファが空なら `None` を返す。
     pub fn pop(&mut self) -> Option<RingSlot> {
-        let header = &self.storage.header;
-        // 自プロセス内の消費者専用インデックスは Relaxed で十分。
-        let read = header.read_index.load(Ordering::Relaxed);
-        // 生産者の進捗を Acquire で取得（対応する Release はスロット書き込みの後）。
-        let write = header.write_index.load(Ordering::Acquire);
-        if read == write {
-            return None;
-        }
-        // 同上: 2 のべき乗での剰余に守られているのでターゲット間で結果は同じ。
-        #[allow(clippy::cast_possible_truncation)]
-        let idx = (read as usize) % RING_CAPACITY;
-        // SAFETY: SPSC 規律により生産者は `slots[write % CAP]` までしか書かず、
-        // ここで読む `slots[read % CAP]` は read < write の不変条件より既に
-        // 書き込みが完了している。Acquire ロードによりその書き込みが可視。
-        #[allow(unsafe_code)]
-        let slot = unsafe { *self.storage.slots[idx].get() };
-        header
-            .read_index
-            .store(read.wrapping_add(1), Ordering::Release);
-        Some(slot)
+        try_pop(self.storage)
     }
 }
 
