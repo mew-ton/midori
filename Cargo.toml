@@ -21,5 +21,5 @@ missing_errors_doc      = "allow"
 missing_panics_doc      = "allow"
 
 [workspace.dependencies]
-midori-core = { path = "crates/midori-core", version = "0.1.0" }
+midori-core = { path = "crates/midori-core", version = "0.2.0" }
 midori-sdk  = { path = "crates/midori-sdk",  version = "0.1.0" }

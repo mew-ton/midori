@@ -1,72 +1,89 @@
-/// Capacity of the SPSC ring buffer (number of slots).
+//! 共有メモリ上の SPSC リングバッファレイアウト定義。
+//!
+//! Driver から Bridge へ raw event を運ぶための **post-MEW-40** のスロット
+//! 形式。raw event は driver の `events.yaml` に沿った key-value 構造を
+//! msgpack で encode したバイト列として `payload` に格納する。inline 容量
+//! ([`PAYLOAD_INLINE_MAX`]) を超える payload は side channel（mmap プール、
+//! 別 Issue MEW-43 で実装）に書き出し、スロットには `side_offset` /
+//! `side_len` のみを格納する。
+//!
+//! 詳細設計: `design/15-sdk-bindings-api.md` 「SPSC スロットレイアウトの変更」。
+//!
+//! 旧スロット（`device_id` / `specifier` / `value_tag` / `value_i64` /
+//! `value_f64` を持つ post-binding 形）は本リリースで撤廃され、
+//! `midori-core` は major bump（0.2.0）となる。
+
+/// SPSC リングバッファのスロット数。
 ///
-/// One slot per raw event; sized to absorb a full tick's worth of driver output
-/// without blocking the producer.
+/// raw event 1 件 = 1 スロット。1 tick 分のドライバー出力を満杯にせず
+/// 受け取れるサイズを目安にしている。
 pub const RING_CAPACITY: usize = 256;
 
-/// Maximum byte length of a device id stored in a [`RingSlot`] (excluding NUL terminator).
-pub const DEVICE_ID_MAX: usize = 63;
-
-/// Maximum byte length of a dot-separated specifier stored in a [`RingSlot`] (excluding NUL terminator).
-pub const SPECIFIER_MAX: usize = 127;
-
-/// Value discriminant stored in [`RingSlot::value_tag`].
+/// 単一スロットに inline で格納できる msgpack バイト列の最大長。
 ///
-/// - 0: `Value::Bool(false)`
-/// - 1: `Value::Bool(true)`
-/// - 2: `Value::Pulse`
-/// - 3: `Value::Int` — integer in `value_i64`
-/// - 4: `Value::Float` — float in `value_f64`
-/// - 5: `Value::Null`
-pub mod value_tag {
-    pub const BOOL_FALSE: u8 = 0;
-    pub const BOOL_TRUE: u8 = 1;
-    pub const PULSE: u8 = 2;
-    pub const INT: u8 = 3;
-    pub const FLOAT: u8 = 4;
-    pub const NULL: u8 = 5;
-}
+/// この値を超える payload は side channel（別 mmap 領域）に書き出し、
+/// `RingSlot::side_offset` / `RingSlot::side_len` のみがスロットに残る。
+///
+/// MIDI / OSC の通常イベントが余裕で収まる範囲として 240 byte に設定。
+/// `SysEx` 1KB 級などはここを超えるため side channel 経由となる。
+pub const PAYLOAD_INLINE_MAX: usize = 240;
 
-/// A single slot in the SPSC ring buffer.
+/// SPSC リングバッファの単一スロット。
 ///
-/// All fields are fixed-size so the struct is safe to place in a cross-process
-/// `mmap` region.  `occupied == 0` means the slot is empty.
+/// `#[repr(C)]` により mmap 可能な固定レイアウトを保証する。FFI で他言語
+/// バインディングからも同レイアウトでアクセスする。
 ///
-/// Strings are stored NUL-terminated and truncated to their respective `*_MAX` constants.
+/// # フィールド
+///
+/// - `occupied`: 0 = 空、1 = 占有。空判定は本来 `write_index` /
+///   `read_index` の比較で十分だが、C 側の利便性（pop した直後に
+///   `slot.occupied == 1` で成功と判定）のために残す
+/// - `payload_len`: msgpack バイト列の実長。`<= PAYLOAD_INLINE_MAX` のとき
+///   inline 格納、超える場合は 0 を立てて side channel 経由とする
+/// - `side_offset` / `side_len`: side channel オフセットとバイト長。
+///   side channel 未使用時は両方 0
+/// - `payload`: msgpack バイト列の inline 領域。`payload_len` バイト分のみ
+///   有効で、それ以降の領域は未定義
+///
+/// # サイズ
+///
+/// 1 + 3 + 4 + 8 + 4 + 4 + 240 = 264 byte。
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct RingSlot {
-    /// 0 = empty, 1 = occupied.
+    /// 0 = 空、1 = 占有。
     pub occupied: u8,
-    /// Value discriminant; see [`value_tag`].
-    pub value_tag: u8,
     #[allow(clippy::pub_underscore_fields)]
-    pub _pad: [u8; 6],
-    /// NUL-terminated device id.
-    pub device_id: [u8; DEVICE_ID_MAX + 1],
-    /// NUL-terminated dot-separated specifier.
-    pub specifier: [u8; SPECIFIER_MAX + 1],
-    /// Used when `value_tag` is [`value_tag::INT`].
-    pub value_i64: i64,
-    /// Used when `value_tag` is [`value_tag::FLOAT`].
-    pub value_f64: f64,
+    pub _pad: [u8; 3],
+    /// inline payload に書かれた msgpack バイト列の長さ（`<= PAYLOAD_INLINE_MAX`）。
+    /// side channel を使う場合は 0 にし、`side_len` 側を立てる。
+    pub payload_len: u32,
+    /// side channel 上の payload 開始オフセット（バイト）。0 = side channel 未使用。
+    pub side_offset: u64,
+    /// side channel 上の payload バイト長。0 = side channel 未使用。
+    pub side_len: u32,
+    #[allow(clippy::pub_underscore_fields)]
+    pub _pad2: [u8; 4],
+    /// inline 格納用の msgpack バイト列。`payload_len` バイト目までが有効。
+    pub payload: [u8; PAYLOAD_INLINE_MAX],
 }
 
-/// Header written at the start of the shared memory region.
+/// 共有メモリ領域の先頭に置かれるヘッダ。
 ///
-/// Layout (`AtomicU64` is `#[repr(C, align(8))]`, so both fields are 8 bytes):
+/// レイアウト（`AtomicU64` は `#[repr(C, align(8))]`、両フィールドとも 8 byte）:
+///
 /// ```text
 /// offset 0:  write_index (AtomicU64)
 /// offset 8:  read_index  (AtomicU64)
-/// offset 16: slots[RING_CAPACITY] (RingSlot array)
+/// offset 16: slots[RING_CAPACITY] (RingSlot 配列)
 /// ```
 ///
-/// Both indices are monotonically increasing. Actual slot index is `index % RING_CAPACITY`.
-/// The buffer is full when `write_index - read_index == RING_CAPACITY`.
+/// 両インデックスは単調増加。実際のスロット位置は `index % RING_CAPACITY`。
+/// バッファ満杯条件は `write_index - read_index == RING_CAPACITY`。
 ///
-/// The producer must store slot data before publishing `write_index` with
-/// [`Ordering::Release`]; the consumer must load `write_index` with
-/// [`Ordering::Acquire`] before reading slot data.
+/// 生産者はスロット書き込み後に `write_index` を [`Ordering::Release`] で
+/// 公開し、消費者は `write_index` を [`Ordering::Acquire`] で読んだ後に
+/// スロットを読む。
 #[repr(C)]
 pub struct ShmHeader {
     pub write_index: std::sync::atomic::AtomicU64,
@@ -83,16 +100,23 @@ mod tests {
     }
 
     #[test]
+    fn payload_inline_max_is_positive() {
+        const { assert!(PAYLOAD_INLINE_MAX > 0) };
+    }
+
+    #[test]
     fn shm_header_size_and_align() {
         assert_eq!(std::mem::size_of::<ShmHeader>(), 16);
         assert_eq!(std::mem::align_of::<ShmHeader>(), 8);
     }
 
     #[test]
-    fn ring_slot_is_repr_c() {
-        // Verify the slot is a fixed size (not dependent on heap types).
+    fn ring_slot_is_repr_c_and_fixed_size() {
         let size = std::mem::size_of::<RingSlot>();
         assert!(size > 0);
+        // payload[PAYLOAD_INLINE_MAX] を含む全領域が見えていること。
+        assert!(size >= PAYLOAD_INLINE_MAX);
+        // アラインメントの倍数で表現可能な構造体サイズになっていること。
         assert_eq!(size % std::mem::align_of::<RingSlot>(), 0);
     }
 }
