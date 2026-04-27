@@ -116,7 +116,7 @@ impl std::error::Error for Full {}
 /// 生産者の push 処理本体。`Producer::push` と FFI からの両方で呼ばれる。
 ///
 /// `slot` は `&RingSlot` を受け取り内部でコピーする。新レイアウト
-/// （`PAYLOAD_INLINE_MAX = 240` 込みで ~264 byte）の値渡しはスタックを
+/// （`PAYLOAD_INLINE_MAX = 240` 込みで 264 byte 固定）の値渡しはスタックを
 /// 無駄に消費するため。
 ///
 /// 呼び出し側は SPSC 規律（任意の時刻に生産者は 1 つだけ）を守ること。
@@ -210,11 +210,7 @@ const EMPTY_SLOT: RingSlot = RingSlot {
 };
 
 #[cfg(test)]
-#[allow(
-    clippy::cast_possible_wrap,
-    clippy::cast_possible_truncation,
-    clippy::items_after_statements
-)]
+#[allow(clippy::cast_possible_truncation, clippy::items_after_statements)]
 mod tests {
     use super::*;
 
