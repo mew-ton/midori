@@ -174,6 +174,21 @@ events:
 
 `type` は常に filter 可能（Driver はイベント種別を `type` で区別する暗黙のキー）。`binding_filter` には `type` を含めても省略しても良い（含めない場合は Bridge が自動で追加扱い）。
 
+#### filter 可能性の判断基準
+
+events.yaml ローダーが `binding_filter` の妥当性を検証する際の規則:
+
+| 型 | filter 可 | 理由 |
+|---|---|---|
+| 数値（`uint7` / `uint14` / `int14` / `nibble` / `midi_channel` / `int32` / `int64` / `float32` / `float64`） | ✅ | 等価比較・range 比較が安価（O(1)） |
+| `bool` | ✅ | 同上 |
+| `string` | ✅ | UTF-8 等価比較。OSC アドレス等の典型的な filter キー |
+| `enum` | ✅ | 文字列リテラルの等価比較（許容値リストが事前に確定している） |
+| `bytes` | ❌ | 可変長。等価比較が高コストで、典型的に `set.expr` でキャプチャするための payload。filter には使わない |
+| `array<T>` | ❌ | 同上（可変長） |
+
+`bytes` / `array<T>` を `binding_filter` に含めると events.yaml ロード時エラー。これらは「値そのもの」として `set` / `setMap.source` から参照される側であって、filter 条件には不適切という設計判断。
+
 ---
 
 ## イベント変数（binding 側で参照される値）
@@ -399,16 +414,34 @@ events:
 
 ### 2 層の命名スキーム
 
-events.yaml と binding YAML で OSC 引数型を別の名前空間で扱う:
+events.yaml と binding YAML で OSC 引数型を別の名前空間で扱う。混乱しやすいので具体例から示す。
 
-| レイヤー | 命名 | 例 |
+#### 具体例: OSC で `/fader1` に float 値が届いた場合
+
+```text
+[wire 上の OSC メッセージ]            /fader1  ,f  0.42
+                                         ↓
+[events.yaml で driver が宣言]        oscFloat イベント（value フィールドの型は float32）
+                                         ↓
+[binding YAML 入力側で照合]            from.type: oscFloat
+                                         ↓
+[Layer 2 binding 適用後]               ComponentState を Layer 3 に流す
+                                         ↓
+[binding YAML 出力側で送出]            to.type: float（Bridge が driver に "float で送れ" と指示）
+                                         ↓
+[wire 上の OSC メッセージ]            /target  ,f  0.42
+```
+
+#### 4 つの名前空間
+
+| 名前空間 | 用途 | 例 |
 |---|---|---|
-| events.yaml の `type` キー | events.yaml の最上位イベント名 | `oscFloat` / `oscInt` / `oscBool` |
-| events.yaml フィールドの `type` 値 | 「フィールド型語彙」（`float32` / `int32` / `bool` 等） | `float32` |
-| binding YAML の `from.type` | events.yaml と一致 | `oscFloat` |
-| binding YAML の `to.type`（出力側、`config/drivers/osc.md`） | 抽象化された高レベル名 | `float` / `int` / `bool` |
+| events.yaml event name | 最上位キー。Driver が `emit_event({"type": ...})` で渡す値 | `oscFloat` |
+| events.yaml field `type` value | フィールド型語彙の値 | `float32` |
+| binding `from.type` | schema 検証用の厳密な型タグ。events.yaml の event name と一致 | `oscFloat` |
+| binding `to.type` | driver-facing な高レベル型（`config/drivers/osc.md` の既存表記） | `float` |
 
-**入力側（input binding）** は events.yaml の event 名（`oscFloat`）を直接参照する。**出力側（output binding）** は `config/drivers/osc.md` の既存高レベル名（`float` / `int` / `bool`）を維持する。両側の命名差は意図的: 入力は schema 検証のための厳密な型タグ、出力は Bridge → driver の意味的な型指定で異なる目的のため。
+**両側の命名差は意図的**: 入力は schema 検証のための厳密な型タグ（events.yaml と整合）、出力は Bridge → driver の意味的な型指定（既存 `config/drivers/osc.md` と整合）で異なる目的のため、それぞれの慣例に揃える。
 
 ### 当面のスコープ
 
@@ -446,7 +479,7 @@ events.yaml ロード時に Bridge が起動エラーで弾くべき不整合:
 | `max_length` の不適合 | `max_length` を持つ型が `bytes` / `string` / `array<T>` 以外、または値が 0 以下 |
 | `note_field` の参照先不在 | `note_field: foo` の `foo` が `fields` に無い |
 | `binding_filter` の参照先不在 | `binding_filter` に列挙したフィールド名が `fields`（または `type`）に無い |
-| `binding_filter` への non-scalar 含み | `bytes` / `array<T>` / `enum` のうち、`enum` は filter 可、`bytes` / `array` は filter 不可 |
+| `binding_filter` への filter 不可型の含み | `bytes` / `array<T>` を `binding_filter` に含めている（判断基準は「filter 可能性の判断基準」節参照） |
 
 binding YAML ロード時の追加バリデーション（events.yaml と binding の整合）:
 
