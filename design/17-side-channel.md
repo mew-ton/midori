@@ -271,7 +271,9 @@ side channel の `read_index` は Bridge が更新する **モジュロ前の単
 Bridge 側のリリース手順:
 
 ```rust
-// ring slot を pop して payload decode が終わったら呼ぶ
+// ring slot を pop し、当該 payload バイトへの参照を破棄したら呼ぶ。
+// decode / schema 照合の成否に関わらず必ず呼び出すこと
+// （後述「consume 完了の境界」参照）。
 fn release_after_consume(&self, slot: &RingSlot) {
     if slot.side_len == 0 {
         return; // inline payload のみ
@@ -287,7 +289,7 @@ Driver 側は `read_index.load(Acquire)` で残り容量を計算する（前述
 ### ring 順序と side 順序の同一性
 
 Driver は `emit_event` を L1 内 Mutex で直列化する（`design/15-sdk-bindings-api.md`
-「スレッド / 非同期モデル」）。したがって:
+「スレッド / 非同期モデル」）。したがって、
 
 - 1 回の `emit_event` の中で「side channel に書く → ring slot を立てる」が
   原子的に進む
@@ -301,16 +303,25 @@ Bridge は ring を順番に pop するので、`side_offset` も単調増加で
 
 ### consume 完了の境界
 
-Bridge は **ring slot を pop 後、msgpack decode が完了するまで** side channel
-の対応領域を読み続ける。`read_index` の Release は decode 完了後に行う。
+Bridge は **ring slot を pop 後、当該 payload バイトへの参照が不要になった
+時点** で `read_index` を Release する。decode / schema 照合の **成否に
+関わらず**、参照を破棄したら Release する。これは side channel の領域リーク
+（恒常的 back-pressure 化）を防ぐための強制ルール。
 
 ```text
 時系列（Bridge 側）:
   1. ring から pop（acquire ring write_index）
   2. side channel から (offset, len) を読む
-  3. msgpack decode → schema 照合 → Layer 2 binding 適用
-  4. side channel の read_index を Release で更新
+  3a. msgpack decode → schema 照合 → Layer 2 binding 適用（成功）
+  3b. decode / schema 照合に失敗 → エラーログを出して payload を捨てる
+  4. side channel の read_index を Release で更新（3a / 3b いずれの経路でも実行）
 ```
+
+**失敗経路（3b）でも必ず Release** するのが要点。`read_index` を進めずに
+loop を抜けると、Driver 側から見て「side channel に空きがない」状態が
+永続し、以降の `emit_event` がすべて `0`（back-pressure）を返す事態に
+なる。decode 失敗時の payload は events.yaml 違反等で **そのバイト列に
+意味は残らない** ので、参照を破棄して Release で OK。
 
 ステップ 2〜3 の間に Driver が「同じバイト範囲」を上書きすることは **ない**：
 Driver は `read_index` を見て「占有 = `write_index_local - read_index`」を
