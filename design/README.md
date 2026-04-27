@@ -1,7 +1,7 @@
 # Midori 設計ドキュメント
 
 > ステータス：設計フェーズ
-> 最終更新：2026-04-23
+> 最終更新：2026-04-28
 
 ## ドキュメント一覧
 
@@ -23,6 +23,7 @@
 | [13-ecosystem-readiness.md](./13-ecosystem-readiness.md) | エコシステム整備 TODO（契約・規約・導線の準備項目） |
 | [15-sdk-bindings-api.md](./15-sdk-bindings-api.md) | SDK バインディング API 設計（C / Node.js / Python の L1/L2/L3 レイヤーモデル） |
 | [16-driver-events-schema.md](./16-driver-events-schema.md) | Driver `events.yaml` スキーマ仕様（型語彙・binding_filter・SysEx・GUI 流用） |
+| [17-side-channel.md](./17-side-channel.md) | Side channel mmap レイアウト（oversized event payload の wrap-around 単一バッファ・back-pressure・ABI version） |
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
 | [config/01-preferences.md](./config/01-preferences.md) | Preferences（非配布・環境固有） |
