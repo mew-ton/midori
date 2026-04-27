@@ -308,10 +308,7 @@ mod tests {
 
         let mut slot = EMPTY_SLOT;
         slot.occupied = 1;
-        #[allow(clippy::cast_possible_truncation)]
-        {
-            slot.payload_len = PAYLOAD_INLINE_MAX as u32;
-        }
+        slot.payload_len = PAYLOAD_INLINE_MAX as u32;
         for (i, byte) in slot.payload.iter_mut().enumerate() {
             *byte = (i % 251) as u8;
         }

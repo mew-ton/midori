@@ -5,8 +5,9 @@
 ### Breaking changes
 
 - **`shm::RingSlot` のレイアウトを raw event payload 形式に差し替え**（MEW-41 / `design/15-sdk-bindings-api.md`）。
-  - 削除されたフィールド: `value_tag` / `_pad` (旧 6 byte) / `device_id` / `specifier` / `value_i64` / `value_f64`
-  - 追加されたフィールド: `payload_len: u32` / `side_offset: u64` / `side_len: u32` / `_pad2: [u8; 4]` / `payload: [u8; PAYLOAD_INLINE_MAX]`
+  - 削除されたフィールド: `value_tag` / `device_id` / `specifier` / `value_i64` / `value_f64`
+  - 追加されたフィールド: `payload_len: u32` / `side_offset: u64` / `side_len: u32` / `payload: [u8; PAYLOAD_INLINE_MAX]`
+  - 内部 padding（`_pad`）は サイズ 6 byte → 3 byte に変更し、新たに `_pad2: [u8; 4]` を追加（レイアウト調整用、API として参照される想定なし）
   - 旧スロットは Layer 2 binding 後の post-binding 形（`device_id` + `specifier` + `value`）だったが、新スロットは Driver → Bridge 間で msgpack バイト列を運ぶ raw event 形式となる。binding 適用は Bridge 側の責務へ移動（`design/layers/02-input-recognition/binding-requirements.md` 参照）
 - **`shm::value_tag` モジュールを削除**。`BOOL_FALSE` / `BOOL_TRUE` / `PULSE` / `INT` / `FLOAT` / `NULL` の定数も合わせて廃止
 - **`shm::DEVICE_ID_MAX` / `shm::SPECIFIER_MAX` を削除**。スロットに device id / specifier フィールドが存在しなくなったため

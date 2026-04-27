@@ -126,7 +126,7 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
 #[allow(unsafe_code, clippy::cast_possible_truncation)]
 mod tests {
     use super::*;
-    use midori_core::shm::PAYLOAD_INLINE_MAX;
+    use midori_core::shm::{PAYLOAD_INLINE_MAX, RING_CAPACITY};
 
     /// inline payload に 4 byte の little-endian シーケンス番号を詰めた
     /// テスト用 [`RingSlot`] を作る。
@@ -205,10 +205,7 @@ mod tests {
 
         let mut pushed: RingSlot = unsafe { std::mem::zeroed() };
         pushed.occupied = 1;
-        #[allow(clippy::cast_possible_truncation)]
-        {
-            pushed.payload_len = PAYLOAD_INLINE_MAX as u32;
-        }
+        pushed.payload_len = PAYLOAD_INLINE_MAX as u32;
         for (i, byte) in pushed.payload.iter_mut().enumerate() {
             *byte = (i % 251) as u8;
         }
@@ -270,6 +267,7 @@ mod tests {
         let ok =
             unsafe { midori_sdk_spsc_pop(raw.cast::<c_void>(), std::ptr::from_mut(&mut popped)) };
         assert_eq!(ok, 1);
+        assert_eq!(popped.occupied, 1);
         assert_eq!(popped.payload_len, 0);
         assert_eq!(popped.side_offset, 4096);
         assert_eq!(popped.side_len, 1024);
@@ -346,6 +344,6 @@ mod tests {
         assert!(size > 0);
         assert!(align.is_power_of_two());
         // SpscStorage の中身は ShmHeader (16 byte) + RING_CAPACITY 個の RingSlot
-        assert!(size >= 16 + 256 * std::mem::size_of::<RingSlot>());
+        assert!(size >= 16 + RING_CAPACITY * std::mem::size_of::<RingSlot>());
     }
 }

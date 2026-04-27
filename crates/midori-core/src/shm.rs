@@ -40,8 +40,9 @@ pub const PAYLOAD_INLINE_MAX: usize = 240;
 ///   `slot.occupied == 1` で成功と判定）のために残す
 /// - `payload_len`: msgpack バイト列の実長。`<= PAYLOAD_INLINE_MAX` のとき
 ///   inline 格納、超える場合は 0 を立てて side channel 経由とする
-/// - `side_offset` / `side_len`: side channel オフセットとバイト長。
-///   side channel 未使用時は両方 0
+/// - `side_offset` / `side_len`: side channel 上の位置とバイト長。**side
+///   channel の使用判定は `side_len > 0` を canonical とする**（`side_offset`
+///   は 0 が side channel 先頭を指す有効値となるため、未使用フラグには使えない）
 /// - `payload`: msgpack バイト列の inline 領域。`payload_len` バイト分のみ
 ///   有効で、それ以降の領域は未定義
 ///
@@ -58,9 +59,12 @@ pub struct RingSlot {
     /// inline payload に書かれた msgpack バイト列の長さ（`<= PAYLOAD_INLINE_MAX`）。
     /// side channel を使う場合は 0 にし、`side_len` 側を立てる。
     pub payload_len: u32,
-    /// side channel 上の payload 開始オフセット（バイト）。0 = side channel 未使用。
+    /// side channel 上の payload 開始オフセット（バイト）。`side_len > 0` の
+    /// ときのみ有効（`side_offset == 0` でも `side_len > 0` なら side channel
+    /// 先頭を指す有効ポインタ）。
     pub side_offset: u64,
-    /// side channel 上の payload バイト長。0 = side channel 未使用。
+    /// side channel 上の payload バイト長。**0 = side channel 未使用**。
+    /// side channel 使用判定はこのフィールドを canonical とする。
     pub side_len: u32,
     #[allow(clippy::pub_underscore_fields)]
     pub _pad2: [u8; 4],
@@ -81,8 +85,8 @@ pub struct RingSlot {
 /// 両インデックスは単調増加。実際のスロット位置は `index % RING_CAPACITY`。
 /// バッファ満杯条件は `write_index - read_index == RING_CAPACITY`。
 ///
-/// 生産者はスロット書き込み後に `write_index` を [`Ordering::Release`] で
-/// 公開し、消費者は `write_index` を [`Ordering::Acquire`] で読んだ後に
+/// 生産者はスロット書き込み後に `write_index` を [`std::sync::atomic::Ordering::Release`] で
+/// 公開し、消費者は `write_index` を [`std::sync::atomic::Ordering::Acquire`] で読んだ後に
 /// スロットを読む。
 #[repr(C)]
 pub struct ShmHeader {
@@ -112,11 +116,14 @@ mod tests {
 
     #[test]
     fn ring_slot_is_repr_c_and_fixed_size() {
-        let size = std::mem::size_of::<RingSlot>();
-        assert!(size > 0);
-        // payload[PAYLOAD_INLINE_MAX] を含む全領域が見えていること。
-        assert!(size >= PAYLOAD_INLINE_MAX);
-        // アラインメントの倍数で表現可能な構造体サイズになっていること。
-        assert_eq!(size % std::mem::align_of::<RingSlot>(), 0);
+        // ドキュメントの 1 + 3 + 4 + 8 + 4 + 4 + 240 = 264 byte に固定。
+        // C ヘッダ（cbindgen 生成）と共有されるレイアウトなので、padding の
+        // 追加・並びの変更による ABI ドリフトをコンパイル時にも検出する。
+        const { assert!(std::mem::size_of::<RingSlot>() == 264) };
+        assert_eq!(std::mem::size_of::<RingSlot>(), 264);
+        assert_eq!(
+            std::mem::size_of::<RingSlot>() % std::mem::align_of::<RingSlot>(),
+            0
+        );
     }
 }
