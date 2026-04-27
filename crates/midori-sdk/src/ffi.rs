@@ -61,8 +61,9 @@ pub unsafe extern "C" fn midori_sdk_spsc_init(storage: *mut c_void) {
     if storage.is_null() {
         return;
     }
-    let storage = storage.cast::<SpscStorage>();
-    storage.write(SpscStorage::new());
+    // ~75 KB の `SpscStorage` を呼び出し側スタックに一時生成せず、宛先ポインタへ
+    // 直接書き込む。小さなスレッドスタックから呼ばれた場合のオーバーフローを回避。
+    SpscStorage::init_in_place(storage.cast::<SpscStorage>());
 }
 
 /// スロットを 1 つ push する。
@@ -186,6 +187,7 @@ mod tests {
         let dummy_slot = slot_with_int(1);
         let nul = std::ptr::null::<c_void>();
 
+        // storage が NULL のケース
         assert_eq!(
             unsafe { midori_sdk_spsc_push(nul, std::ptr::from_ref::<RingSlot>(&dummy_slot)) },
             0
@@ -194,6 +196,30 @@ mod tests {
             unsafe { midori_sdk_spsc_pop(nul, std::ptr::from_mut(&mut slot)) },
             0
         );
+
+        // storage は有効だが slot/out_slot 側が NULL のケース。
+        // OR の short-circuit で後段の NULL チェックも動作することを確認する。
+        let layout = std::alloc::Layout::from_size_align(
+            midori_sdk_spsc_storage_size(),
+            midori_sdk_spsc_storage_alignment(),
+        )
+        .expect("valid layout");
+        // SAFETY: layout は size/alignment 共に正で、後で同じ layout で dealloc する
+        let raw = unsafe { std::alloc::alloc(layout) };
+        assert!(!raw.is_null());
+        unsafe { midori_sdk_spsc_init(raw.cast::<c_void>()) };
+
+        assert_eq!(
+            unsafe { midori_sdk_spsc_push(raw.cast::<c_void>(), std::ptr::null::<RingSlot>()) },
+            0
+        );
+        assert_eq!(
+            unsafe { midori_sdk_spsc_pop(raw.cast::<c_void>(), std::ptr::null_mut::<RingSlot>()) },
+            0
+        );
+
+        // SAFETY: 同じ layout で dealloc
+        unsafe { std::alloc::dealloc(raw, layout) };
     }
 
     /// `build.rs` が生成した C ヘッダに想定の関数宣言が含まれていることを検証する。

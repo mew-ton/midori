@@ -55,6 +55,37 @@ impl SpscStorage {
         }
     }
 
+    /// 確保済みの領域に SPSC ストレージを **その場で** 初期化する。
+    ///
+    /// `Self::new()` と異なり、`SpscStorage` 全体（~75 KB）を呼び出し側スタック上に
+    /// 一時生成しない。FFI 経由で C 側が用意した領域へ書き込む経路（小さなスレッド
+    /// スタックや組込み環境）でのオーバーフローを避けるために用意する。
+    ///
+    /// インデックス管理の不変条件（`read..write` 範囲のスロットだけが読まれる）に
+    /// より、`slots` 配列は未初期化のままで安全。`header` のみ Atomic を 0 で書く。
+    ///
+    /// # Safety
+    ///
+    /// `ptr` は以下を満たすこと:
+    /// - 非 NULL
+    /// - `size_of::<SpscStorage>()` バイト以上の書き込み可能領域を指す
+    /// - `align_of::<SpscStorage>()` のアラインメントを満たす
+    /// - 呼び出し時点で生存する Producer/Consumer がない
+    #[allow(unsafe_code)]
+    pub unsafe fn init_in_place(ptr: *mut Self) {
+        // SAFETY: 呼び出し側契約により ptr は SpscStorage 全体を覆う書き込み可能
+        // 領域を指し、適切にアラインされている。`header` フィールドへの addr_of_mut!
+        // は未初期化のフィールドに対しても合法。ShmHeader は 16 バイトなのでスタック
+        // 経由で書いても問題ない。
+        let header_ptr = std::ptr::addr_of_mut!((*ptr).header);
+        header_ptr.write(ShmHeader {
+            write_index: AtomicU64::new(0),
+            read_index: AtomicU64::new(0),
+        });
+        // `slots` は意図的に未初期化のまま残す。pop は read < write の不変条件で
+        // 守られているため、未書込みのスロットを読むことはない。
+    }
+
     /// SPSC 規律に従って Producer / Consumer のペアに分割する。
     ///
     /// `&mut self` を取るため、ペアが生存する間は再分割が型レベルで禁止される。
