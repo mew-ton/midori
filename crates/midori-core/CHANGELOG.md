@@ -4,7 +4,7 @@
 
 ### Breaking changes
 
-- **`shm::RingSlot` のレイアウトを raw event payload 形式に差し替え**（MEW-41 / `design/15-sdk-bindings-api.md`）。
+- **`shm::RingSlot` のレイアウトを raw event payload 形式に差し替え**（設計: `design/15-sdk-bindings-api.md`「SPSC スロットレイアウトの変更」）。
   - 削除されたフィールド: `value_tag` / `device_id` / `specifier` / `value_i64` / `value_f64`
   - 追加されたフィールド: `payload_len: u32` / `side_offset: u64` / `side_len: u32` / `payload: [u8; PAYLOAD_INLINE_MAX]`
   - 内部 padding（`_pad`）は サイズ 6 byte → 3 byte に変更し、新たに `_pad2: [u8; 4]` を追加（レイアウト調整用、API として参照される想定なし）
@@ -15,7 +15,7 @@
 ### Added
 
 - `shm::PAYLOAD_INLINE_MAX` 定数（240 byte）— inline payload の最大サイズ
-- `RingSlot::side_offset` / `side_len` フィールド — `payload_len > PAYLOAD_INLINE_MAX` の payload を side channel（mmap プール）に逃すためのポインタ枠。side channel 本体の確保・割り当て・GC は別 Issue（MEW-43）で実装
+- `RingSlot::side_offset` / `side_len` フィールド — `payload_len > PAYLOAD_INLINE_MAX` の payload を side channel（mmap プール）に逃すためのポインタ枠。side channel 本体の確保・割り当て・GC は別途実装する（本クレートのスコープ外）
 
 ### Notes
 

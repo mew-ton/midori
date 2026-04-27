@@ -26,8 +26,8 @@ use midori_core::shm::{RingSlot, ShmHeader, PAYLOAD_INLINE_MAX, RING_CAPACITY};
 
 /// 共有メモリ上に置かれることを意図した SPSC リングバッファのストレージ。
 ///
-/// `#[repr(C)]` により mmap 可能な固定レイアウトを保証する。FFI（MEW-37）
-/// で他言語からも同レイアウトでアクセスする予定。
+/// `#[repr(C)]` により mmap 可能な固定レイアウトを保証し、C FFI 経由で他言語
+/// からも同レイアウトでアクセスできる。
 #[repr(C)]
 pub struct SpscStorage {
     header: ShmHeader,
@@ -329,8 +329,8 @@ mod tests {
     fn it_should_carry_side_channel_offsets_when_inline_is_unused() {
         // payload_len > PAYLOAD_INLINE_MAX 相当のケース: payload_len=0 で
         // side_offset/side_len のみが立ち、inline payload 領域は使われない。
-        // side channel 本体の確保は MEW-43 のスコープ。本テストはフィールドの
-        // セマンティクスのみを検証する。
+        // 本テストは RingSlot フィールドのセマンティクスのみを検証する
+        // （side channel 本体の確保は本クレートのスコープ外）。
         let mut storage = SpscStorage::new();
         let (mut p, mut c) = storage.split();
 

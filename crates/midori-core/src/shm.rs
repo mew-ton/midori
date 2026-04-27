@@ -1,17 +1,14 @@
 //! 共有メモリ上の SPSC リングバッファレイアウト定義。
 //!
-//! Driver から Bridge へ raw event を運ぶための **post-MEW-40** のスロット
-//! 形式。raw event は driver の `events.yaml` に沿った key-value 構造を
-//! msgpack で encode したバイト列として `payload` に格納する。inline 容量
-//! ([`PAYLOAD_INLINE_MAX`]) を超える payload は side channel（mmap プール、
-//! 別 Issue MEW-43 で実装）に書き出し、スロットには `side_offset` /
-//! `side_len` のみを格納する。
+//! Driver から Bridge へ raw event を運ぶスロット形式。raw event は driver の
+//! `events.yaml` に沿った key-value 構造を msgpack で encode したバイト列
+//! として [`RingSlot::payload`] に格納する。inline 容量
+//! ([`PAYLOAD_INLINE_MAX`]) を超える payload は別 mmap 領域（side channel）
+//! に書き出し、スロットには [`RingSlot::side_offset`] / [`RingSlot::side_len`]
+//! のみを格納する。side channel 本体の確保・割り当て・GC は本ファイルでは
+//! 扱わない。
 //!
-//! 詳細設計: `design/15-sdk-bindings-api.md` 「SPSC スロットレイアウトの変更」。
-//!
-//! 旧スロット（`device_id` / `specifier` / `value_tag` / `value_i64` /
-//! `value_f64` を持つ post-binding 形）は本リリースで撤廃され、
-//! `midori-core` は major bump（0.2.0）となる。
+//! 詳細設計: `design/15-sdk-bindings-api.md`「SPSC スロットレイアウトの変更」。
 
 /// SPSC リングバッファのスロット数。
 ///

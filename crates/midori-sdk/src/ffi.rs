@@ -236,7 +236,8 @@ mod tests {
 
     /// `payload_len` > [`PAYLOAD_INLINE_MAX`] 相当のケース: `payload_len` = 0 で
     /// `side_offset` / `side_len` のみ立てたスロットがそのまま運ばれることを検証。
-    /// side channel 本体の確保は MEW-43。本テストはフィールド輸送のみを確認する。
+    /// 本テストは FFI 経由のフィールド輸送のみを確認する（side channel 本体の
+    /// 確保は本クレートのスコープ外）。
     #[test]
     fn it_should_carry_side_channel_offsets_through_ffi() {
         let layout = std::alloc::Layout::from_size_align(
