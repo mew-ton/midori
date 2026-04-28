@@ -120,7 +120,7 @@ pub struct SideChannelHeader {
 サイズ目安: `4 + 4 + 8 + 48 = 64 byte`（1 cache line）。続くバイトバッファは
 ページサイズ（4 KiB）アラインで開始する。具体的な開始オフセットは
 
-```
+```text
 bytes_base_offset = align_up(sizeof(SideChannelHeader), PAGE_SIZE)
                   = align_up(64, 4096) = 4096
 ```
@@ -345,7 +345,7 @@ Driver 側は `read_index.load(Acquire)` で残り容量を計算する（前述
 ### ring 順序と side 順序の同一性
 
 Driver は `emit_event` を L1 内 Mutex で直列化する（`design/15-sdk-bindings-api.md`
-「スレッド / 非同期モデル」）。したがって、
+「スレッド / 非同期モデル」）ため、以下が保証される:
 
 - 1 回の `emit_event` の中で「side channel に書く → ring slot を立てる」が
   原子的に進む
