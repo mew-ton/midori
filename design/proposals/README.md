@@ -23,11 +23,13 @@ payload（SysEx 1 KB 級・OSC blob 等）をどう運ぶか、2 案を比較検
 
 #### 比較サマリ
 
+メモリ列はいずれも **概算（オーダー比較用）**。案 B の正確な計算は ring slot に 8 byte ヘッダ + 4 byte align padding + ページ整列を加味した値で、実値は [variable-ring.md](./variable-ring.md) 「メモリ予算」節を参照。
+
 | 観点 | A. Side Channel | B. Variable Ring Slot |
 |---|---|---|
-| **メモリ（MIDI 1 KB SysEx）** | 64 KiB ring + 256 KiB side ≒ **320 KiB** | 256 × 1 KiB = **256 KiB** |
-| **メモリ（典型 OSC 256 byte）** | 64 KiB ring + side 未使用 ≒ 64 KiB | 256 × 256 byte = 64 KiB |
-| **メモリ（4 KB blob driver）** | 64 KiB ring + side（数 MiB） | 256 × 4 KiB = 1 MiB |
+| **メモリ（MIDI 1 KB SysEx）** | 64 KiB ring + 256 KiB side ≒ **320 KiB** | ≒ **256 KiB**（実値は約 260 KiB） |
+| **メモリ（典型 OSC 256 byte）** | 64 KiB ring + side 未使用 ≒ 64 KiB | ≒ 64 KiB（実値は約 68 KiB） |
+| **メモリ（4 KB blob driver）** | 64 KiB ring + side（数 MiB） | ≒ 1 MiB（実値は約 1.004 MiB） |
 | **shm セグメント数** | **2 個**（ring + side） | **1 個** |
 | **fd 受け渡し** | 2 個 | 1 個 |
 | **ABI 表面** | `ShmHeader` + `SideChannelHeader` の 2 ヘッダ | `ShmHeader` の 1 ヘッダ（`slot_size` / `version` 追加） |

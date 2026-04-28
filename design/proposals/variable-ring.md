@@ -53,7 +53,9 @@ slot offset 4:  payload_len: u32
 slot offset 8:  payload: [u8; slot_size - 8]
 ```
 
-ヘッダ部分（`occupied` + `payload_len` で 8 byte）は固定オフセットに置き、payload は **`slot_size - 8` バイト**続く。`slot_size` は handshake で決まり、`ShmHeader.slot_size` に格納される。
+ヘッダ部分（`occupied: u8` + `_pad: [u8; 3]` + `payload_len: u32` の合計 8 byte）は固定オフセットに置き、payload は **`slot_size - 8` バイト**続く。`slot_size` は handshake で決まり、`ShmHeader.slot_size` に格納される。
+
+> **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。Bridge は handshake 受領時に `slot_size` を 4 byte 倍数へ切り上げる（後述「Handshake プロトコル」step 4）。
 
 ### 旧 RingSlot との差分
 
@@ -76,12 +78,19 @@ slot offset 8:  payload: [u8; slot_size - 8]
 pub struct ShmHeader {
     pub write_index: AtomicU64,
     pub read_index: AtomicU64,
-    pub slot_size: u32,        // バイト単位、handshake で決まる（>= MIN_SLOT_SIZE）
+    pub slot_size: u32,        // バイト単位、handshake で決まる（4 byte 倍数）
     pub version: u32,          // ABI version（本案で導入）
-    // 以下は将来拡張余地
+    // 以下は将来拡張余地（cache line align）
     pub _pad: [u8; 32],
 }
+
+// 採用時はコンパイル時アサーションで lock する（既存 ShmHeader 16 byte
+// アサーションを置き換える）:
+//   const _: () = assert!(std::mem::size_of::<ShmHeader>() == 56);
+//   const _: () = assert!(std::mem::align_of::<ShmHeader>() == 8);
 ```
+
+総サイズ：`8 + 8 + 4 + 4 + 32 = 56 byte`、alignment は `AtomicU64` の 8 byte。
 
 `slot_size` は driver 起動時に Bridge が書き込み、それ以降は不変。Driver と Bridge は起動時にこの値を読み込んで stride 計算に使う。
 
@@ -110,9 +119,9 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
    - 結果を `max_payload_size: u32` として保持
 3. **driver → Bridge** に `request_ring(max_payload_size)` を送信（control channel 経由）
 4. **Bridge 側で受領**:
-   - `max_payload_size > MAX_SLOT_SIZE` なら reject（実装上限超過）
-   - `slot_size = max_payload_size + 8`（ヘッダ分）に丸めてページサイズアラインメント
-   - `RING_CAPACITY × slot_size + sizeof(ShmHeader)` の shm を allocate
+   - **slot_size の確定**: `slot_size = ((max_payload_size + 8) + 3) & !3`（ヘッダ 8 byte を加算した上で 4 byte 倍数へ切り上げ。`payload_len: u32` の natural alignment を slot 全数で維持するため）
+   - **上限チェック**: `slot_size > MAX_SLOT_SIZE` なら reject（実装上限超過）
+   - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate（mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
    - `ShmHeader.slot_size` に書き込んで初期化
 5. **Bridge → driver** に shm fd を返す
 6. **driver は fd を mmap し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
@@ -138,7 +147,9 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 |---|---|---|
 | 成功 | `1` | リング slot に書けた |
 | ring 満杯 | `0` | back-pressure（drop） |
-| payload size 超過（>= `slot_size - 8`） | `-2` | events.yaml 違反 / driver 実装バグ |
+| payload size 超過（payload バイト長 `> slot_size - 8`） | `-2` | events.yaml 違反 / driver 実装バグ |
+
+ちょうど `slot_size - 8`（= 確定後の payload 領域上限）バイトの payload は **収まる**（境界条件は strict greater-than）。
 
 side channel 案で必要だった「side channel フル」の概念がなくなる。`-2` の発生は実質 events.yaml validator の仕事で、handshake 時の `max_payload_size` 宣言が正しければ runtime で `-2` は出ない（防衛的に残すのみ）。
 
@@ -146,17 +157,21 @@ side channel 案で必要だった「side channel フル」の概念がなくな
 
 ## メモリ予算
 
-driver ごとの shm 使用量:
+driver ごとの shm 使用量。下表は **概算（`slot_size` を `max_payload_size` のキリの良い値で代用）** で、実値は前述の確定式
+`slot_size = ((max_payload_size + 8) + 3) & !3` および
+`shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size` を 4 KiB ページに切り上げた値となる。
 
-| ユースケース | `bytes.max_length` の最大 | `slot_size` 概算 | 必要メモリ |
-|---|---|---|---|
-| MIDI（SysEx 1 KB 上限） | 1 KB | 1 KiB | **256 KiB** |
-| OSC（典型的な float / int / 短い blob） | 256 byte | 256 byte | 64 KiB |
-| 大型 OSC blob 想定 | 4 KB | 4 KiB | 1 MiB |
-| 仮想：長尺 SysEx | 16 KB | 16 KiB | 4 MiB |
-| 上限超過 | > 64 KiB | reject | 起動不可 |
+| ユースケース | `bytes.max_length` の最大 | `slot_size`（確定値） | 概算 shm 容量 | 実 shm 容量（ページ整列後） |
+|---|---|---|---|---|
+| MIDI（SysEx 1 KB 上限） | 1024 byte | 1032 byte | 256 KiB | 256 KiB（`56 + 256 × 1032 = 264,248 byte → 260 KiB ページ整列`）|
+| OSC（典型的な float / int / 短い blob） | 256 byte | 264 byte | 64 KiB | 68 KiB（`56 + 256 × 264 = 67,640 byte → 68 KiB`）|
+| 大型 OSC blob 想定 | 4096 byte | 4104 byte | 1 MiB | 1.004 MiB（`56 + 256 × 4104 = 1,050,680 byte → 1028 KiB`）|
+| 仮想：長尺 SysEx | 16384 byte | 16392 byte | 4 MiB | 4.003 MiB（`56 + 256 × 16392 = 4,196,408 byte → 4100 KiB`）|
+| 上限超過 | > 65528 byte | reject | — | 起動不可 |
 
-`MAX_SLOT_SIZE = 64 KiB` 上限なら、1 driver あたり最大 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
+> 「概算 shm 容量」は `slot_size` を `max_payload_size` 相当に丸めた目安、「実 shm 容量」は 8 byte ヘッダオーバーヘッドとページ整列を反映した値。`MAX_SLOT_SIZE = 64 KiB - 8 byte = 65528 byte` を超える `max_payload_size` は reject される（slot_size が `MAX_SLOT_SIZE = 65536 byte` に収まらないため）。
+
+`MAX_SLOT_SIZE = 64 KiB` 上限なら、1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
 
 side channel 案との比較は [README.md](./README.md) 参照。
 
@@ -293,8 +308,12 @@ policy は side channel 案と同じく:
 - `crates/midori-core/src/shm.rs`
   - `RingSlot` から `side_offset` / `side_len` / `_pad2` を削除
   - `payload` を動的サイズに変更（stride 計算に切り替え）
-  - `ShmHeader` に `slot_size` / `version` 追加
-  - モジュールコメントを本書参照に更新
+  - `ShmHeader` に `slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加（総 56 byte）
+  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/proposals/variable-ring.md`、または採用後の正式パス）への参照に置き換え
+  - `PAYLOAD_INLINE_MAX` 定数および関連 `assert!` を削除
+  - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新
+  - 既存テスト `ring_slot_is_repr_c_and_fixed_size`（`assert!(size_of::<RingSlot>() == 264)`）は **削除**（`RingSlot` が動的サイズになるため固定サイズ assertion は意味を失う）
+  - 代わりに `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を runtime で検証する初期化ガードを追加
 - `crates/midori-sdk/src/spsc.rs` / `ffi.rs`
   - `RingProducer` / `RingConsumer` の API に `slot_size` を導入
   - `midori_sdk_spsc_*` の C ABI を `slot_size` 受け取りに拡張（major bump）
