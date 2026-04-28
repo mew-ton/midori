@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
 |---|---|
 | MIDI note-on/off | Python / C 例で `type: "noteOn"` / `"noteOff"` を別イベントとして emit。`channel/note/velocity` を構造化フィールドで保持 |
 | MIDI CC | Python / C 例で `type: "controlChange"` + `controller` / `value` |
-| MIDI pitch bend | Python 例で `type: "pitchBend"` + `value: int14` |
+| MIDI pitch bend | Python 例で `type: "pitchBend"` + `value` フィールド（events.yaml では `int16` + `range: [-8192, 8191]` で宣言） |
 | MIDI SysEx 可変長 | Python 例で `payload: bytes(...)`（C なら `midori_event_put_bytes`）。`emit_event` は payload サイズに依らず受け取れる前提（実装は wire format 別 Issue に委ねる） |
 | OSC アドレスパターン | Node 例で `address` をそのまま emit。`/avatar/parameters/UpperExpression` の照合は Bridge 側 binding が担当 |
 | OSC 型付き引数 | Node 例で `argType` を文字（`"f"` / `"i"` / `"T"` 等）で渡し、`value` 自体は型付き JSON で表現 |
@@ -712,7 +712,7 @@ if (cb->struct_size < offsetof(midori_driver_callbacks_t, on_configure)
 | Note On | `{type: "noteOn", channel: 1, note: 60, velocity: 100}` | OK |
 | Note Off | `{type: "noteOff", channel: 1, note: 60, velocity: 0}` | OK |
 | Control Change | `{type: "controlChange", channel: 1, controller: 11, value: 64}` | OK |
-| Pitch Bend | `{type: "pitchBend", channel: 1, value: 8191}` | OK（int14 を int で運ぶ） |
+| Pitch Bend | `{type: "pitchBend", channel: 1, value: 8191}` | OK（14-bit signed の範囲を msgpack int で運ぶ。events.yaml は `int16` + `range: [-8192, 8191]` で宣言） |
 | Channel Aftertouch | `{type: "channelAftertouch", channel: 1, pressure: 64}` | OK |
 | Program Change | `{type: "programChange", channel: 1, program: 5}` | OK |
 | Real-Time | `{type: "realtime", message: "start"}` | OK |
