@@ -137,8 +137,8 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
 1. **driver 起動** → events.yaml をパース
 2. **driver 側で `max_payload_size` と必要 `slot_size` を計算**:
    - **`tier: inline`**（または default）の event のみ対象
-   - 該当 event の `bytes.max_length` を収集
-   - msgpack encode 後の最大長 + 固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加算 → `max_payload_size: u32`
+   - **event ごとに、その event 内の全可変長フィールド**（`bytes` / `string` 等の `max_length` 指定があるもの）の `max_length` を **合算**（複数の可変長フィールドが同時に最大になるケースを過小見積もりしないため）
+   - 全 inline tier event の中で **最大の合算値** に固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加算 → `max_payload_size: u32`
    - **必要 `slot_size = ((max_payload_size + 8) + 3) & !3`**（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ）
 3. **driver → Bridge** へ要求送信（control channel 経由）
    - `slot_size <= DEFAULT_SLOT_SIZE` の場合: 要求しない（または "default" として通知）
@@ -196,7 +196,7 @@ driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPA
 | HARD 超過 | > 65528 byte（slot_size > 65536 となる） | reject | — | 起動不可 |
 
 > default 内の driver は handshake で `slot_size` を要求しないため、Bridge 側で `DEFAULT_SLOT_SIZE = 1032 byte` の slot で確保される（OSC のように `max_payload_size` が default より小さい場合も同じ slot サイズ）。
-> HARD 上限なら 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB` ちょうど。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
+> HARD 上限なら 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB` ちょうど。合計メモリは driver 数 `N` に比例（最悪 `N × 16 MiB`、典型は driver あたり数百 KiB なので大半の運用で数十 MiB に収まる）。
 
 ---
 

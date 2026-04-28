@@ -71,14 +71,15 @@ inline tier の slot サイズは Bridge 側に 2 つの定数を持つ。両者
 
 Driver 側の振る舞い:
 
-- inline tier の events から `max_payload_size = max(各 bytes.max_length) + 固定オーバーヘッド` を計算
+- inline tier の events ごとに **その event 内の全 `bytes` / `string` 等可変長フィールドの `max_length` を合算** し、msgpack エンコード後の最大長として求める（複数の可変長フィールドが同時に最大になるケースを過小見積もりしないため）
+- 全 inline tier event の中で最大の合算値に固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加えたものを `max_payload_size` とする
 - 必要 `slot_size = ((max_payload_size + 8) + 3) & !3`（4 byte align、詳細は [01-inline-ring.md](./01-inline-ring.md)）
 - `slot_size <= DEFAULT_SLOT_SIZE`: handshake で要求しない（Bridge が default で確保）
 - 超える: handshake で `slot_size` を要求。Bridge は `slot_size <= HARD_SLOT_SIZE` なら受理、超過なら reject
 
 reject されたら driver 起動失敗。driver 作者は events.yaml の `bytes.max_length` を見直すか、該当 event を `tier: streamed` 化する。
 
-メモリ予算: 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB`。multi-driver 構成でも合計数十 MiB に収まる。
+メモリ予算: **1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB`**。合計メモリは driver 数 `N` に比例（`N × 16 MiB` が最悪ケース。例: 4 driver で 64 MiB）。実値は driver ごとの実 `slot_size` で決まり、典型的には driver あたり数百 KiB に収まる。
 
 詳細プロトコル・slot レイアウト・メモリ順序などは [01-inline-ring.md](./01-inline-ring.md)。
 
@@ -93,7 +94,11 @@ reject されたら driver 起動失敗。driver 作者は events.yaml の `byte
 - サイズ: `bytes.max_length` の硬い上限なし（実装側の現実的予算による）
 - 主用途: OSC blob、audio chunk、文字列など inline 上限を超える可能性のある event
 
-settle するまで、driver 作者は `tier: streamed` event を宣言しても **runtime はエラーで弾く**（schema validator で「streamed は未実装」と reject）。実装着手時は本フォルダに `02-streamed.md` を新設し、本書の表もそこへ更新する。
+settle するまで、driver 作者は `tier: streamed` event を宣言しても **runtime はエラーで弾く**。
+
+> 責務分離: `tier` 自体の構文妥当性（`inline | streamed` のいずれか、文字列として正しいか）は **events.yaml schema validator** が検証する。一方 `streamed` の **実利用可否**（Bridge が当該 tier を扱える capability を持つか）は **runtime feature-availability check** が判定し、未実装なら起動時に reject する。前者は静的、後者は動的検査。
+
+実装着手時は本フォルダに `02-streamed.md` を新設し、本書の表もそこへ更新する。
 
 ---
 
