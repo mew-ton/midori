@@ -592,10 +592,11 @@ fn it_should_load_missing_file_as_outcome_missing() {
 
 #[test]
 fn it_should_load_existing_file_as_outcome_loaded() {
-    let dir = std::env::temp_dir();
-    let path = dir.join(format!("midori-events-test-{}.yaml", std::process::id()));
+    // NamedTempFile は Drop 時に自動削除されるため、assert が panic
+    // しても tmp ファイルは残らない。
+    let file = tempfile::NamedTempFile::new().expect("create tmp");
     std::fs::write(
-        &path,
+        file.path(),
         r"
 schema_version: 1
 events:
@@ -605,8 +606,7 @@ events:
 ",
     )
     .expect("write tmp");
-    let outcome = load_from_path(&path).expect("load");
-    let _ = std::fs::remove_file(&path);
+    let outcome = load_from_path(file.path()).expect("load");
     match outcome {
         LoadOutcome::Loaded(schema) => assert_eq!(schema.schema_version, 1),
         LoadOutcome::Missing => panic!("should be Loaded"),

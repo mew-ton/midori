@@ -49,7 +49,14 @@ impl std::fmt::Display for LoadError {
     }
 }
 
-impl std::error::Error for LoadError {}
+impl std::error::Error for LoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            Self::Parse { source, .. } => Some(source),
+        }
+    }
+}
 
 /// Load `events.yaml` from `path`. Returns `LoadOutcome::Missing` when the
 /// file does not exist (per spec the caller decides drop-all vs warning).
