@@ -1,7 +1,7 @@
 # Driver `events.yaml` スキーマ仕様
 
 > ステータス：設計フェーズ
-> 最終更新：2026-04-27
+> 最終更新：2026-04-28
 
 各 Driver が宣言する `events.yaml` の文法を規定する。`design/15-sdk-bindings-api.md`（MEW-40）で確定した「SDK は events.yaml を一切知らず、Bridge が schema 照合を担う」原則に従い、本ドキュメントは **Bridge が読む** 側のスキーマと、**Driver 作者が書く** 側の YAML 文法のみを扱う。
 
@@ -17,7 +17,7 @@
 # drivers/midi/events.yaml
 schema_version: 1
 events:
-  noteOn:
+  noteOn:                      # tier 省略 → inline (default)
     fields:
       channel:  { type: midi_channel, optional: false }
       note:     { type: uint7,        optional: false }
@@ -31,6 +31,13 @@ events:
       controller: { type: uint7,        optional: false }
       value:      { type: uint7,        optional: false }
     binding_filter: [type, channel, controller]
+
+  oscBlob:                     # 大型 payload は明示的に streamed
+    tier: streamed
+    fields:
+      address: { type: string, max_length: 256 }
+      payload: { type: bytes,  max_length: 65536 }
+    binding_filter: [type, address]
 ```
 
 3 つの最上位キー:
@@ -42,6 +49,15 @@ events:
 | `defaults` | ❌ | 全イベント共通フィールドのデフォルト宣言（任意） |
 
 各 event のキー（例: `noteOn`）は **`type` フィールドの値**と一致させる。イベントは Driver 側で `emit_event({"type": "noteOn", ...})` のように `type` を含めて emit する設計（MEW-40）なので、events.yaml の最上位キーが `type` の許容値リストになる。
+
+各 event の直下キー:
+
+| キー | 必須 | 内容 |
+|---|---|---|
+| `fields` | ✅ | フィールド定義（後述「フィールド宣言の文法」） |
+| `tier` | ❌ | 配送 tier。`inline` または `streamed`（後述「tier」節）。省略時は `inline` |
+| `binding_filter` | ❌ | binding 側で絞り込みに使えるフィールド（後述） |
+| `note_field` | ❌ | `{note}` テンプレート展開対象（後述） |
 
 ---
 
@@ -152,6 +168,42 @@ events:
 
 ---
 
+## tier
+
+各 event は配送経路の **tier** を宣言できる。`design/17-driver-comm/` の driver↔bridge コミュニケーション戦略で確立した分離モデルに従い、driver 作者は event 性質ごとに 2 種類から選ぶ:
+
+| tier | 経路 | 速度保証 | サイズ柔軟性 | 用途 |
+|---|---|---|---|---|
+| `inline` (default) | shm SPSC ring（固定 slot） | あり（sub-ms） | なし（slot_size 上限） | MIDI noteOn 等、小サイズ・低レイテンシ要 |
+| `streamed` | shm 以外（pipe / socket 等、将来実装） | なし | あり | OSC blob・audio chunk・文字列等、大型 payload |
+
+省略時は `inline` を default 補完。
+
+```yaml
+events:
+  noteOn:
+    fields: { ... }
+    # tier 省略 → inline (default)
+
+  oscBlob:
+    tier: streamed         # 大型 payload を扱う event は明示
+    fields:
+      payload: { type: bytes, max_length: 65536 }
+```
+
+### 構文と実利用可否の責務分離
+
+- `tier` の **構文妥当性**（`inline | streamed` 以外を reject）は **Bridge 側 schema validator が静的に検証** する
+- `tier: streamed` の **実利用可否**（streamed 経路の実装が runtime に存在するか）は **runtime feature-availability check の責務**
+- streamed tier の経路実装が未着手の段階では、driver 作者は宣言だけ書ける（schema validator は通過）が、Bridge 起動時に runtime check で reject される
+- 経路実装の詳細は本書のスコープ外。`design/17-driver-comm/` 配下を参照（`02-streamed.md` 着手時に追加予定）
+
+### adapter 側の関与
+
+adapter（Layer 2 / 4 binding YAML）は **tier に無関心**。binding YAML には `tier` の語彙は出現しない。tier 知識は driver↔bridge の責務として閉じる（責務マトリクス: `design/17-driver-comm/00-overview.md`）。
+
+---
+
 ## binding_filter
 
 binding YAML の `from.<field>` でフィルタとして使えるフィールドを events.yaml 側で **explicit に宣言** する。
@@ -250,7 +302,7 @@ events:
     fields:
       payload:
         type: bytes
-        max_length: 1024  # PAYLOAD_INLINE_MAX 超過時は side channel 経由（MEW-43）
+        max_length: 1024  # 1 KiB は inline tier の DEFAULT_SLOT_SIZE = 1032 byte（payload 容量 1024 byte）に収まる上限。詳細は design/17-driver-comm/01-inline-ring.md
     binding_filter: [type]
 ```
 
@@ -480,6 +532,7 @@ events.yaml ロード時に Bridge が起動エラーで弾くべき不整合:
 | `note_field` の参照先不在 | `note_field: foo` の `foo` が `fields` に無い |
 | `binding_filter` の参照先不在 | `binding_filter` に列挙したフィールド名が `fields`（または `type`）に無い |
 | `binding_filter` への filter 不可型の含み | `bytes` / `array<T>` を `binding_filter` に含めている（判断基準は「filter 可能性の判断基準」節参照） |
+| `tier` の値不正 | `tier` が `inline` / `streamed` 以外の文字列（unknown 値は reject。省略時は `inline` を default 補完） |
 
 binding YAML ロード時の追加バリデーション（events.yaml と binding の整合）:
 
