@@ -128,7 +128,7 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
      | 各 key（msgpack str） | str ヘッダタグ（長さ L に応じて: L≤31 で 1 byte / L≤2^8-1 で 2 byte / L≤2^16-1 で 3 byte / それ超は 5 byte）+ key UTF-8 バイト長 |
      | `type` フィールドの value | str ヘッダタグ + driver が宣言する最長 type 文字列の UTF-8 バイト長 |
      | `bytes` / `string`（`max_length` 指定あり） | bin/str ヘッダタグ（`max_length` の値に応じた 1/2/3/5 byte）+ `max_length` |
-     | 整数（uint7 / int7 / uint14 / int14 / nibble / midi_channel / int32 / int64） | 1 byte（fixint）または最大 9 byte（int64）。各型の最大に応じて固定 |
+     | 整数（msgpack int family: positive/negative fixint / uint8/16/32/64 / int8/16/32/64） | 1 byte（fixint, 値域 `[-32, 127]`）から最大 9 byte（uint64 / int64 = タグ 1 byte + 値 8 byte）まで。events.yaml の各整数型がどの msgpack 表現に encode されるかは `design/16-driver-events-schema.md` 参照 |
      | 浮動小数（float32 / float64） | 5 byte（float32）または 9 byte（float64） |
      | `bool` | 1 byte |
      | 配列（`max_length` 指定あり） | 配列ヘッダタグ（要素数に応じた 1/3/5 byte）+ 各要素 worst-case × `max_length` |
