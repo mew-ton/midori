@@ -1,11 +1,11 @@
-# Variable-Sized Ring Slot 案（検討中）
+# Inline Tier — Variable-Sized Ring Slot
 
-> ステータス：**検討中（採否未決定）**
+> ステータス：設計フェーズ
 > 最終更新：2026-04-28
 
-本書は oversized event payload を運ぶ方式の **案 B**。**案 A（[side-channel.md](./side-channel.md)）** と比較検討中。両案の比較と採否判断材料は [README.md](./README.md) を参照。
+本書は driver↔bridge 配送の **inline tier**（速度保証あり、shm SPSC ring 経由）の詳細仕様。tier モデル全体・他 tier との関係は [00-overview.md](./00-overview.md) を参照。
 
-「driver が宣言する最大 payload サイズに合わせて、起動時 (handshake) に **RingSlot のサイズを動的に決める**」案。各スロットは driver lifetime 内で固定サイズだが、driver プロセスごとに異なる。すべての payload は ring slot に inline で収まり、別 mmap 領域（side channel）は不要。
+「driver が宣言する最大 payload サイズに合わせて、起動時 (handshake) に **RingSlot のサイズを動的に決める**」方針。各スロットは driver lifetime 内で固定サイズだが、driver プロセスごとに異なる。inline tier の event はすべて ring slot に inline で収まる。
 
 実装本体（FFI 拡張・テスト）は本書のスコープ外。Driver/Bridge 双方が触る API は **スケッチ** までを示し、実装 Issue で詳細化する。
 
@@ -13,11 +13,14 @@
 
 ## 全体方針
 
-1. driver は events.yaml の `bytes.max_length` 集合を解析し、`max_payload_size = max(全 bytes.max_length) + 固定オーバーヘッド` を **handshake 時に Bridge へ宣言** する
-2. Bridge は受け取った `max_payload_size` で **`ShmHeader.slot_size` を確定** し、`RING_CAPACITY × slot_size` の shm を確保
-3. ring slot サイズは driver lifetime 内で **固定**。driver 再起動時のみ変えられる
-4. 全 payload が **inline**。`RingSlot::side_offset` / `side_len` は **廃止**
-5. back-pressure はリング満杯のみ（`emit_event` が `0` を返す）。payload size 超過は handshake 時にハードに弾かれるため、`-2` の使い道は events.yaml 違反の防衛的検出のみ
+1. inline tier の対象は events.yaml で `tier` 宣言が `inline`（または省略時の default）の event のみ。`tier: streamed` の event は本書の範囲外（[00-overview.md](./00-overview.md) 参照）
+2. Bridge は **`DEFAULT_SLOT_PAYLOAD` (1024 byte) / `HARD_SLOT_PAYLOAD` (65536 byte)** の 2 つの limit 定数を持つ
+3. driver は inline tier の event の `bytes.max_length` 集合から `max_payload_size = max(各 bytes.max_length) + 固定オーバーヘッド` を計算
+   - `max_payload_size <= DEFAULT_SLOT_PAYLOAD` のとき: **handshake で要求しない**。Bridge は default で確保
+   - 超えるとき: **handshake で `slot_size` を要求**。Bridge は `slot_size <= HARD_SLOT_PAYLOAD` なら受理、超えていれば reject
+4. ring slot サイズは driver lifetime 内で **固定**。driver 再起動時のみ変えられる
+5. 全 inline tier payload が **ring slot に inline 格納**。可変長の動的領域（旧 side_offset / side_len 等）は持たない
+6. back-pressure はリング満杯のみ（`emit_event` が `0` を返す）。payload size 超過は handshake 時にハードに弾かれるため、`-2` の使い道は events.yaml 違反の防衛的検出のみ
 
 ---
 
@@ -25,14 +28,16 @@
 
 本書で決めること:
 
-- ハンドシェイクで `max_payload_size` を決めるプロトコル
+- ハンドシェイクで `slot_size` を決めるプロトコル（`DEFAULT_SLOT_PAYLOAD` / `HARD_SLOT_PAYLOAD` の規約）
 - `ShmHeader` への `slot_size` 追加と stride 計算
-- `RingSlot` の固定サイズ前提の撤廃（payload 部が動的長）
+- `RingSlot` の固定 payload 配列前提の撤廃（payload 部が driver ごとに固定長だが driver 間で異なる）
 - back-pressure 戻り値仕様の簡略化
 - ABI / version の取り扱い方針
 
 スコープ外（**Out of Scope**）:
 
+- streamed tier の実装（[00-overview.md](./00-overview.md) で予約のみ）
+- events.yaml schema への `tier` フィールド追加（別 Issue で `design/16-driver-events-schema.md` を改訂）
 - driver lifetime 中の `slot_size` 変更（driver 再起動でしか変えられない）
 - 同一プロセス内 multi-driver（`design/15-sdk-bindings-api.md` の方針通り別プロセス化）
 - 圧縮（msgpack バイト列をそのまま運ぶ）
@@ -112,17 +117,35 @@ fn slot_ptr(base: *mut u8, header: &ShmHeader, idx: u64) -> *mut u8 {
 
 ## Handshake プロトコル
 
+### limit 規約
+
+Bridge 側に 2 つの定数を持つ:
+
+| 定数 | 値（暫定） | 役割 |
+|---|---|---|
+| `DEFAULT_SLOT_PAYLOAD` | 1024 byte (1 KiB) | driver 要求が無いときに使う slot payload サイズ。MIDI SysEx 1 KB 上限と一致するため、典型 driver は要求不要 |
+| `HARD_SLOT_PAYLOAD` | 65536 byte (64 KiB) | driver 要求の上限。これ超は handshake で reject。1 driver あたり最大メモリ = `RING_CAPACITY (256) × HARD_SLOT_PAYLOAD = 16 MiB` |
+
+両定数は将来 driver.yaml override の余地を残すが、初期は固定（実装 Issue で確定）。
+
+### フロー
+
 driver 起動時、Bridge 側で shm を確保するまでの流れ:
 
 1. **driver 起動** → events.yaml をパース
-2. **driver 側で max_payload_size を計算**:
-   - 全 events の `bytes.max_length` を収集
-   - msgpack encode 後の最大長 + 固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）
+2. **driver 側で `max_payload_size` を計算**:
+   - **`tier: inline`**（または default）の event のみ対象
+   - 該当 event の `bytes.max_length` を収集
+   - msgpack encode 後の最大長 + 固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加算
    - 結果を `max_payload_size: u32` として保持
-3. **driver → Bridge** に `request_ring(max_payload_size)` を送信（control channel 経由）
+3. **driver → Bridge** へ要求送信（control channel 経由）
+   - `max_payload_size <= DEFAULT_SLOT_PAYLOAD` の場合: 要求しない（または "default" として通知）
+   - 超える場合: `request_ring(max_payload_size)` を送信
 4. **Bridge 側で受領**:
-   - **slot_size の確定**: `slot_size = ((max_payload_size + 8) + 3) & !3`（ヘッダ 8 byte を加算した上で 4 byte 倍数へ切り上げ。`payload_len: u32` の natural alignment を slot 全数で維持するため）
-   - **上限チェック**: `slot_size > MAX_SLOT_SIZE` なら reject（実装上限超過）
+   - **slot_size の確定**:
+     - 要求なし → `slot_size = DEFAULT_SLOT_PAYLOAD + 8`（ヘッダ 8 byte 込み、すでに 4 byte 倍数）
+     - 要求あり → `slot_size = ((max_payload_size + 8) + 3) & !3`（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ）
+   - **上限チェック**: `slot_size > HARD_SLOT_PAYLOAD` なら reject（events.yaml 見直し or `tier: streamed` 化を促す）
    - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate。具体式は `shm_mmap_size = (shm_total + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)`（`PAGE_SIZE = 4096`。mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
    - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
 5. **Bridge → driver** に shm fd を返す
@@ -130,12 +153,13 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
 
 control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge との fd 受け渡しプロトコル」と統合する。具体的なソケット手順は実装 Issue で詰める。
 
-### 上限の扱い
+### reject 時の挙動
 
-`MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` を実装上限の初期値とする（暫定）。これにより:
+`slot_size > HARD_SLOT_PAYLOAD` で reject された driver は **起動できない**。driver 作者は次のいずれかで対応する:
 
-- 1 driver あたり最大メモリ = `RING_CAPACITY (256) × MAX_SLOT_SIZE (65536) = 16 MiB`
-- `slot_size > MAX_SLOT_SIZE` となる `max_payload_size`（具体的には `max_payload_size > 65528 byte`）の場合は **events.yaml の `bytes.max_length` を見直す方針**（圧縮するか、論理的に分割するか）
+- events.yaml の `bytes.max_length` を見直し、HARD 上限内に収める
+- 大型 payload を扱う event を `tier: streamed` 化（streamed tier 実装後）
+- payload を論理的に分割する（複数 event に切る）
 
 `slot_size > MAX_SLOT_SIZE` となる driver は handshake で reject され、起動できない。
 
@@ -153,27 +177,24 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 
 ちょうど `slot_size - 8`（= 確定後の payload 領域上限）バイトの payload は **収まる**（境界条件は strict greater-than）。
 
-side channel 案で必要だった「side channel フル」の概念がなくなる。`-2` の発生は実質 events.yaml validator の仕事で、handshake 時の `max_payload_size` 宣言が正しければ runtime で `-2` は出ない（防衛的に残すのみ）。
+`-2` の発生は実質 events.yaml validator の仕事で、handshake 時の `max_payload_size` 宣言が正しければ runtime で `-2` は出ない（防衛的に残すのみ）。
 
 ---
 
 ## メモリ予算
 
-driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPACITY (256) × slot_size` を 4 KiB ページに切り上げた値が実 shm 容量。`slot_size` は `((max_payload_size + 8) + 3) & !3` で確定する。
+driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPACITY (256) × slot_size` を 4 KiB ページに切り上げた値が実 shm 容量。`slot_size` は handshake で確定（前述）。
 
-| ユースケース | `bytes.max_length` の最大 | `slot_size`（確定値） | 実 shm 容量（ページ整列後） |
-|---|---|---|---|
-| MIDI（SysEx 1 KB 上限） | 1024 byte | 1032 byte | 260 KiB（`56 + 256 × 1032 = 264,248 byte → 65 ページ = 266,240 byte`）|
-| OSC（典型的な float / int / 短い blob） | 256 byte | 264 byte | 68 KiB（`56 + 256 × 264 = 67,640 byte → 17 ページ = 69,632 byte`）|
-| 大型 OSC blob 想定 | 4096 byte | 4104 byte | 1028 KiB（`56 + 256 × 4104 = 1,050,680 byte → 257 ページ = 1,052,672 byte`）|
-| 仮想：長尺 SysEx | 16384 byte | 16392 byte | 4100 KiB（`56 + 256 × 16392 = 4,196,408 byte → 1025 ページ = 4,198,400 byte`）|
-| 上限超過 | > 65528 byte | reject | 起動不可 |
+| ユースケース | `bytes.max_length` の最大 | handshake | `slot_size`（確定値） | 実 shm 容量（ページ整列後） |
+|---|---|---|---|---|
+| MIDI（SysEx 1 KB 上限） | 1024 byte | 要求なし（default 内） | 1032 byte | 260 KiB（`56 + 256 × 1032 = 264,248 byte → 65 ページ = 266,240 byte`）|
+| OSC（典型的な float / int / 短い blob） | 256 byte | 要求なし | 1032 byte | 260 KiB（同上、default で確保） |
+| 大型 OSC blob 想定 | 4096 byte | 要求あり | 4104 byte | 1028 KiB（`56 + 256 × 4104 = 1,050,680 byte → 257 ページ = 1,052,672 byte`）|
+| 仮想：長尺 SysEx | 16384 byte | 要求あり | 16392 byte | 4100 KiB（`56 + 256 × 16392 = 4,196,408 byte → 1025 ページ = 4,198,400 byte`）|
+| HARD 超過 | > 65528 byte | reject | — | 起動不可 |
 
-> `max_payload_size > MAX_SLOT_SIZE - 8 byte = 65528 byte` のケースは reject される（`slot_size` が `MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` を超えるため）。
-
-`MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` 上限なら、1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
-
-side channel 案との比較は [README.md](./README.md) 参照。
+> default 内の driver は handshake で `slot_size` を要求しないため、Bridge 側で `DEFAULT_SLOT_PAYLOAD + 8 = 1032 byte` の slot で確保される（OSC のように `max_payload_size` が default より小さい場合も同じ slot サイズ）。
+> HARD 上限なら 1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
 
 ---
 
@@ -298,20 +319,21 @@ policy は side channel 案と同じく:
 
 ## 既存ドキュメントへの波及
 
-採用された場合、実装 Issue で以下の更新が必要:
+実装 Issue（[00-overview.md](./00-overview.md) 参照）で以下の更新が必要:
 
 - `design/15-sdk-bindings-api.md`
   - 「SPSC スロットレイアウトの変更」の `RingSlot` 定義から `side_offset` / `side_len` を削除
-  - 「`emit_event` の戻り値」節を本案の簡略化に合わせて更新
-  - 「side channel」節を撤回し、本案へのリンクに置き換え
-- `design/16-driver-events-schema.md`
-  - 「SysEx の表現」節の `max_length: 1024` 由来コメントを本案の `slot_size` 説明にリンク
+  - 「`emit_event` の戻り値」節を本書の簡略化に合わせて更新（`-2` の発生条件を `events.yaml` の `max_length` 違反に限定）
+  - 「side channel」言及があれば撤回し、`design/17-driver-comm/` への参照に置き換え
+- `design/16-driver-events-schema.md`（**別 Issue**）
+  - events 定義に `tier: inline | streamed` を追加（default `inline`）
+  - 「SysEx の表現」節の `max_length: 1024` 由来コメントを `design/17-driver-comm/01-inline-ring.md` にリンク
 - `crates/midori-core/src/shm.rs`
   - `RingSlot` から `side_offset` / `side_len` / `_pad2` を削除
   - `payload` を動的サイズに変更（stride 計算に切り替え）
   - `ShmHeader` に `slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加。**総サイズが 16 byte → 56 byte に拡大**
   - **RingSlot 配列の開始 offset が 16 → 56 へ変わる**：現状のモジュールコメント（`offset 16: slots[RING_CAPACITY]` と書かれている）と、ヘッダから slot を引き出す全コード（FFI 含む）を `size_of::<ShmHeader>()` で算出する形に修正
-  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/proposals/variable-ring.md`、または採用後の正式パス）への参照に置き換え。`offset 16: slots[...]` 行は新サイズ（56）または `size_of::<ShmHeader>()` 相対の表記へ更新
+  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/17-driver-comm/01-inline-ring.md`）への参照に置き換え。`offset 16: slots[...]` 行は新サイズ（56）または `size_of::<ShmHeader>()` 相対の表記へ更新
   - `PAYLOAD_INLINE_MAX` 定数および関連 `assert!` を削除
   - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新（`align == 8` は据え置き）
   - 既存テスト `ring_slot_is_repr_c_and_fixed_size`（`assert!(size_of::<RingSlot>() == 264)`）は **削除**（`RingSlot` が動的サイズになるため固定サイズ assertion は意味を失う）
@@ -319,7 +341,7 @@ policy は side channel 案と同じく:
 - `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs`
   - `RingProducer` / `RingConsumer` の API に `slot_size` を導入
   - `midori_sdk_spsc_*` の C ABI を `slot_size` 受け取りに拡張（major bump）
-  - **FFI 戻り値型の major breaking change**: 現在 `midori_sdk_spsc_push` / `midori_sdk_spsc_pop` は `u8` を返すが、本案で導入する `-2`（payload size 超過）の負値を表現するため **`int32_t`（または `int8_t`）** へ変更する必要がある。すべての言語ラッパー（PyO3 / napi-rs / C ヘッダ）も連動更新
+  - **FFI 戻り値型の major breaking change**: 現在 `midori_sdk_spsc_push` / `midori_sdk_spsc_pop` は `u8` を返すが、本書で導入する `-2`（payload size 超過）の負値を表現するため **`int32_t`（または `int8_t`）** へ変更する必要がある。すべての言語ラッパー（PyO3 / napi-rs / C ヘッダ）も連動更新
 - テスト全般（本リポジトリのテストは `crates/<name>/src/*.rs` 内の `#[cfg(test)] mod tests` に同居している。専用 `tests/` ディレクトリは現状無いので、改修は `src/` 内で完結する）
   - `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs` の既存テスト（`PAYLOAD_INLINE_MAX` / 264 byte 固定 slot サイズに依存している箇所）を、`ShmHeader.slot_size` 由来の動的サイズ前提へ書き換え
   - SPSC ring を attach する SDK API（`RingProducer` / `RingConsumer`）と C ABI（`midori_sdk_spsc_*`）に `slot_size` 引数が増えたパスを通すテストを更新／追加
@@ -329,8 +351,7 @@ policy は side channel 案と同じく:
 
 ## 参考リンク
 
-- [side-channel.md](./side-channel.md) — 案 A（比較対象）
-- [README.md](./README.md) — 両案の比較と採否判断材料
+- [00-overview.md](./00-overview.md) — driver↔bridge 配送戦略の総論（tier モデル、limit 規約）
 - `design/15-sdk-bindings-api.md` — SDK バインディング API 設計
-- `design/16-driver-events-schema.md` — events.yaml スキーマ（`bytes.max_length` の上限値定義）
-- `crates/midori-core/src/shm.rs` — 現在の `RingSlot` 実装
+- `design/16-driver-events-schema.md` — events.yaml スキーマ（`bytes.max_length` の上限値定義 / `tier` 宣言）
+- `crates/midori-core/src/shm.rs` — 現在の `RingSlot` 実装（本書採用後に改訂対象）

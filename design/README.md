@@ -23,6 +23,7 @@
 | [13-ecosystem-readiness.md](./13-ecosystem-readiness.md) | エコシステム整備 TODO（契約・規約・導線の準備項目） |
 | [15-sdk-bindings-api.md](./15-sdk-bindings-api.md) | SDK バインディング API 設計（C / Node.js / Python の L1/L2/L3 レイヤーモデル） |
 | [16-driver-events-schema.md](./16-driver-events-schema.md) | Driver `events.yaml` スキーマ仕様（型語彙・binding_filter・SysEx・GUI 流用） |
+| [17-driver-comm/](./17-driver-comm/) | Driver↔Bridge コミュニケーション戦略（tier モデル、inline ring 詳細、streamed 予約） |
 | [proposals/](./proposals/) | 検討中の設計案（複数案を並走させて比較中。採用後は番号付きファイルへ昇格）|
 | [layers/cross/timing.md](./layers/cross/timing.md) | tick 仕様・pulse リセット・MIDI タイミング |
 | [config/00-component-types.md](./config/00-component-types.md) | component type 一覧（primitive value・必須フィールド・描画コンポーネント） |
