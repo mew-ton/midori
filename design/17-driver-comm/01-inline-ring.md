@@ -14,10 +14,10 @@
 ## 全体方針
 
 1. inline tier の対象は events.yaml で `tier` 宣言が `inline`（または省略時の default）の event のみ。`tier: streamed` の event は本書の範囲外（[00-overview.md](./00-overview.md) 参照）
-2. Bridge は **`DEFAULT_SLOT_PAYLOAD` (1024 byte) / `HARD_SLOT_PAYLOAD` (65536 byte)** の 2 つの limit 定数を持つ
-3. driver は inline tier の event の `bytes.max_length` 集合から `max_payload_size = max(各 bytes.max_length) + 固定オーバーヘッド` を計算
-   - `max_payload_size <= DEFAULT_SLOT_PAYLOAD` のとき: **handshake で要求しない**。Bridge は default で確保
-   - 超えるとき: **handshake で `slot_size` を要求**。Bridge は `slot_size <= HARD_SLOT_PAYLOAD` なら受理、超えていれば reject
+2. Bridge は **`DEFAULT_SLOT_SIZE` (1032 byte) / `HARD_SLOT_SIZE` (65536 byte)** の 2 つの slot 全体サイズ定数を持つ
+3. driver は inline tier の event の `bytes.max_length` 集合から `max_payload_size = max(各 bytes.max_length) + 固定オーバーヘッド` を計算し、必要 slot_size を `((max_payload_size + 8) + 3) & !3` で求める
+   - `slot_size <= DEFAULT_SLOT_SIZE` のとき: **handshake で要求しない**。Bridge は default で確保
+   - 超えるとき: **handshake で `slot_size` を要求**。Bridge は `slot_size <= HARD_SLOT_SIZE` なら受理、超えていれば reject
 4. ring slot サイズは driver lifetime 内で **固定**。driver 再起動時のみ変えられる
 5. 全 inline tier payload が **ring slot に inline 格納**。可変長の動的領域（旧 side_offset / side_len 等）は持たない
 6. back-pressure はリング満杯のみ（`emit_event` が `0` を返す）。payload size 超過は handshake 時にハードに弾かれるため、`-2` の使い道は events.yaml 違反の防衛的検出のみ
@@ -28,7 +28,7 @@
 
 本書で決めること:
 
-- ハンドシェイクで `slot_size` を決めるプロトコル（`DEFAULT_SLOT_PAYLOAD` / `HARD_SLOT_PAYLOAD` の規約）
+- ハンドシェイクで `slot_size` を決めるプロトコル（`DEFAULT_SLOT_SIZE` / `HARD_SLOT_SIZE` の規約）
 - `ShmHeader` への `slot_size` 追加と stride 計算
 - `RingSlot` の固定 payload 配列前提の撤廃（payload 部が driver ごとに固定長だが driver 間で異なる）
 - back-pressure 戻り値仕様の簡略化
@@ -121,12 +121,12 @@ fn slot_ptr(base: *mut u8, header: &ShmHeader, idx: u64) -> *mut u8 {
 
 ### limit 規約
 
-Bridge 側に 2 つの定数を持つ:
+Bridge 側に 2 つの定数を持つ。両者ともに **slot 全体のバイト数**（ヘッダ 8 byte + payload + alignment padding を含む）を表す:
 
 | 定数 | 値（暫定） | 役割 |
 |---|---|---|
-| `DEFAULT_SLOT_PAYLOAD` | 1024 byte (1 KiB) | driver 要求が無いときに使う slot payload サイズ。MIDI SysEx 1 KB 上限と一致するため、典型 driver は要求不要 |
-| `HARD_SLOT_PAYLOAD` | 65536 byte (64 KiB) | driver 要求の上限。これ超は handshake で reject。1 driver あたり最大メモリ = `RING_CAPACITY (256) × HARD_SLOT_PAYLOAD = 16 MiB` |
+| `DEFAULT_SLOT_SIZE` | 1032 byte | driver 要求が無いときに確保する slot 全体サイズ。payload 容量は `1032 - 8 = 1024 byte` で MIDI SysEx 1 KiB 上限と一致するため、典型 driver は要求不要 |
+| `HARD_SLOT_SIZE` | 65536 byte (64 KiB) | driver 要求の上限。`slot_size > HARD_SLOT_SIZE` は handshake で reject。1 driver あたり最大メモリ = `RING_CAPACITY (256) × HARD_SLOT_SIZE = 16 MiB`（exact） |
 
 両定数は将来 driver.yaml override の余地を残すが、初期は固定（実装 Issue で確定）。
 
@@ -135,19 +135,19 @@ Bridge 側に 2 つの定数を持つ:
 driver 起動時、Bridge 側で shm を確保するまでの流れ:
 
 1. **driver 起動** → events.yaml をパース
-2. **driver 側で `max_payload_size` を計算**:
+2. **driver 側で `max_payload_size` と必要 `slot_size` を計算**:
    - **`tier: inline`**（または default）の event のみ対象
    - 該当 event の `bytes.max_length` を収集
-   - msgpack encode 後の最大長 + 固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加算
-   - 結果を `max_payload_size: u32` として保持
+   - msgpack encode 後の最大長 + 固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加算 → `max_payload_size: u32`
+   - **必要 `slot_size = ((max_payload_size + 8) + 3) & !3`**（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ）
 3. **driver → Bridge** へ要求送信（control channel 経由）
-   - `max_payload_size <= DEFAULT_SLOT_PAYLOAD` の場合: 要求しない（または "default" として通知）
-   - 超える場合: `request_ring(max_payload_size)` を送信
+   - `slot_size <= DEFAULT_SLOT_SIZE` の場合: 要求しない（または "default" として通知）
+   - 超える場合: `request_ring(slot_size)` を送信
 4. **Bridge 側で受領**:
    - **slot_size の確定**:
-     - 要求なし → `slot_size = DEFAULT_SLOT_PAYLOAD + 8`（ヘッダ 8 byte 込み、すでに 4 byte 倍数）
-     - 要求あり → `slot_size = ((max_payload_size + 8) + 3) & !3`（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ）
-   - **上限チェック**: `slot_size > HARD_SLOT_PAYLOAD` なら reject（events.yaml 見直し or `tier: streamed` 化を促す）
+     - 要求なし → `slot_size = DEFAULT_SLOT_SIZE` (= 1032 byte)
+     - 要求あり → 受信した `slot_size` をそのまま採用
+   - **上限チェック**: `slot_size > HARD_SLOT_SIZE` なら reject（events.yaml 見直し or `tier: streamed` 化を促す）
    - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate。具体式は `shm_mmap_size = (shm_total + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)`（`PAGE_SIZE = 4096`。mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
    - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
 5. **Bridge → driver** に shm fd を返す
@@ -157,13 +157,13 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 
 ### reject 時の挙動
 
-`slot_size > HARD_SLOT_PAYLOAD` で reject された driver は **起動できない**。driver 作者は次のいずれかで対応する:
+`slot_size > HARD_SLOT_SIZE` で reject された driver は **起動できない**。driver 作者は次のいずれかで対応する:
 
 - events.yaml の `bytes.max_length` を見直し、HARD 上限内に収める
 - 大型 payload を扱う event を `tier: streamed` 化（streamed tier 実装後）
 - payload を論理的に分割する（複数 event に切る）
 
-`slot_size > HARD_SLOT_PAYLOAD` となる driver は handshake で reject され、起動できない。
+`slot_size > HARD_SLOT_SIZE` となる driver は handshake で reject され、起動できない。
 
 ---
 
@@ -193,10 +193,10 @@ driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPA
 | OSC（典型的な float / int / 短い blob） | 256 byte | 要求なし | 1032 byte | 260 KiB（同上、default で確保） |
 | 大型 OSC blob 想定 | 4096 byte | 要求あり | 4104 byte | 1028 KiB（`56 + 256 × 4104 = 1,050,680 byte → 257 ページ = 1,052,672 byte`）|
 | 仮想：長尺 SysEx | 16384 byte | 要求あり | 16392 byte | 4100 KiB（`56 + 256 × 16392 = 4,196,408 byte → 1025 ページ = 4,198,400 byte`）|
-| HARD 超過 | > 65528 byte | reject | — | 起動不可 |
+| HARD 超過 | > 65528 byte（slot_size > 65536 となる） | reject | — | 起動不可 |
 
-> default 内の driver は handshake で `slot_size` を要求しないため、Bridge 側で `DEFAULT_SLOT_PAYLOAD + 8 = 1032 byte` の slot で確保される（OSC のように `max_payload_size` が default より小さい場合も同じ slot サイズ）。
-> HARD 上限なら 1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
+> default 内の driver は handshake で `slot_size` を要求しないため、Bridge 側で `DEFAULT_SLOT_SIZE = 1032 byte` の slot で確保される（OSC のように `max_payload_size` が default より小さい場合も同じ slot サイズ）。
+> HARD 上限なら 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB` ちょうど。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
 
 ---
 

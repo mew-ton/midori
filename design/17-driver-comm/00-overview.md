@@ -62,20 +62,23 @@ adapter 側の binding YAML には tier の語彙が現れない。これは「d
 
 ## limit 規約（inline tier）
 
-inline tier の slot サイズは Bridge 側に 2 つの定数を持つ:
+inline tier の slot サイズは Bridge 側に 2 つの定数を持つ。両者ともに **slot 全体のバイト数**（ヘッダ 8 byte + payload + alignment padding を含む）を表す:
 
 | 定数 | 値（暫定） | 役割 |
 |---|---|---|
-| `DEFAULT_SLOT_PAYLOAD` | 1024 byte (1 KiB) | driver から要求が無いときの slot payload サイズ。MIDI SysEx 1 KB 上限と一致 |
-| `HARD_SLOT_PAYLOAD` | 65536 byte (64 KiB) | driver 要求の上限。これ超は handshake で reject |
+| `DEFAULT_SLOT_SIZE` | 1032 byte | driver から要求が無いときに確保する slot 全体サイズ。payload 容量は `1032 - 8 = 1024 byte` で MIDI SysEx 1 KiB 上限と一致 |
+| `HARD_SLOT_SIZE` | 65536 byte (64 KiB) | driver 要求の上限。`slot_size > HARD_SLOT_SIZE` は handshake で reject |
 
 Driver 側の振る舞い:
 
 - inline tier の events から `max_payload_size = max(各 bytes.max_length) + 固定オーバーヘッド` を計算
-- `max_payload_size <= DEFAULT_SLOT_PAYLOAD`: handshake で要求しない（Bridge が default で確保）
-- 超える: handshake で `slot_size` を要求。Bridge は `slot_size <= HARD_SLOT_PAYLOAD` なら受理、超過なら reject
+- 必要 `slot_size = ((max_payload_size + 8) + 3) & !3`（4 byte align、詳細は [01-inline-ring.md](./01-inline-ring.md)）
+- `slot_size <= DEFAULT_SLOT_SIZE`: handshake で要求しない（Bridge が default で確保）
+- 超える: handshake で `slot_size` を要求。Bridge は `slot_size <= HARD_SLOT_SIZE` なら受理、超過なら reject
 
 reject されたら driver 起動失敗。driver 作者は events.yaml の `bytes.max_length` を見直すか、該当 event を `tier: streamed` 化する。
+
+メモリ予算: 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB`。multi-driver 構成でも合計数十 MiB に収まる。
 
 詳細プロトコル・slot レイアウト・メモリ順序などは [01-inline-ring.md](./01-inline-ring.md)。
 
