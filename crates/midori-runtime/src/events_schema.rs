@@ -318,6 +318,10 @@ pub fn validate(schema: &EventsSchema) -> Result<(), Vec<ValidationError>> {
         });
     }
 
+    for (field_name, spec) in &schema.defaults {
+        validate_field_spec(&format!("defaults.{field_name}"), spec, &mut errors);
+    }
+
     for (event_name, event) in &schema.events {
         validate_event(event_name, event, &mut errors);
     }
@@ -706,6 +710,26 @@ events:
         );
         let errors = validate(&schema).unwrap_err();
         assert!(errors.iter().any(|e| e.message.contains("positive")));
+    }
+
+    #[test]
+    fn it_should_validate_defaults_field_specs() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8 }
+defaults:
+  bad: { type: uint8, range: [10, 5] }
+",
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.path == "defaults.bad"),
+            "defaults.bad should be reported"
+        );
     }
 
     #[test]
