@@ -1,13 +1,15 @@
-# Side Channel レイアウト仕様
+# Side Channel レイアウト案（検討中）
 
-> ステータス：設計フェーズ
+> ステータス：**検討中（採否未決定）**
 > 最終更新：2026-04-28
+
+本書は oversized event payload を運ぶ方式の **案 A**。**案 B（[variable-ring.md](./variable-ring.md)）** と比較検討中。両案の比較と採否判断材料は [README.md](./README.md) を参照。
 
 `design/15-sdk-bindings-api.md`「SPSC スロットレイアウトの変更」で確保された
 `RingSlot::side_offset` / `RingSlot::side_len` は、`PAYLOAD_INLINE_MAX`
 （240 byte）を超える msgpack payload を逃すための「別 mmap 領域（**side
 channel**）」を指すフィールドである。本ドキュメントはその side channel の
-実体を規定する。
+実体を **案 A** として規定する。
 
 `design/16-driver-events-schema.md` の `bytes` 型 `max_length` 上限（SysEx で
 1024 byte）は side channel の存在を前提に書かれており、本ドキュメントが完成
