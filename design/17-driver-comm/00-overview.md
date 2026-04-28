@@ -71,9 +71,9 @@ inline tier の slot サイズは Bridge 側に 2 つの定数を持つ。両者
 
 Driver 側の振る舞い:
 
-- inline tier の events ごとに **その event 内の全 `bytes` / `string` 等可変長フィールドの `max_length` を合算** し、msgpack エンコード後の最大長として求める（複数の可変長フィールドが同時に最大になるケースを過小見積もりしないため）
-- 全 inline tier event の中で最大の合算値に固定オーバーヘッド（type 文字列・key 名・msgpack タグ等）を加えたものを `max_payload_size` とする
-- 必要 `slot_size = ((max_payload_size + 8) + 3) & !3`（4 byte align、詳細は [01-inline-ring.md](./01-inline-ring.md)）
+- inline tier の event ごとに **msgpack worst-case payload サイズ**（map / key / 各 value の worst-case を加算したもの）を算出し、event 間で最大値を `max_payload_size` とする
+  - **算出規約の詳細**（map ヘッダ、各 type の msgpack worst-case 等）は [01-inline-ring.md](./01-inline-ring.md)「Handshake プロトコル」step 2 の表を **唯一の規範** とする。本書は summary
+- 必要 `slot_size = ((max_payload_size + 8) + 3) & !3`（4 byte align）
 - `slot_size <= DEFAULT_SLOT_SIZE`: handshake で要求しない（Bridge が default で確保）
 - 超える: handshake で `slot_size` を要求。Bridge は `slot_size <= HARD_SLOT_SIZE` なら受理、超過なら reject
 
