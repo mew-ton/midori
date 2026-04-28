@@ -62,23 +62,7 @@ slot offset 8:  payload: [u8; slot_size - 8]
 
 > **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。driver は **算出時に `slot_size = ((max_payload_size + 8) + 3) & !3` で丸める**。Bridge は受領した `slot_size` が 4 byte 倍数であることを **必ず検証** し、違反時は handshake を reject する（ABI 安全性の根幹のため driver 実装バグや不正入力に対する防衛）。公式に従えば alignment violation は自動的に防げる。
 
-### 現行 RingSlot との差分
-
-`crates/midori-core/src/shm.rs` の現行 `RingSlot` 実装からの変更点:
-
-| フィールド | 現行 | 本案 |
-|---|---|---|
-| `occupied: u8` + `_pad: [u8; 3]` | あり | あり |
-| `payload_len: u32` | あり | あり |
-| `side_offset: u64` | あり | **廃止** |
-| `side_len: u32` | あり | **廃止** |
-| `_pad2: [u8; 4]` | あり | **廃止** |
-| `payload: [u8; PAYLOAD_INLINE_MAX]` | 固定 240 byte | **動的（`slot_size - 8`）** |
-| 1 スロットの総バイト数 | 264 固定 | `slot_size`（handshake で決定） |
-
-`PAYLOAD_INLINE_MAX` 定数も不要となる。
-
-### ShmHeader の拡張
+### ShmHeader レイアウト
 
 ```rust
 #[repr(C)]
@@ -86,15 +70,14 @@ pub struct ShmHeader {
     pub write_index: AtomicU64,
     pub read_index: AtomicU64,
     pub slot_size: u32,        // バイト単位、handshake で決まる（4 byte 倍数）
-    pub version: u32,          // ABI version（本案で導入。初期値 1）
-    // 将来フィールド追加余地（append-only minor bump 時に消費）。
+    pub version: u32,          // ABI version（初期値 1）
+    // 将来フィールド追加余地（append-only な version up 時に消費）。
     // 32 byte 確保しておくと、ヘッダ前段 24 byte と合わせて総 56 byte となり、
     // 64 byte cache line 1 本以内に収まる（残り 8 byte は将来追加分の余裕）
     pub _pad: [u8; 32],
 }
 
-// 採用時はコンパイル時アサーションで lock する（既存 ShmHeader 16 byte
-// アサーションを置き換える）:
+// コンパイル時に size / alignment を lock:
 //   const _: () = assert!(std::mem::size_of::<ShmHeader>() == 56);
 //   const _: () = assert!(std::mem::align_of::<ShmHeader>() == 8);
 ```
@@ -184,7 +167,7 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 
 ## 戻り値仕様
 
-`emit_event` 戻り値（本案で簡略化）:
+`emit_event` 戻り値:
 
 | ケース | 戻り値 | 意味 |
 |---|---|---|
@@ -373,41 +356,9 @@ fn validate_compat(header: &ShmHeader) -> Result<(), CompatError> {
 
 ---
 
-## 既存ドキュメントへの波及
-
-実装 Issue（[00-overview.md](./00-overview.md) 参照）で以下の更新が必要:
-
-- `design/15-sdk-bindings-api.md`
-  - 「SPSC スロットレイアウトの変更」の `RingSlot` 定義から `side_offset` / `side_len` を削除
-  - 「`emit_event` の戻り値」節を本書の簡略化に合わせて更新（`-2` の発生条件を `events.yaml` の `max_length` 違反に限定）
-  - 「side channel」言及があれば撤回し、`design/17-driver-comm/` への参照に置き換え
-- `design/16-driver-events-schema.md`（**別 Issue**）
-  - events 定義に `tier: inline | streamed` を追加（default `inline`）
-  - 「SysEx の表現」節の `max_length: 1024` 由来コメントを `design/17-driver-comm/01-inline-ring.md` にリンク
-- `crates/midori-core/src/shm.rs`
-  - `RingSlot` から `side_offset` / `side_len` / `_pad2` を削除
-  - `payload` を動的サイズに変更（stride 計算に切り替え）
-  - `ShmHeader` に `slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加。**総サイズが 16 byte → 56 byte に拡大**
-  - **RingSlot 配列の開始 offset が 16 → 56 へ変わる**：現状のモジュールコメント（`offset 16: slots[RING_CAPACITY]` と書かれている）と、ヘッダから slot を引き出す全コード（FFI 含む）を `size_of::<ShmHeader>()` で算出する形に修正
-  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/17-driver-comm/01-inline-ring.md`）への参照に置き換え。`offset 16: slots[...]` 行は新サイズ（56）または `size_of::<ShmHeader>()` 相対の表記へ更新
-  - `PAYLOAD_INLINE_MAX` 定数および関連 `assert!` を削除
-  - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新（`align == 8` は据え置き）
-  - 既存テスト `ring_slot_is_repr_c_and_fixed_size`（`assert!(size_of::<RingSlot>() == 264)`）は **削除**（`RingSlot` が動的サイズになるため固定サイズ assertion は意味を失う）
-  - 代わりに `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を runtime で検証する初期化ガードを追加
-- `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs`
-  - `RingProducer` / `RingConsumer` の API に `slot_size` を導入
-  - `midori_sdk_spsc_*` の C ABI を `slot_size` 受け取りに拡張（major bump）
-  - **FFI 戻り値型の major breaking change**: 現在 `midori_sdk_spsc_push` / `midori_sdk_spsc_pop` は `u8` を返すが、本書で導入する `-2`（payload size 超過）の負値を表現するため **`int32_t`（または `int8_t`）** へ変更する必要がある。すべての言語ラッパー（PyO3 / napi-rs / C ヘッダ）も連動更新
-- テスト全般（本リポジトリのテストは `crates/<name>/src/*.rs` 内の `#[cfg(test)] mod tests` に同居している。専用 `tests/` ディレクトリは現状無いので、改修は `src/` 内で完結する）
-  - `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs` の既存テスト（`PAYLOAD_INLINE_MAX` / 264 byte 固定 slot サイズに依存している箇所）を、`ShmHeader.slot_size` 由来の動的サイズ前提へ書き換え
-  - SPSC ring を attach する SDK API（`RingProducer` / `RingConsumer`）と C ABI（`midori_sdk_spsc_*`）に `slot_size` 引数が増えたパスを通すテストを更新／追加
-  - `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を起動時に検証する unit test を `crates/midori-core/src/shm.rs` に新設（前述の runtime ガードと一対）
-
----
-
 ## 参考リンク
 
 - [00-overview.md](./00-overview.md) — driver↔bridge 配送戦略の総論（tier モデル、limit 規約）
 - `design/15-sdk-bindings-api.md` — SDK バインディング API 設計
 - `design/16-driver-events-schema.md` — events.yaml スキーマ（`bytes.max_length` の上限値定義 / `tier` 宣言）
-- `crates/midori-core/src/shm.rs` — 現在の `RingSlot` 実装（本書採用後に改訂対象）
+- `crates/midori-core/src/shm.rs` — `RingSlot` / `ShmHeader` 実装
