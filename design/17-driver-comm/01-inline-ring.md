@@ -60,7 +60,7 @@ slot offset 8:  payload: [u8; slot_size - 8]
 
 ヘッダ部分（`occupied: u8` + `_pad: [u8; 3]` + `payload_len: u32` の合計 8 byte）は固定オフセットに置き、payload は **`slot_size - 8` バイト**続く。`slot_size` は handshake で決まり、`ShmHeader.slot_size` に格納される。
 
-> **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。この保証は **driver 側で算出時に `slot_size = ((max_payload_size + 8) + 3) & !3` で丸めること** により担保される（Bridge は受領した `slot_size` の 4 byte 倍数性を検証してもよい）。Driver 側で alignment violation を懸念する必要はない（公式に従えば自動的に満たされる）。
+> **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。driver は **算出時に `slot_size = ((max_payload_size + 8) + 3) & !3` で丸める**。Bridge は受領した `slot_size` が 4 byte 倍数であることを **必ず検証** し、違反時は handshake を reject する（ABI 安全性の根幹のため driver 実装バグや不正入力に対する防衛）。公式に従えば alignment violation は自動的に防げる。
 
 ### 現行 RingSlot との差分
 
@@ -151,16 +151,17 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
      | 配列（`max_length` 指定あり） | 配列ヘッダタグ（要素数に応じた 1/3/5 byte）+ 各要素 worst-case × `max_length` |
 
    - 全 inline tier event の中で **最大の worst-case サイズ** を `max_payload_size: u32` とする
-   - **必要 `slot_size = ((max_payload_size + 8) + 3) & !3`**（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ）
+   - **必要 `slot_size = ((max_payload_size + 8) + 3) & !3`**（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ。`!3` は bitwise NOT で `0xFFFF...FFFC` を生成し下位 2 bit をマスクするイディオム。算術等価式: `((max_payload_size + 8 + 3) / 4) * 4`）
 
    この algorithm は本書を **唯一の規範** とする（[00-overview.md](./00-overview.md) は summary で参照するのみ）。
-3. **driver → Bridge** へ要求送信（control channel 経由）
-   - `slot_size <= DEFAULT_SLOT_SIZE` の場合: 要求しない（または "default" として通知）
-   - 超える場合: `request_ring(slot_size)` を送信
+3. **driver → Bridge** へ `request_ring(slot_size)` を送信（control channel 経由、handshake 必須メッセージ）
+   - `slot_size <= DEFAULT_SLOT_SIZE` の場合: `slot_size = 0`（sentinel）を送信 → Bridge は DEFAULT で確保
+   - 超える場合: 計算した `slot_size` を送信 → Bridge は受信値を採用（ただし上限チェックあり、step 4 参照）
 4. **Bridge 側で受領**:
    - **slot_size の確定**:
-     - 要求なし → `slot_size = DEFAULT_SLOT_SIZE` (= 1032 byte)
-     - 要求あり → 受信した `slot_size` をそのまま採用
+     - 受信値が `0` (sentinel) → `slot_size = DEFAULT_SLOT_SIZE` (= 1032 byte)
+     - それ以外 → 受信した `slot_size` をそのまま採用
+   - **alignment 検証（必須）**: `slot_size % 4 != 0` なら reject（4 byte 倍数性違反は ABI 違反として扱う）
    - **上限チェック**: `slot_size > HARD_SLOT_SIZE` なら reject（events.yaml 見直し or `tier: streamed` 化を促す）
    - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate。具体式は `shm_mmap_size = (shm_total + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)`（`PAGE_SIZE = 4096`。mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
    - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
@@ -301,14 +302,15 @@ impl RingConsumer {
 
 ## ABI / version
 
-`ShmHeader.version: u32` 1 個のみで管理する。
+`ShmHeader.version: u32` 1 個のみで管理する。**この値は単調増加する整数カウンタ**であり、semver の major/minor をエンコードしたものではない（互換性は Bridge 側の `MIN_SUPPORTED_VERSION` / `MAX_SUPPORTED_VERSION` レンジで判定する）。
 
 ### policy 概要
 
 - **初期版の `version` 値は `1`**（最初のリリースで Bridge が handshake 時にこの値を書き込み、`MIN_SUPPORTED_VERSION = MAX_SUPPORTED_VERSION = 1`）
-- ABI に変化があれば minor / major 問わず必ず `version` を増分
+- ABI に変化があれば変更種別を問わず必ず `version` を `+1` 増分（u32 カウンタなので semver のような major/minor の符号化はしない）
 - Bridge は `[MIN_SUPPORTED_VERSION, MAX_SUPPORTED_VERSION]` の範囲で受け入れ
-- 末尾 `_pad` を消費する追加は append-only minor として古い driver も受け入れ続けられる
+- **append-only な変更**（末尾 `_pad` 消費でフィールド追加）は `MAX_SUPPORTED_VERSION` を引き上げるだけで旧 driver も受け入れ続けられる
+- **breaking な変更**（既存フィールドの型・順序・意味の変更）は `MIN_SUPPORTED_VERSION` を引き上げて旧 driver を reject する
 
 ### 受け入れマトリクス
 
@@ -320,12 +322,12 @@ impl RingConsumer {
 
 ### 互換性ルール
 
-| 変更内容 | semver | `version` 更新 | 互換性 |
+| 変更内容 | 変更タイプ | `version` 更新 | 互換性 |
 |---|---|---|---|
-| 末尾の `_pad` を消費して新フィールド追加（既存フィールドの offset を変更しない） | **minor** | `version` を増分 | Bridge が `MAX_SUPPORTED_VERSION` を引き上げれば旧 driver も受け入れ続けられる（**append-only**） |
-| 既存フィールドの型変更・順序変更・意味変更 | **major** | `version` を増分 | 旧 driver は `MIN_SUPPORTED_VERSION` の引き上げで reject される。`midori-core` の major bump とともに driver 再ビルド必須 |
-| `slot_size` 既定値の変更（レイアウト不変） | minor | 不要 | ABI 影響なし |
-| バイトバッファの解釈変更（stride 計算の意味変更等） | **major** | `version` を増分 | レイアウト不変でも解釈差は ABI 互換性に影響するため major 扱い |
+| 末尾の `_pad` を消費して新フィールド追加（既存フィールドの offset を変更しない） | **append-only** | `version` を増分 | Bridge が `MAX_SUPPORTED_VERSION` を引き上げれば旧 driver も受け入れ続けられる |
+| 既存フィールドの型変更・順序変更・意味変更 | **breaking** | `version` を増分 | 旧 driver は `MIN_SUPPORTED_VERSION` の引き上げで reject される。`midori-core` の major bump とともに driver 再ビルド必須 |
+| `slot_size` 既定値の変更（レイアウト不変） | non-ABI | 不要 | ABI 影響なし |
+| バイトバッファの解釈変更（stride 計算の意味変更等） | **breaking** | `version` を増分 | レイアウト不変でも解釈差は ABI 互換性に影響するため breaking 扱い |
 
 「append-only な minor bump」という規律により、Bridge が複数 version を受け入れる実装を入れれば **旧 driver は再ビルドなしで動き続けられる** のが本 ABI 設計の利点。
 
