@@ -55,7 +55,7 @@ slot offset 8:  payload: [u8; slot_size - 8]
 
 ヘッダ部分（`occupied: u8` + `_pad: [u8; 3]` + `payload_len: u32` の合計 8 byte）は固定オフセットに置き、payload は **`slot_size - 8` バイト**続く。`slot_size` は handshake で決まり、`ShmHeader.slot_size` に格納される。
 
-> **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。Bridge は handshake 受領時に `slot_size` を 4 byte 倍数へ切り上げる（後述「Handshake プロトコル」step 4）。
+> **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。この保証は **後述「Handshake プロトコル」step 4** で Bridge が `slot_size` を 4 byte 倍数へ切り上げる処理（`slot_size = ((max_payload_size + 8) + 3) & !3`）により担保される。Driver 側で alignment violation を懸念する必要はない。
 
 ### 旧 RingSlot との差分
 
@@ -79,8 +79,9 @@ pub struct ShmHeader {
     pub write_index: AtomicU64,
     pub read_index: AtomicU64,
     pub slot_size: u32,        // バイト単位、handshake で決まる（4 byte 倍数）
-    pub version: u32,          // ABI version（本案で導入）
-    // 以下は将来拡張余地（cache line align）
+    pub version: u32,          // ABI version（本案で導入。初期値 1）
+    // 将来フィールド追加余地。append-only minor bump 時に消費する
+    // （32 byte で次の cache line（64 byte）境界手前まで埋める形）
     pub _pad: [u8; 32],
 }
 
@@ -121,8 +122,8 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
 4. **Bridge 側で受領**:
    - **slot_size の確定**: `slot_size = ((max_payload_size + 8) + 3) & !3`（ヘッダ 8 byte を加算した上で 4 byte 倍数へ切り上げ。`payload_len: u32` の natural alignment を slot 全数で維持するため）
    - **上限チェック**: `slot_size > MAX_SLOT_SIZE` なら reject（実装上限超過）
-   - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate（mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
-   - `ShmHeader.slot_size` に書き込んで初期化
+   - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate。具体式は `shm_mmap_size = (shm_total + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)`（`PAGE_SIZE = 4096`。mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
+   - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
 5. **Bridge → driver** に shm fd を返す
 6. **driver は fd を mmap し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
 
@@ -130,12 +131,12 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 
 ### 上限の扱い
 
-`MAX_SLOT_SIZE` は実装上限として **64 KiB** を初期値とする（暫定）。これにより:
+`MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` を実装上限の初期値とする（暫定）。これにより:
 
-- 1 driver あたり最大メモリ = `RING_CAPACITY (256) × 64 KiB = 16 MiB`
-- 64 KiB 以下に収まらない場合は **events.yaml の `bytes.max_length` を見直す方針**（圧縮するか、論理的に分割するか）
+- 1 driver あたり最大メモリ = `RING_CAPACITY (256) × MAX_SLOT_SIZE (65536) = 16 MiB`
+- `slot_size > MAX_SLOT_SIZE` となる `max_payload_size`（具体的には `max_payload_size > 65528 byte`）の場合は **events.yaml の `bytes.max_length` を見直す方針**（圧縮するか、論理的に分割するか）
 
-`MAX_SLOT_SIZE` を超える driver は handshake で reject され、起動できない。
+`slot_size > MAX_SLOT_SIZE` となる driver は handshake で reject され、起動できない。
 
 ---
 
@@ -268,6 +269,7 @@ impl RingConsumer {
 
 policy は side channel 案と同じく:
 
+- **初期版の `version` 値は `1`**（最初のリリースで Bridge が handshake 時にこの値を書き込み、`MIN_SUPPORTED_VERSION = MAX_SUPPORTED_VERSION = 1`）
 - ABI に変化があれば minor / major 問わず必ず `version` を増分
 - Bridge は `[MIN_SUPPORTED_VERSION, MAX_SUPPORTED_VERSION]` の範囲で受け入れ
 - 末尾 `_pad` を消費する追加は append-only minor として古い driver も受け入れ続けられる
@@ -318,6 +320,11 @@ policy は side channel 案と同じく:
 - `crates/midori-sdk/src/spsc.rs` / `ffi.rs`
   - `RingProducer` / `RingConsumer` の API に `slot_size` を導入
   - `midori_sdk_spsc_*` の C ABI を `slot_size` 受け取りに拡張（major bump）
+  - **FFI 戻り値型の major breaking change**: 現在 `midori_sdk_spsc_push` / `midori_sdk_spsc_pop` は `u8` を返すが、本案で導入する `-2`（payload size 超過）の負値を表現するため **`int32_t`（または `int8_t`）** へ変更する必要がある。すべての言語ラッパー（PyO3 / napi-rs / C ヘッダ）も連動更新
+- 統合テスト / E2E
+  - `crates/*/tests/` 配下で `RingSlot` / `PAYLOAD_INLINE_MAX` / 264 byte 固定 slot サイズに依存しているケースを洗い出し、`ShmHeader.slot_size` に基づく動的サイズ前提へ書き換え
+  - SPSC ring を attach する SDK API（`RingProducer` / `RingConsumer`）と C ABI（`midori_sdk_spsc_*`）に `slot_size` 引数が増えたパスを通す統合テストを更新／追加
+  - `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を起動時に検証する unit test を新設（前述の runtime ガードと一対）
 
 ---
 
