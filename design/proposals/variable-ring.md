@@ -80,8 +80,9 @@ pub struct ShmHeader {
     pub read_index: AtomicU64,
     pub slot_size: u32,        // バイト単位、handshake で決まる（4 byte 倍数）
     pub version: u32,          // ABI version（本案で導入。初期値 1）
-    // 将来フィールド追加余地。append-only minor bump 時に消費する
-    // （32 byte で次の cache line（64 byte）境界手前まで埋める形）
+    // 将来フィールド追加余地（append-only minor bump 時に消費）。
+    // 32 byte 確保しておくと、ヘッダ前段 24 byte と合わせて総 56 byte となり、
+    // 64 byte cache line 1 本以内に収まる（残り 8 byte は将来追加分の余裕）
     pub _pad: [u8; 32],
 }
 
@@ -158,21 +159,19 @@ side channel 案で必要だった「side channel フル」の概念がなくな
 
 ## メモリ予算
 
-driver ごとの shm 使用量。下表は **概算（`slot_size` を `max_payload_size` のキリの良い値で代用）** で、実値は前述の確定式
-`slot_size = ((max_payload_size + 8) + 3) & !3` および
-`shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size` を 4 KiB ページに切り上げた値となる。
+driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPACITY (256) × slot_size` を 4 KiB ページに切り上げた値が実 shm 容量。`slot_size` は `((max_payload_size + 8) + 3) & !3` で確定する。
 
-| ユースケース | `bytes.max_length` の最大 | `slot_size`（確定値） | 概算 shm 容量 | 実 shm 容量（ページ整列後） |
-|---|---|---|---|---|
-| MIDI（SysEx 1 KB 上限） | 1024 byte | 1032 byte | 256 KiB | 256 KiB（`56 + 256 × 1032 = 264,248 byte → 260 KiB ページ整列`）|
-| OSC（典型的な float / int / 短い blob） | 256 byte | 264 byte | 64 KiB | 68 KiB（`56 + 256 × 264 = 67,640 byte → 68 KiB`）|
-| 大型 OSC blob 想定 | 4096 byte | 4104 byte | 1 MiB | 1.004 MiB（`56 + 256 × 4104 = 1,050,680 byte → 1028 KiB`）|
-| 仮想：長尺 SysEx | 16384 byte | 16392 byte | 4 MiB | 4.003 MiB（`56 + 256 × 16392 = 4,196,408 byte → 4100 KiB`）|
-| 上限超過 | > 65528 byte | reject | — | 起動不可 |
+| ユースケース | `bytes.max_length` の最大 | `slot_size`（確定値） | 実 shm 容量（ページ整列後） |
+|---|---|---|---|
+| MIDI（SysEx 1 KB 上限） | 1024 byte | 1032 byte | 260 KiB（`56 + 256 × 1032 = 264,248 byte → 65 ページ = 266,240 byte`）|
+| OSC（典型的な float / int / 短い blob） | 256 byte | 264 byte | 68 KiB（`56 + 256 × 264 = 67,640 byte → 17 ページ = 69,632 byte`）|
+| 大型 OSC blob 想定 | 4096 byte | 4104 byte | 1028 KiB（`56 + 256 × 4104 = 1,050,680 byte → 257 ページ = 1,052,672 byte`）|
+| 仮想：長尺 SysEx | 16384 byte | 16392 byte | 4100 KiB（`56 + 256 × 16392 = 4,196,408 byte → 1025 ページ = 4,198,400 byte`）|
+| 上限超過 | > 65528 byte | reject | 起動不可 |
 
-> 「概算 shm 容量」は `slot_size` を `max_payload_size` 相当に丸めた目安、「実 shm 容量」は 8 byte ヘッダオーバーヘッドとページ整列を反映した値。`MAX_SLOT_SIZE = 64 KiB - 8 byte = 65528 byte` を超える `max_payload_size` は reject される（slot_size が `MAX_SLOT_SIZE = 65536 byte` に収まらないため）。
+> `max_payload_size > MAX_SLOT_SIZE - 8 byte = 65528 byte` のケースは reject される（`slot_size` が `MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` を超えるため）。
 
-`MAX_SLOT_SIZE = 64 KiB` 上限なら、1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
+`MAX_SLOT_SIZE = 65536 byte (= 64 KiB)` 上限なら、1 driver あたり最大 約 16 MiB。multi-driver 構成でも合計数十 MiB に収まる現実的な予算。
 
 side channel 案との比較は [README.md](./README.md) 参照。
 
@@ -317,14 +316,14 @@ policy は side channel 案と同じく:
   - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新（`align == 8` は据え置き）
   - 既存テスト `ring_slot_is_repr_c_and_fixed_size`（`assert!(size_of::<RingSlot>() == 264)`）は **削除**（`RingSlot` が動的サイズになるため固定サイズ assertion は意味を失う）
   - 代わりに `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を runtime で検証する初期化ガードを追加
-- `crates/midori-sdk/src/spsc.rs` / `ffi.rs`
+- `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs`
   - `RingProducer` / `RingConsumer` の API に `slot_size` を導入
   - `midori_sdk_spsc_*` の C ABI を `slot_size` 受け取りに拡張（major bump）
   - **FFI 戻り値型の major breaking change**: 現在 `midori_sdk_spsc_push` / `midori_sdk_spsc_pop` は `u8` を返すが、本案で導入する `-2`（payload size 超過）の負値を表現するため **`int32_t`（または `int8_t`）** へ変更する必要がある。すべての言語ラッパー（PyO3 / napi-rs / C ヘッダ）も連動更新
-- 統合テスト / E2E
-  - `crates/*/tests/` 配下で `RingSlot` / `PAYLOAD_INLINE_MAX` / 264 byte 固定 slot サイズに依存しているケースを洗い出し、`ShmHeader.slot_size` に基づく動的サイズ前提へ書き換え
-  - SPSC ring を attach する SDK API（`RingProducer` / `RingConsumer`）と C ABI（`midori_sdk_spsc_*`）に `slot_size` 引数が増えたパスを通す統合テストを更新／追加
-  - `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を起動時に検証する unit test を新設（前述の runtime ガードと一対）
+- テスト全般（本リポジトリのテストは `crates/<name>/src/*.rs` 内の `#[cfg(test)] mod tests` に同居している。専用 `tests/` ディレクトリは現状無いので、改修は `src/` 内で完結する）
+  - `crates/midori-sdk/src/spsc.rs` / `crates/midori-sdk/src/ffi.rs` の既存テスト（`PAYLOAD_INLINE_MAX` / 264 byte 固定 slot サイズに依存している箇所）を、`ShmHeader.slot_size` 由来の動的サイズ前提へ書き換え
+  - SPSC ring を attach する SDK API（`RingProducer` / `RingConsumer`）と C ABI（`midori_sdk_spsc_*`）に `slot_size` 引数が増えたパスを通すテストを更新／追加
+  - `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を起動時に検証する unit test を `crates/midori-core/src/shm.rs` に新設（前述の runtime ガードと一対）
 
 ---
 
