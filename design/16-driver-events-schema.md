@@ -31,12 +31,18 @@ events:
       controller: { type: uint7,        optional: false }
       value:      { type: uint7,        optional: false }
     binding_filter: [type, channel, controller]
+```
 
-  oscBlob:                     # 大型 payload は明示的に streamed
-    tier: streamed
+`tier` を明示する例（OSC 系 driver で大型 blob を運ぶ想定）:
+
+```yaml
+# drivers/osc/events.yaml の抜粋
+events:
+  oscBlob:
+    tier: streamed             # 大型 payload は inline ring を経由しない
     fields:
       address: { type: string, max_length: 256 }
-      payload: { type: bytes,  max_length: 65536 }
+      payload: { type: bytes,  max_length: 65536 }  # 値は例示。streamed には HARD_SLOT_SIZE のような硬い上限は無い（実装側の現実的予算による）
     binding_filter: [type, address]
 ```
 
@@ -174,8 +180,8 @@ events:
 
 | tier | 経路 | 速度保証 | サイズ柔軟性 | 用途 |
 |---|---|---|---|---|
-| `inline` (default) | shm SPSC ring（固定 slot） | あり（sub-ms） | なし（slot_size 上限） | MIDI noteOn 等、小サイズ・低レイテンシ要 |
-| `streamed` | shm 以外（pipe / socket 等、将来実装） | なし | あり | OSC blob・audio chunk・文字列等、大型 payload |
+| `inline` (default) | shm SPSC ring（固定 slot） | あり（sub-ms） | なし（`slot_size` 上限あり。`DEFAULT_SLOT_SIZE` / `HARD_SLOT_SIZE` の値は `design/17-driver-comm/01-inline-ring.md` 参照） | MIDI noteOn 等、小サイズ・低レイテンシ要 |
+| `streamed` | shm 以外（pipe / socket 等、将来実装） | なし | あり（硬い上限なし、実装側の現実的予算による） | OSC blob・audio chunk・文字列等、大型 payload |
 
 省略時は `inline` を default 補完。
 
@@ -195,12 +201,12 @@ events:
 
 - `tier` の **構文妥当性**（`inline | streamed` 以外を reject）は **Bridge 側 schema validator が静的に検証** する
 - `tier: streamed` の **実利用可否**（streamed 経路の実装が runtime に存在するか）は **runtime feature-availability check の責務**
-- streamed tier の経路実装が未着手の段階では、driver 作者は宣言だけ書ける（schema validator は通過）が、Bridge 起動時に runtime check で reject される
+- streamed tier の経路実装が未着手の段階では、driver 作者は宣言だけ書ける（schema validator は通過）が、Bridge 起動時に runtime check で **当該 driver の起動を reject**（events.yaml ロード後・ring 確保前。Bridge プロセス全体は継続し、他 driver の起動には影響しない）
 - 経路実装の詳細は本書のスコープ外。`design/17-driver-comm/` 配下を参照（`02-streamed.md` 着手時に追加予定）
 
 ### adapter 側の関与
 
-adapter（Layer 2 / 4 binding YAML）は **tier に無関心**。binding YAML には `tier` の語彙は出現しない。tier 知識は driver↔bridge の責務として閉じる（責務マトリクス: `design/17-driver-comm/00-overview.md`）。
+adapter（Layer 2 / 4 binding YAML）は **tier に無関心**。binding YAML には `tier` の語彙は出現しない。tier 知識は driver↔bridge の責務として閉じる（責任マトリクス: `design/17-driver-comm/00-overview.md`）。
 
 ---
 
