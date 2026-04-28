@@ -308,10 +308,11 @@ policy は side channel 案と同じく:
 - `crates/midori-core/src/shm.rs`
   - `RingSlot` から `side_offset` / `side_len` / `_pad2` を削除
   - `payload` を動的サイズに変更（stride 計算に切り替え）
-  - `ShmHeader` に `slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加（総 56 byte）
-  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/proposals/variable-ring.md`、または採用後の正式パス）への参照に置き換え
+  - `ShmHeader` に `slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加。**総サイズが 16 byte → 56 byte に拡大**
+  - **RingSlot 配列の開始 offset が 16 → 56 へ変わる**：現状のモジュールコメント（`offset 16: slots[RING_CAPACITY]` と書かれている）と、ヘッダから slot を引き出す全コード（FFI 含む）を `size_of::<ShmHeader>()` で算出する形に修正
+  - モジュールコメント（`//!`）の改訂：`side_offset` / `side_len` / `PAYLOAD_INLINE_MAX` への現存参照を **すべて削除** し、本書（`design/proposals/variable-ring.md`、または採用後の正式パス）への参照に置き換え。`offset 16: slots[...]` 行は新サイズ（56）または `size_of::<ShmHeader>()` 相対の表記へ更新
   - `PAYLOAD_INLINE_MAX` 定数および関連 `assert!` を削除
-  - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新
+  - 既存テスト `shm_header_size_and_align`（`assert_eq!(size_of::<ShmHeader>(), 16)`）を **新サイズ 56 byte** へ更新（`align == 8` は据え置き）
   - 既存テスト `ring_slot_is_repr_c_and_fixed_size`（`assert!(size_of::<RingSlot>() == 264)`）は **削除**（`RingSlot` が動的サイズになるため固定サイズ assertion は意味を失う）
   - 代わりに `ShmHeader.slot_size` の最小値 / 4 byte 倍数性を runtime で検証する初期化ガードを追加
 - `crates/midori-sdk/src/spsc.rs` / `ffi.rs`
