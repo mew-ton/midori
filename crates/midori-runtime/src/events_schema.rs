@@ -25,12 +25,53 @@ use serde::Deserialize;
 // =============================================================================
 
 /// Top-level structure of `events.yaml`.
+///
+/// `defaults` は spec 上「全イベント共通フィールドのデフォルト宣言」として
+/// 扱う。本書（loader / validator）は **defaults の field spec 単独を検証
+/// する** が、各 event への merge は行わない。merge を必要とする呼び出し側
+/// （Bridge runtime 経路の確定後に実装）が自分で扱う。
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct EventsSchema {
     pub schema_version: u32,
+    #[serde(deserialize_with = "deserialize_unique_events")]
     pub events: BTreeMap<String, EventDef>,
     #[serde(default)]
     pub defaults: BTreeMap<String, FieldSpec>,
+}
+
+/// `events` map deserializer that rejects duplicate event names.
+///
+/// 通常の `BTreeMap` deserialize は同名キーを silently 上書きするが、
+/// spec は「イベント名衝突」を起動時エラー扱いとしている。
+fn deserialize_unique_events<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, EventDef>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct V;
+    impl<'de> serde::de::Visitor<'de> for V {
+        type Value = BTreeMap<String, EventDef>;
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a map of event names to event definitions")
+        }
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::MapAccess<'de>,
+        {
+            let mut result = BTreeMap::new();
+            while let Some((key, value)) = map.next_entry::<String, EventDef>()? {
+                if result.contains_key(&key) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate event name: {key}"
+                    )));
+                }
+                result.insert(key, value);
+            }
+            Ok(result)
+        }
+    }
+    deserializer.deserialize_map(V)
 }
 
 /// Per-event definition.
@@ -138,7 +179,13 @@ impl<'de> Deserialize<'de> for FieldType {
 impl FieldType {
     fn parse(s: &str) -> Option<Self> {
         if let Some(inner) = s.strip_prefix("array<").and_then(|x| x.strip_suffix('>')) {
-            return Self::parse(inner.trim()).map(|t| Self::Array(Box::new(t)));
+            let inner_ty = Self::parse(inner.trim())?;
+            // spec restricts `array<T>` の T をスカラー型 table の値に限定
+            // （`array<enum>` や `array<array<...>>` は語彙外）
+            if !inner_ty.is_scalar() {
+                return None;
+            }
+            return Some(Self::Array(Box::new(inner_ty)));
         }
         Some(match s {
             "int8" => Self::Int8,
@@ -185,6 +232,12 @@ impl FieldType {
     /// Variable-length / structured types are excluded.
     fn is_filterable(&self) -> bool {
         !matches!(self, Self::Bytes | Self::Array(_))
+    }
+
+    /// Whether the type belongs to the スカラー型 table in spec
+    /// (`array<T>` の T として許可される範囲)。
+    fn is_scalar(&self) -> bool {
+        !matches!(self, Self::Enum | Self::Array(_))
     }
 
     /// Default integer/float bounds (inclusive). `None` for non-numeric types.
@@ -261,6 +314,12 @@ impl std::error::Error for LoadError {}
 
 /// Load `events.yaml` from `path`. Returns `LoadOutcome::Missing` when the
 /// file does not exist (per spec the caller decides drop-all vs warning).
+///
+/// **Note**: 本関数は YAML パースのみを行い、schema バリデーション
+/// (`validate`) は実行しない。`LoadOutcome::Loaded` を受け取った caller は
+/// **必ず** `validate(&schema)` を続けて呼び出して schema 違反を検出する
+/// 責任を負う（load と validate を分離してあるのは、load 段階の I/O 失敗と
+/// validate 段階の意味論違反を別系統で報告するため）。
 pub fn load_from_path(path: &Path) -> Result<LoadOutcome, LoadError> {
     let yaml = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -305,6 +364,8 @@ impl std::fmt::Display for ValidationError {
         write!(f, "{}: {}", self.path, self.message)
     }
 }
+
+impl std::error::Error for ValidationError {}
 
 /// Validate `schema` against the rules in `design/16-driver-events-schema.md`.
 /// Returns all violations collected (does not stop at the first error).
@@ -452,6 +513,13 @@ fn validate_range(
         });
         return;
     };
+    if !min.is_finite() || !max.is_finite() {
+        errors.push(ValidationError {
+            path: path.to_owned(),
+            message: "`range` values must be finite (NaN / Inf are rejected)".to_owned(),
+        });
+        return;
+    }
     if min > max {
         errors.push(ValidationError {
             path: path.to_owned(),
@@ -719,6 +787,93 @@ events:
         );
         let errors = validate(&schema).unwrap_err();
         assert!(errors.iter().any(|e| e.message.contains("positive")));
+    }
+
+    #[test]
+    fn it_should_reject_duplicate_event_names_at_parse_time() {
+        let yaml = r"
+schema_version: 1
+events:
+  noteOn:
+    fields:
+      x: { type: uint8 }
+  noteOn:
+    fields:
+      y: { type: uint8 }
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(
+            result.is_err(),
+            "duplicate event name should fail to deserialize"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_array_of_enum() {
+        let yaml = r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      vals: { type: array<enum>, max_length: 4 }
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(
+            result.is_err(),
+            "array<enum> should fail (non-scalar inner type)"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_nested_array_type() {
+        let yaml = r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      vals: { type: array<array<uint8>>, max_length: 4 }
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(
+            result.is_err(),
+            "nested array type should fail (non-scalar inner type)"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_non_numeric_range_values() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8, range: [foo, bar] }
+",
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.message.contains("numeric")),
+            "non-numeric range values should be rejected"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_nan_range_values() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: float64, range: [.nan, .nan] }
+",
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.message.contains("finite")),
+            "NaN range values should be rejected"
+        );
     }
 
     #[test]
