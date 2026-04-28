@@ -155,13 +155,11 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 
 ### reject 時の挙動
 
-`slot_size > HARD_SLOT_SIZE` で reject された driver は **起動できない**。driver 作者は次のいずれかで対応する:
+`slot_size > HARD_SLOT_SIZE` の driver は handshake で reject され、**起動できない**。driver 作者は次のいずれかで対応する:
 
 - events.yaml の `bytes.max_length` を見直し、HARD 上限内に収める
 - 大型 payload を扱う event を `tier: streamed` 化（streamed tier 実装後）
 - payload を論理的に分割する（複数 event に切る）
-
-`slot_size > HARD_SLOT_SIZE` となる driver は handshake で reject され、起動できない。
 
 ---
 
@@ -194,7 +192,7 @@ driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPA
 | HARD 超過 | > 65528 byte（slot_size > 65536 となる） | reject | — | 起動不可 |
 
 > default 内の driver は handshake で `slot_size` を要求しないため、Bridge 側で `DEFAULT_SLOT_SIZE = 1032 byte` の slot で確保される（OSC のように `max_payload_size` が default より小さい場合も同じ slot サイズ）。
-> HARD 上限なら 1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB` ちょうど。合計メモリは driver 数 `N` に比例（最悪 `N × 16 MiB`、典型は driver あたり数百 KiB なので大半の運用で数十 MiB に収まる）。
+> HARD 上限なら 1 driver あたり最大 `sizeof(ShmHeader) (56) + RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16,777,272 byte ≈ 16 MiB`（ヘッダ 56 byte は誤差範囲、limit 規約節と同じ式）。合計メモリは driver 数 `N` に比例（最悪 `N × 16 MiB`、典型は driver あたり数百 KiB なので大半の運用で数十 MiB に収まる）。
 
 ---
 
@@ -272,9 +270,14 @@ pub struct RingConsumer {
 }
 
 impl RingConsumer {
-    /// Driver からの handshake 要求 (max_payload_size) を受けて
-    /// shm を確保し、fd を返す。
-    pub fn create(max_payload_size: u32) -> std::io::Result<(Self, OwnedFd)>;
+    /// Driver からの handshake `request_ring(requested_slot_size)` を
+    /// 受けて shm を確保し、fd を返す。
+    /// - `requested_slot_size = 0` (sentinel) → DEFAULT_SLOT_SIZE で確保
+    /// - それ以外 → そのまま `slot_size` として採用（4 byte 倍数性と
+    ///   HARD_SLOT_SIZE 上限を内部で検証、違反は Err）
+    /// slot_size 計算は driver 側 1 箇所で完結する（max_payload_size
+    /// → slot_size 変換は driver SDK が行い、Bridge 側で再計算しない）。
+    pub fn create(requested_slot_size: u32) -> std::io::Result<(Self, OwnedFd)>;
 
     /// 1 slot を pop し、payload を返す。
     pub fn read(&self) -> Option<Vec<u8>>;
