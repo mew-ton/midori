@@ -498,7 +498,7 @@ fence を書く必要はない**。`AtomicU64::store(..., Release)` /
 
 /// Driver プロセスが Bridge から受け取る side channel ハンドル。
 pub struct SideChannelProducer {
-    base: *mut u8,                // mmap 先頭（バッファの先頭、ヘッダの直後）
+    base: *mut u8,                // bytes バッファの先頭（mmap 内でページアライン済み、bytes_base_offset = 4096 位置）
     header: *mut SideChannelHeader,
     capacity: u64,                // ヘッダから読んだ値をキャッシュ
     write_index_local: u64,       // Driver 内のみで管理（Bridge には公開不要）
@@ -539,8 +539,9 @@ int midori_sdk_attach_side_channel(int fd);
 // crates/midori-runtime/src/side_channel.rs（新規ファイル想定）
 
 /// Bridge プロセスが driver ごとに保持する side channel ハンドル。
+/// `base` / `header` のセマンティクスは Driver 側 `SideChannelProducer` と同じ。
 pub struct SideChannelConsumer {
-    base: *const u8,
+    base: *const u8,              // bytes バッファの先頭（mmap 内でページアライン済み、bytes_base_offset = 4096 位置）
     header: *const SideChannelHeader,
     capacity: u64,
 }
