@@ -62,9 +62,11 @@ slot offset 8:  payload: [u8; slot_size - 8]
 
 > **alignment 要件**: `slot_size` は **4 byte の倍数** であること（`payload_len: u32` の natural alignment を slot N >= 1 でも維持するため）。この保証は **後述「Handshake プロトコル」step 4** で Bridge が `slot_size` を 4 byte 倍数へ切り上げる処理（`slot_size = ((max_payload_size + 8) + 3) & !3`）により担保される。Driver 側で alignment violation を懸念する必要はない。
 
-### 旧 RingSlot との差分
+### 現行 RingSlot との差分
 
-| フィールド | 旧（side channel 案） | 本案 |
+`crates/midori-core/src/shm.rs` の現行 `RingSlot` 実装からの変更点:
+
+| フィールド | 現行 | 本案 |
 |---|---|---|
 | `occupied: u8` + `_pad: [u8; 3]` | あり | あり |
 | `payload_len: u32` | あり | あり |
@@ -161,7 +163,7 @@ control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge 
 - 大型 payload を扱う event を `tier: streamed` 化（streamed tier 実装後）
 - payload を論理的に分割する（複数 event に切る）
 
-`slot_size > MAX_SLOT_SIZE` となる driver は handshake で reject され、起動できない。
+`slot_size > HARD_SLOT_PAYLOAD` となる driver は handshake で reject され、起動できない。
 
 ---
 
@@ -200,7 +202,7 @@ driver ごとの shm 使用量。`shm_total = sizeof(ShmHeader) (56) + RING_CAPA
 
 ## メモリ順序
 
-ring 既存の Acquire/Release で完結する（**side channel が無いので追加 fence 不要**）。
+ring 既存の Acquire/Release で完結する（**inline tier は ring 単独で動くため追加 fence 不要**）。
 
 ```text
 Driver 側書き込み順:
@@ -214,7 +216,7 @@ Bridge 側読み出し順:
   3. slot.payload から payload バイトを読む
 ```
 
-side channel 案にあった「`side_read_index` の独立 Release/Acquire」「ring と side の memory ordering 整合」のような複合的な議論が **不要**。
+追加の atomic フィールドや別経路との memory ordering 整合の議論は **不要**（ring 単独で完結）。
 
 ---
 
@@ -285,16 +287,54 @@ impl RingConsumer {
 
 ## ABI / version
 
-`ShmHeader.version: u32` 1 個のみで管理する。**side channel 案で必要だった `SideChannelHeader` は存在しないため、ABI 表面が 1 つ減る**。
+`ShmHeader.version: u32` 1 個のみで管理する。
 
-policy は side channel 案と同じく:
+### policy 概要
 
 - **初期版の `version` 値は `1`**（最初のリリースで Bridge が handshake 時にこの値を書き込み、`MIN_SUPPORTED_VERSION = MAX_SUPPORTED_VERSION = 1`）
 - ABI に変化があれば minor / major 問わず必ず `version` を増分
 - Bridge は `[MIN_SUPPORTED_VERSION, MAX_SUPPORTED_VERSION]` の範囲で受け入れ
 - 末尾 `_pad` を消費する追加は append-only minor として古い driver も受け入れ続けられる
 
-詳細表は [side-channel.md](./side-channel.md) の「ABI / version 取り扱い」節を参照（policy 自体は両案で共通）。
+### 受け入れマトリクス
+
+| Driver 側 `version` | Bridge 判定 | 動作 |
+|---|---|---|
+| `version` < `MIN_SUPPORTED_VERSION` | reject | Bridge が知らない古いレイアウトのため。エラーログを出して当該 driver 起動を中止 |
+| `MIN_SUPPORTED_VERSION` <= `version` <= `MAX_SUPPORTED_VERSION` | accept | Bridge は `version` 値を見て **どのフィールドまでが書かれているか** を判断 |
+| `version` > `MAX_SUPPORTED_VERSION` | reject | Bridge が知らない新しいレイアウトのため。Bridge を更新するまで起動不可 |
+
+### 互換性ルール
+
+| 変更内容 | semver | `version` 更新 | 互換性 |
+|---|---|---|---|
+| 末尾の `_pad` を消費して新フィールド追加（既存フィールドの offset を変更しない） | **minor** | `version` を増分 | Bridge が `MAX_SUPPORTED_VERSION` を引き上げれば旧 driver も受け入れ続けられる（**append-only**） |
+| 既存フィールドの型変更・順序変更・意味変更 | **major** | `version` を増分 | 旧 driver は `MIN_SUPPORTED_VERSION` の引き上げで reject される。`midori-core` の major bump とともに driver 再ビルド必須 |
+| `slot_size` 既定値の変更（レイアウト不変） | minor | 不要 | ABI 影響なし |
+| バイトバッファの解釈変更（stride 計算の意味変更等） | **major** | `version` を増分 | レイアウト不変でも解釈差は ABI 互換性に影響するため major 扱い |
+
+「append-only な minor bump」という規律により、Bridge が複数 version を受け入れる実装を入れれば **旧 driver は再ビルドなしで動き続けられる** のが本 ABI 設計の利点。
+
+### validate_compat 擬似コード
+
+```rust
+// 擬似コード（実装 Issue で確定）
+const MIN_SUPPORTED_VERSION: u32 = 1;
+const MAX_SUPPORTED_VERSION: u32 = 1; // 拡張時に引き上げる
+
+fn validate_compat(header: &ShmHeader) -> Result<(), CompatError> {
+    let v = header.version;
+    if v < MIN_SUPPORTED_VERSION || v > MAX_SUPPORTED_VERSION {
+        return Err(CompatError::ShmVersionMismatch {
+            actual: v,
+            supported: MIN_SUPPORTED_VERSION..=MAX_SUPPORTED_VERSION,
+        });
+    }
+    Ok(())
+}
+```
+
+`ShmHeader` のサイズは `crates/midori-core/src/shm.rs` で `const_assert!` でコンパイル時固定する（実装 Issue で具体値確定）。
 
 ---
 
