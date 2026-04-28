@@ -470,9 +470,18 @@ fn validate_range(
     }
 }
 
+/// `serde_yml::Value` の数値を f64 に変換する。
+///
+/// `as_f64()` 単独では実装によって整数リテラル (`range: [0, 127]` 等) が
+/// `None` 返却となる可能性があるため、`as_i64()` / `as_u64()` への fallback
+/// を順に試す。`Value::Number` 以外は `None`。
+#[allow(clippy::cast_precision_loss)]
 fn yaml_to_f64(v: &serde_yml::Value) -> Option<f64> {
     match v {
-        serde_yml::Value::Number(n) => n.as_f64(),
+        serde_yml::Value::Number(n) => n
+            .as_f64()
+            .or_else(|| n.as_i64().map(|i| i as f64))
+            .or_else(|| n.as_u64().map(|u| u as f64)),
         _ => None,
     }
 }
