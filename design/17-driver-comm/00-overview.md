@@ -79,7 +79,7 @@ Driver 側の振る舞い:
 
 reject されたら driver 起動失敗。driver 作者は events.yaml の `bytes.max_length` を見直すか、該当 event を `tier: streamed` 化する。
 
-メモリ予算: **1 driver あたり最大 `RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16 MiB`**。合計メモリは driver 数 `N` に比例（`N × 16 MiB` が最悪ケース。例: 4 driver で 64 MiB）。実値は driver ごとの実 `slot_size` で決まり、典型的には driver あたり数百 KiB に収まる。
+メモリ予算: **1 driver あたり最大 `sizeof(ShmHeader) (56) + RING_CAPACITY (256) × HARD_SLOT_SIZE (65536) = 16,777,272 byte ≈ 16 MiB`**（ヘッダ 56 byte は誤差範囲）。合計メモリは driver 数 `N` に比例（最悪 `N × 16 MiB`、例: 4 driver で 64 MiB）。実値は driver ごとの実 `slot_size` で決まり、典型的には driver あたり数百 KiB に収まる。
 
 詳細プロトコル・slot レイアウト・メモリ順序などは [01-inline-ring.md](./01-inline-ring.md)。
 
