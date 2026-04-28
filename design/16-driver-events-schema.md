@@ -325,7 +325,7 @@ events:
     fields:
       payload:
         type: bytes
-        max_length: 1024  # 1 KiB は inline tier の DEFAULT_SLOT_SIZE = 1032 byte（payload 容量 1024 byte）に収まる上限。詳細は design/17-driver-comm/01-inline-ring.md
+        max_length: 1024  # SysEx payload の最大長（1 KiB）。実 ring の payload 収容量は実装の slot 設計による（design/17-driver-comm/01-inline-ring.md の DEFAULT_SLOT_SIZE / HARD_SLOT_SIZE 参照）
     binding_filter: [type]
 ```
 
@@ -555,7 +555,7 @@ events.yaml ロード時に Bridge が起動エラーで弾くべき不整合:
 | `note_field` の参照先不在 | `note_field: foo` の `foo` が `fields` に無い |
 | `binding_filter` の参照先不在 | `binding_filter` に列挙したフィールド名が `fields`（または `type`）に無い |
 | `binding_filter` への filter 不可型の含み | `bytes` / `array<T>` を `binding_filter` に含めている（判断基準は「filter 可能性の判断基準」節参照） |
-| `tier` の値不正 | `tier` が `inline` / `streamed` 以外の文字列（unknown 値は reject。省略時は `inline` を default 補完） |
+| `tier` の値不正 | `tier` が文字列リテラル `inline` / `streamed` 以外（unknown 文字列および非文字列値（`true` / `1` / `null` 等）は reject。省略時は `inline` を default 補完） |
 
 binding YAML ロード時の追加バリデーション（events.yaml と binding の整合）:
 
