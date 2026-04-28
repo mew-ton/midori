@@ -185,6 +185,8 @@ events:
 
 省略時は `inline` を default 補完。
 
+> **note**: `streamed` は本設計の **論理的な tier 名**。`crates/midori-core/src/shm.rs` 等に出てくる旧 mmap side-channel 実装（`design/proposals/` の不採用案で議論されたもの）とは **別概念** で、同一視しないこと。streamed tier の経路は shm 外の IPC（pipe / socket / stdout 等）になる予定で、shm/mmap ベースの side-channel ではない。
+
 ```yaml
 events:
   noteOn:
