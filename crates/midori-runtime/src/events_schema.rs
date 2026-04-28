@@ -14,7 +14,7 @@
 // ため module 全体で抑制する。実体は単体テストで網羅している。
 #![allow(dead_code)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -31,39 +31,47 @@ use serde::Deserialize;
 /// する** が、各 event への merge は行わない。merge を必要とする呼び出し側
 /// （Bridge runtime 経路の確定後に実装）が自分で扱う。
 #[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct EventsSchema {
     pub schema_version: u32,
-    #[serde(deserialize_with = "deserialize_unique_events")]
+    #[serde(deserialize_with = "deserialize_unique_event_map")]
     pub events: BTreeMap<String, EventDef>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_unique_field_map")]
     pub defaults: BTreeMap<String, FieldSpec>,
 }
 
-/// `events` map deserializer that rejects duplicate event names.
-///
-/// 通常の `BTreeMap` deserialize は同名キーを silently 上書きするが、
-/// spec は「イベント名衝突」を起動時エラー扱いとしている。
-fn deserialize_unique_events<'de, D>(
+/// 同名キーで silently 上書きせず、duplicate を起動時エラーで弾くための
+/// 汎用 deserializer。spec は events / fields / defaults の重複キーを
+/// すべて起動時エラー扱いとしているため、対象 map の値型ごとに薄い
+/// wrapper 関数を用意してこれを呼ぶ。
+fn deserialize_unique_map<'de, V, D>(
     deserializer: D,
-) -> Result<BTreeMap<String, EventDef>, D::Error>
+    expecting: &'static str,
+    duplicate_label: &'static str,
+) -> Result<BTreeMap<String, V>, D::Error>
 where
     D: serde::Deserializer<'de>,
+    V: Deserialize<'de>,
 {
-    struct V;
-    impl<'de> serde::de::Visitor<'de> for V {
-        type Value = BTreeMap<String, EventDef>;
+    struct UniqueMap<V>(&'static str, &'static str, std::marker::PhantomData<V>);
+    impl<'de, V> serde::de::Visitor<'de> for UniqueMap<V>
+    where
+        V: Deserialize<'de>,
+    {
+        type Value = BTreeMap<String, V>;
         fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("a map of event names to event definitions")
+            f.write_str(self.0)
         }
         fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
         where
             A: serde::de::MapAccess<'de>,
         {
             let mut result = BTreeMap::new();
-            while let Some((key, value)) = map.next_entry::<String, EventDef>()? {
+            while let Some((key, value)) = map.next_entry::<String, V>()? {
                 if result.contains_key(&key) {
                     return Err(serde::de::Error::custom(format!(
-                        "duplicate event name: {key}"
+                        "duplicate {}: {}",
+                        self.1, key
                     )));
                 }
                 result.insert(key, value);
@@ -71,12 +79,44 @@ where
             Ok(result)
         }
     }
-    deserializer.deserialize_map(V)
+    deserializer.deserialize_map(UniqueMap::<V>(
+        expecting,
+        duplicate_label,
+        std::marker::PhantomData,
+    ))
+}
+
+fn deserialize_unique_event_map<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, EventDef>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_unique_map(
+        deserializer,
+        "a map of event names to event definitions",
+        "event name",
+    )
+}
+
+fn deserialize_unique_field_map<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, FieldSpec>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_unique_map(
+        deserializer,
+        "a map of field names to field specs",
+        "field name",
+    )
 }
 
 /// Per-event definition.
 #[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct EventDef {
+    #[serde(deserialize_with = "deserialize_unique_field_map")]
     pub fields: BTreeMap<String, FieldSpec>,
     #[serde(default)]
     pub tier: Tier,
@@ -101,6 +141,7 @@ pub enum Tier {
 
 /// Field declaration (`field_spec` in spec terms).
 #[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct FieldSpec {
     #[serde(rename = "type")]
     pub ty: FieldType,
@@ -384,7 +425,7 @@ pub fn validate(schema: &EventsSchema) -> Result<(), Vec<ValidationError>> {
     }
 
     for (event_name, event) in &schema.events {
-        validate_event(event_name, event, &mut errors);
+        validate_event(event_name, event, &schema.defaults, &mut errors);
     }
 
     if errors.is_empty() {
@@ -394,7 +435,12 @@ pub fn validate(schema: &EventsSchema) -> Result<(), Vec<ValidationError>> {
     }
 }
 
-fn validate_event(name: &str, event: &EventDef, errors: &mut Vec<ValidationError>) {
+fn validate_event(
+    name: &str,
+    event: &EventDef,
+    defaults: &BTreeMap<String, FieldSpec>,
+    errors: &mut Vec<ValidationError>,
+) {
     let event_path = format!("events.{name}");
 
     if event.fields.is_empty() {
@@ -404,16 +450,23 @@ fn validate_event(name: &str, event: &EventDef, errors: &mut Vec<ValidationError
         });
     }
 
-    let field_names: BTreeSet<&str> = event.fields.keys().map(String::as_str).collect();
+    // 参照解決用の merged view: defaults を base に置き、event.fields で上書き。
+    // spec「全イベント共通フィールドのデフォルト宣言」に従い、defaults の field
+    // 名は note_field / binding_filter から参照可能。
+    let merged: BTreeMap<&str, &FieldSpec> = defaults
+        .iter()
+        .chain(event.fields.iter())
+        .map(|(k, v)| (k.as_str(), v))
+        .collect();
 
-    // Per-field validation
+    // Per-field validation (event.fields のみ。defaults は親 validator が直接検証)
     for (field_name, spec) in &event.fields {
         validate_field_spec(&format!("{event_path}.fields.{field_name}"), spec, errors);
     }
 
-    // note_field reference must exist in fields
+    // note_field reference must exist in fields ∪ defaults
     if let Some(note_field) = &event.note_field {
-        if !field_names.contains(note_field.as_str()) {
+        if !merged.contains_key(note_field.as_str()) {
             errors.push(ValidationError {
                 path: format!("{event_path}.note_field"),
                 message: format!("references unknown field `{note_field}`"),
@@ -421,13 +474,13 @@ fn validate_event(name: &str, event: &EventDef, errors: &mut Vec<ValidationError
         }
     }
 
-    // binding_filter references must exist in fields (or be `type`, the
-    // implicit event-type discriminator)
+    // binding_filter references must exist in fields ∪ defaults (or be `type`,
+    // the implicit event-type discriminator)
     for filter in &event.binding_filter {
         if filter == "type" {
             continue;
         }
-        let Some(spec) = event.fields.get(filter) else {
+        let Some(spec) = merged.get(filter.as_str()).copied() else {
             errors.push(ValidationError {
                 path: format!("{event_path}.binding_filter"),
                 message: format!("references unknown field `{filter}`"),
@@ -490,6 +543,118 @@ fn validate_field_spec(path: &str, spec: &FieldSpec, errors: &mut Vec<Validation
     // range validation
     if let Some(range) = &spec.range {
         validate_range(path, &spec.ty, range, errors);
+    }
+
+    // default value 型整合性
+    if let Some(default) = &spec.default {
+        validate_default(path, spec, default, errors);
+    }
+}
+
+fn validate_default(
+    path: &str,
+    spec: &FieldSpec,
+    default: &serde_yml::Value,
+    errors: &mut Vec<ValidationError>,
+) {
+    use serde_yml::Value;
+    let push = |msg: String, errors: &mut Vec<ValidationError>| {
+        errors.push(ValidationError {
+            path: path.to_owned(),
+            message: msg,
+        });
+    };
+
+    // 型 vs YAML kind の最低限の照合
+    let kind_ok = matches!(
+        (&spec.ty, default),
+        (
+            FieldType::Int8
+                | FieldType::Uint8
+                | FieldType::Int16
+                | FieldType::Uint16
+                | FieldType::Int32
+                | FieldType::Uint32
+                | FieldType::Int64
+                | FieldType::Uint64
+                | FieldType::Float32
+                | FieldType::Float64,
+            Value::Number(_),
+        ) | (FieldType::Bool, Value::Bool(_))
+            | (FieldType::String | FieldType::Enum, Value::String(_))
+            | (FieldType::Bytes, Value::String(_) | Value::Sequence(_))
+            | (FieldType::Array(_), Value::Sequence(_))
+    );
+    if !kind_ok {
+        push(
+            "`default` value type does not match the declared field type".to_owned(),
+            errors,
+        );
+        return;
+    }
+
+    // enum: default が values に含まれているか
+    if matches!(spec.ty, FieldType::Enum) {
+        if let (Value::String(s), Some(values)) = (default, &spec.values) {
+            if !values.iter().any(|v| v == s) {
+                push(format!("`default` value `{s}` is not in `values`"), errors);
+            }
+        }
+    }
+
+    // 数値: range（あれば）or 型のデフォルト値域に収まる
+    if spec.ty.supports_range() {
+        if let Some(n) = yaml_to_f64(default) {
+            if n.is_finite() {
+                let bound = spec
+                    .range
+                    .as_ref()
+                    .and_then(|r| {
+                        let lo = yaml_to_f64(&r.min)?;
+                        let hi = yaml_to_f64(&r.max)?;
+                        if lo.is_finite() && hi.is_finite() && lo <= hi {
+                            Some((lo, hi))
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| spec.ty.default_range());
+                if let Some((lo, hi)) = bound {
+                    if n < lo || n > hi {
+                        push(
+                            format!(
+                                "`default` value {n} is outside the allowed range [{lo}, {hi}]"
+                            ),
+                            errors,
+                        );
+                    }
+                }
+            } else {
+                push(
+                    "`default` value must be finite (NaN / Inf are rejected)".to_owned(),
+                    errors,
+                );
+            }
+        }
+    }
+
+    // string / bytes / array: max_length（あれば）に収まる
+    if let Some(max_len) = spec.max_length {
+        let len = match (&spec.ty, default) {
+            (FieldType::String | FieldType::Bytes, Value::String(s)) => Some(s.len() as u64),
+            (FieldType::Bytes | FieldType::Array(_), Value::Sequence(seq)) => {
+                Some(seq.len() as u64)
+            }
+            _ => None,
+        };
+        if let Some(actual) = len {
+            if actual > max_len {
+                push(
+                    format!("`default` length {actual} exceeds `max_length` {max_len}"),
+                    errors,
+                );
+            }
+        }
     }
 }
 
@@ -873,6 +1038,142 @@ events:
         assert!(
             errors.iter().any(|e| e.message.contains("finite")),
             "NaN range values should be rejected"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_unknown_top_level_field() {
+        let yaml = r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8 }
+unknownTopLevel: oops
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(
+            result.is_err(),
+            "unknown top-level field should be rejected"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_unknown_field_in_event_def() {
+        let yaml = r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8 }
+    unknownProp: 1
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(result.is_err(), "unknown event field should be rejected");
+    }
+
+    #[test]
+    fn it_should_reject_duplicate_fields_in_event() {
+        let yaml = r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      a: { type: uint8 }
+      a: { type: uint8 }
+";
+        let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+        assert!(
+            result.is_err(),
+            "duplicate field in event should fail to deserialize"
+        );
+    }
+
+    #[test]
+    fn it_should_resolve_note_field_via_defaults() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8 }
+    note_field: common
+defaults:
+  common: { type: uint8 }
+",
+        );
+        validate(&schema).expect("note_field referencing defaults should resolve");
+    }
+
+    #[test]
+    fn it_should_resolve_binding_filter_via_defaults() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8 }
+    binding_filter: [type, common]
+defaults:
+  common: { type: uint8 }
+",
+        );
+        validate(&schema).expect("binding_filter referencing defaults should resolve");
+    }
+
+    #[test]
+    fn it_should_reject_default_with_mismatched_type() {
+        let schema = parse(
+            r#"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8, optional: true, default: "abc" }
+"#,
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.message.contains("type")),
+            "default with wrong type should be rejected"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_default_outside_range() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      x: { type: uint8, range: [0, 127], optional: true, default: 200 }
+",
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.message.contains("outside")),
+            "default outside range should be rejected"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_default_not_in_enum_values() {
+        let schema = parse(
+            r"
+schema_version: 1
+events:
+  evt:
+    fields:
+      mode: { type: enum, values: [a, b, c], optional: true, default: zz }
+",
+        );
+        let errors = validate(&schema).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.message.contains("not in")),
+            "default not in enum values should be rejected"
         );
     }
 
