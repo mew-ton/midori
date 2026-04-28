@@ -33,9 +33,9 @@ driver の `events.yaml` で **event 型ごとに `tier`** を宣言する（`de
 events:
   noteOn:                 # tier 省略 → inline (default)
     fields:
-      channel: { type: midi_channel }
-      note:    { type: uint7 }
-      velocity: { type: uint7 }
+      channel: { type: uint8, range: [1, 16] }
+      note:    { type: uint8, range: [0, 127] }
+      velocity: { type: uint8, range: [0, 127] }
 
   oscBlob:                # 大型 payload を扱う event は明示的に streamed
     tier: streamed

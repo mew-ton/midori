@@ -86,7 +86,7 @@ MIDI イベントによって note フィールドの有無が異なるため、
 | `source: arg1` | `to.setMap.source` | setMap の入力値として使うキャプチャ変数を指定 |
 | `(hi << 2) \| (lo >> 5)` | `to.set.expr` | 複数キャプチャ変数を式で計算する |
 
-キャプチャ変数の物理型は各バイト `uint7`（SysEx の1バイト = 0–127）。`set.expr` で複数バイトをビット演算により合成することで、14bit 以上の値（例: `(hi << 7) | lo`）を表現できる。計算可能性の詳細は [ドライバー要件](../../layers/01-input-driver/requirements.md) を参照。
+キャプチャ変数は各バイト 7-bit unsigned（SysEx の 1 バイト = 0–127、events.yaml では `uint8` + `range: [0, 127]` で宣言）。`set.expr` で複数バイトをビット演算により合成することで、14 bit 以上の値（例: `(hi << 7) | lo`）を表現できる。計算可能性の詳細は [ドライバー要件](../../layers/01-input-driver/requirements.md) を参照。
 
 ### realtime イベント
 
