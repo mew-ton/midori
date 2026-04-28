@@ -584,8 +584,10 @@ events:
 
 #[test]
 fn it_should_load_missing_file_as_outcome_missing() {
-    let path = std::env::temp_dir().join("nonexistent-events.yaml");
-    let _ = std::fs::remove_file(&path);
+    // 一意な temp dir を作って、その中の未作成 path を渡す。並列実行や
+    // 既存ファイルとの衝突を防ぐ（tempdir は Drop で auto cleanup）。
+    let dir = tempfile::tempdir().expect("create tmp dir");
+    let path = dir.path().join("missing.yaml");
     let outcome = load_from_path(&path).expect("missing file should not error");
     assert!(matches!(outcome, LoadOutcome::Missing));
 }
