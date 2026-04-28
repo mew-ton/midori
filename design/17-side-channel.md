@@ -100,7 +100,8 @@ Driver に渡す** 形にする。具体的なソケット手順や ancillary da
 // crates/midori-core/src/shm.rs に追加予定（実装 Issue で確定）
 #[repr(C)]
 pub struct SideChannelHeader {
-    /// side channel ABI バージョン。フィールド追加は major bump で `version` を増やす
+    /// side channel ABI バージョン。**ABI に変化があれば minor / major
+    /// 問わず必ず増分する**（「ABI / version 取り扱い」節の policy 参照）
     pub version: u32,
     /// `bytes` 領域の総バイト数。ページサイズアラインメント済み（4 KiB の倍数）
     pub capacity: u32,
@@ -188,12 +189,24 @@ buffer 既存の Acquire/Release パターンをそのまま流用できる。
 
 ### 書き込みアルゴリズム（Driver 側）
 
+`write` の戻り値は **二系統のエラーを型で分ける**。`emit_event` 側の戻り値
+仕様（`0` = back-pressure / `-2` = payload size 超過）と一対一対応させる
+ため、`Result<(u64, u32), SideChannelError>` を返す:
+
 ```rust
+pub enum SideChannelError {
+    /// 領域フル（一過性）。emit_event は 0 を返す
+    Full,
+    /// payload が `u32::MAX` または `capacity` を超える。
+    /// emit_event は -2 を返す（events.yaml 違反相当）
+    SizeExceeded,
+}
+
 // 擬似コード（実装 Issue で実装）
-fn write(&mut self, payload: &[u8]) -> Option<(u64, u32)> {
+fn write(&mut self, payload: &[u8]) -> Result<(u64, u32), SideChannelError> {
     let len = payload.len() as u64;
     if len > u32::MAX as u64 || len > self.capacity {
-        return None; // payload size 超過（events.yaml 違反相当）
+        return Err(SideChannelError::SizeExceeded);
     }
 
     let r = self.header.read_index.load(Acquire);
@@ -202,7 +215,7 @@ fn write(&mut self, payload: &[u8]) -> Option<(u64, u32)> {
     // 残り空き容量
     let free = self.capacity - (w - r);
     if free < len {
-        return None; // back-pressure（領域フル）
+        return Err(SideChannelError::Full);
     }
 
     // モジュロ前の単調値で side_offset を確定
@@ -222,9 +235,25 @@ fn write(&mut self, payload: &[u8]) -> Option<(u64, u32)> {
     // ring slot 側で Release されるので、ここでは local 更新のみ
     self.write_index_local = w + len;
 
-    Some((side_offset, len as u32))
+    Ok((side_offset, len as u32))
 }
 ```
+
+`emit_event` 側はこれを次のようにマップする:
+
+```rust
+match producer.write(&msgpack_bytes) {
+    Ok((offset, len)) => /* ring slot に side_offset/side_len を立てる */,
+    Err(SideChannelError::Full) => return 0,         // back-pressure
+    Err(SideChannelError::SizeExceeded) => return -2, // events.yaml 違反相当
+}
+```
+
+**`SizeExceeded` は events.yaml の `bytes.max_length` チェック後に到達する
+セーフティネット**。`emit_event` 内の検出順序（後述「back-pressure シグナル」
+節）で `max_length` 超過は事前に弾かれるが、`max_length` 未指定の events
+や Driver 実装のバグで `capacity` 超の payload が到達したら `write` 側で
+最後の砦として `SizeExceeded` を返す。
 
 `side_offset` は **モジュロ前の単調値**であり、`u64` の範囲なら 16 EB
 （オーバーフローしない）。
@@ -447,8 +476,16 @@ impl SideChannelProducer {
     pub unsafe fn from_fd(fd: RawFd) -> std::io::Result<Self>;
 
     /// payload を書き込み、(side_offset, side_len) を返す。
-    /// 戻り値 None は **領域フル**（emit_event の `0` 戻り値に対応）。
-    pub fn write(&mut self, payload: &[u8]) -> Option<(u64, u32)>;
+    /// `Err(Full)` = 領域フル（emit_event は `0` 戻り）、
+    /// `Err(SizeExceeded)` = `u32::MAX` または `capacity` 超（emit_event は
+    /// `-2` 戻り）。詳細は「書き込みアルゴリズム」節参照。
+    pub fn write(&mut self, payload: &[u8])
+        -> Result<(u64, u32), SideChannelError>;
+}
+
+pub enum SideChannelError {
+    Full,
+    SizeExceeded,
 }
 ```
 
@@ -507,33 +544,56 @@ mmap unmap / shm unlink の具体手順は実装 Issue で確定。
 
 ## ABI / version 取り扱い
 
-### `SideChannelHeader::version`
+### policy 概要
 
-side channel の ABI は `SideChannelHeader::version: u32` で表現する。
-最初は `1`。Driver と Bridge が起動時にこの値を確認し、不一致なら
-**Bridge 側でエラーログを出して当該 driver の起動を中止** する。
+side channel の ABI は `SideChannelHeader::version: u32` で表現し、**ABI に
+何らかの変化があれば minor / major 問わず必ず `version` を増分する**。
+Driver は「自分がビルドされた時点の `version`」を書き、Bridge は **自身が
+受け入れる version 範囲** `[MIN_SUPPORTED_VERSION, MAX_SUPPORTED_VERSION]`
+を持って判定する。
+
+最初のリリースでは `MIN_SUPPORTED_VERSION = MAX_SUPPORTED_VERSION = 1`。
+ABI が拡張されるたびに、Bridge 側で受け入れ可能な範囲を広げる。
+
+### 受け入れマトリクス
+
+| Driver 側 `version` | Bridge 判定 | 動作 |
+|---|---|---|
+| `version` < `MIN_SUPPORTED_VERSION` | reject | Bridge が知らない古いレイアウトのため。エラーログを出して当該 driver 起動を中止 |
+| `MIN_SUPPORTED_VERSION` <= `version` <= `MAX_SUPPORTED_VERSION` | accept | Bridge は `version` 値を見て **どのフィールドまでが書かれているか** を判断 |
+| `version` > `MAX_SUPPORTED_VERSION` | reject | Bridge が知らない新しいレイアウトのため。Bridge を更新するまで起動不可 |
+
+### 互換性ルール
+
+| 変更内容 | semver | `version` 更新 | 互換性 |
+|---|---|---|---|
+| 末尾の `_pad` を消費して新フィールド追加（既存フィールドの offset を変更しない） | **minor** | `version` を増分 | Bridge が `MAX_SUPPORTED_VERSION` を引き上げれば旧 driver も受け入れ続けられる（**append-only**） |
+| 既存フィールドの型変更・順序変更・意味変更 | **major** | `version` を増分 | 旧 driver は `MIN_SUPPORTED_VERSION` の引き上げで reject される。`midori-core` の major bump とともに driver 再ビルド必須 |
+| `capacity` のデフォルト値変更（レイアウト不変） | minor | 不要 | ABI 影響なし |
+| バイトバッファの解釈変更（モジュロ単位、ヘッダレイアウトを変えずに意味だけ変える等） | **major** | `version` を増分 | レイアウト不変でも解釈差は ABI 互換性に影響するため major 扱い |
+
+「append-only な minor bump」という規律により、Bridge が複数 version を
+受け入れる実装を入れれば **旧 driver は再ビルドなしで動き続けられる** のが
+本 ABI 設計の利点。
+
+### validate_compat 擬似コード
 
 ```rust
-// 擬似コード
+// 擬似コード（実装 Issue で確定）
+const MIN_SUPPORTED_VERSION: u32 = 1;
+const MAX_SUPPORTED_VERSION: u32 = 1; // 拡張時に引き上げる
+
 fn validate_compat(header: &SideChannelHeader) -> Result<(), CompatError> {
-    if header.version != 1 {
+    let v = header.version;
+    if v < MIN_SUPPORTED_VERSION || v > MAX_SUPPORTED_VERSION {
         return Err(CompatError::SideChannelVersionMismatch {
-            actual: header.version,
-            expected: 1,
+            actual: v,
+            supported: MIN_SUPPORTED_VERSION..=MAX_SUPPORTED_VERSION,
         });
     }
     Ok(())
 }
 ```
-
-`midori-core` の semver 規律:
-
-| 変更内容 | semver | 対応 |
-|---|---|---|
-| `SideChannelHeader` のフィールド追加（末尾の `_pad` を消費） | minor 可 | `version` を増やすが旧 driver は `version > 1` で reject される。互換性を保つには Bridge が両 version を受け入れる経路を実装する |
-| `SideChannelHeader` のフィールド変更（既存型の意味変更・順序変更） | major | `midori-core` major bump、driver 側も再ビルド必須 |
-| `capacity` のデフォルト値変更 | minor | ABI 影響なし |
-| バイトバッファの解釈変更（モジュロ単位等） | major | ABI 影響あり |
 
 `crates/midori-core/src/shm.rs` の `ShmHeader` / `RingSlot` と同様、
 `SideChannelHeader` のサイズは `const_assert!` でコンパイル時固定する
