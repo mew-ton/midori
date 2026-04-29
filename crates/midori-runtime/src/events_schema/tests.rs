@@ -666,8 +666,11 @@ events:
     assert_eq!(err.feature, "streamed");
     let rendered = err.to_string();
     assert!(
-        rendered.contains("driver `osc`") && rendered.contains("event `oscBlob`"),
-        "display must include driver name and event name, got: {rendered}"
+        rendered.contains("driver `osc`")
+            && rendered.contains("event `oscBlob`")
+            && rendered.contains("feature `streamed`")
+            && rendered.contains("streamed tier is not implemented yet"),
+        "display must include driver, event, feature and reason, got: {rendered}"
     );
 }
 
