@@ -145,15 +145,18 @@ impl SpscStorage {
     ///
     /// # Safety
     ///
-    /// `buffer` は `shm_total_size(slot_size)` バイト以上を確保済みで、
-    /// 8-byte alignment を満たしていること。`Box<[u64]>` で確保されている
-    /// ためこの条件は型レベルで担保されている。
+    /// `buffer` は `Box<[UnsafeCell<u64>]>` として `shm_total_size(slot_size)`
+    /// バイト以上を確保済みで、8-byte alignment を満たしていること。
+    /// `UnsafeCell<u64>` の配列は `u64` の alignment (8 byte) を継承する
+    /// ため、本 type に格納する限り `ShmHeader` の 8-byte alignment 要件は
+    /// 型レベルで担保される。本関数は `init_in_place` 経由で先頭から
+    /// `ShmHeader` を書き込む。
     #[allow(unsafe_code)]
     unsafe fn write_header(&self) {
-        // SAFETY: buffer は u64 配列なので 8-byte aligned かつ `shm_total_size`
-        // 以上を確保している。UnsafeCell::get 経由で取り出した raw pointer
-        // への書き込みは aliasing rule 上正規ルート。`init_in_place` と
-        // 同じ手順で in-place 初期化する。
+        // SAFETY: buffer は UnsafeCell<u64> 配列なので 8-byte aligned かつ
+        // `shm_total_size` 以上を確保している。UnsafeCell::get 経由で
+        // 取り出した raw pointer への書き込みは aliasing rule 上正規ルート。
+        // `init_in_place` と同じ手順で in-place 初期化する。
         Self::init_in_place(self.buffer_base(), self.slot_size);
     }
 
@@ -373,6 +376,16 @@ pub(crate) unsafe fn pop_raw_into(
 /// [`pop_raw_into`] と同じ契約。
 #[allow(unsafe_code)]
 pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>> {
+    // empty fast-path: ポーリングループでは大半の呼び出しが空に当たるので、
+    // 先に header を check して `vec![0u8; max_payload]` を allocate しない。
+    // ※ 実際の slot 読みも内部で改めて header を見るが、empty 判定は
+    // Acquire load 1 回で済むため安価。
+    let header = shm_header_ref(base);
+    let read = header.read_index.load(Ordering::Relaxed);
+    let write = header.write_index.load(Ordering::Acquire);
+    if read == write {
+        return None;
+    }
     // payload 長は最大でも slot_size - SLOT_HEADER_SIZE。最初に最大容量で
     // 確保しておき、Truncated は発生しない経路にする。
     let max_payload = (slot_size as usize).saturating_sub(SLOT_HEADER_SIZE as usize);
@@ -384,7 +397,8 @@ pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>>
         }
         // SAFETY: out_buf_cap = max_payload を渡しているため pop_raw_into
         // は Truncated を返さない（payload_len は内部で max_payload に
-        // clamp 済み）。理論上到達しない Truncated と Empty をまとめて
+        // clamp 済み）。理論上到達しない Truncated と、empty fast-path 後に
+        // 別スレッドが消費した極めて稀なレースで起こり得る Empty をまとめて
         // None で表現する。
         PopOutcome::Empty | PopOutcome::Truncated(_) => None,
     }
