@@ -29,6 +29,9 @@ mod validator;
 pub use feature_check::{check_runtime_features, FeatureUnavailable};
 pub use loader::{load_from_path, resolve_events_yaml_path, LoadError, LoadOutcome};
 pub use types::{EventDef, EventsSchema, FieldSpec, FieldType, RangeBound, Tier};
+// 同 crate 内の `events_pipeline::runtime_check` も範囲比較で使うため
+// crate スコープで再エクスポートする（外部 API には出さない）。
+pub(crate) use types::yaml_to_f64;
 pub use validator::{validate, ValidationError};
 
 #[cfg(test)]

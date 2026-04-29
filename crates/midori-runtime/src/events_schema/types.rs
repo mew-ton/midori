@@ -190,11 +190,14 @@ impl FieldType {
     }
 
     /// Default integer/float bounds (inclusive). `None` for non-numeric types.
-    /// 整数の `f64` 化は schema validator の境界比較用なので、`i64::MAX`
-    /// 付近で 1 ulp ずれても実害がない（events.yaml で `int64` ぴったり
-    /// 境界の `range` を書く driver は事実上いない）と判断して許容する。
+    ///
+    /// 起動時 schema validator（`events_schema::validator`）と runtime 照合層
+    /// （`events_pipeline::runtime_check`）の両方が `range:` 省略時の境界比較
+    /// に用いる。整数の `f64` 化は `i64::MAX` 付近で 1 ulp ずれても実害がない
+    /// （events.yaml で `int64` ぴったり境界の `range` を書く driver は事実上
+    /// いない）と判断して許容する。
     #[allow(clippy::cast_precision_loss)]
-    pub(super) fn default_range(&self) -> Option<(f64, f64)> {
+    pub(crate) fn default_range(&self) -> Option<(f64, f64)> {
         Some(match self {
             Self::Int8 => (f64::from(i8::MIN), f64::from(i8::MAX)),
             Self::Uint8 => (0.0, f64::from(u8::MAX)),
@@ -281,4 +284,22 @@ where
         "a map of field names to field specs",
         "field name",
     )
+}
+
+/// `serde_yml::Value` の数値を `f64` に変換する。
+///
+/// `as_f64()` 単独では実装によって整数リテラル（`range: [0, 127]` 等）が
+/// `None` を返す可能性があるため、`as_i64()` / `as_u64()` への fallback を
+/// 順に試す。`Value::Number` 以外は `None`。validator（schema 起動時検査）と
+/// `events_pipeline::runtime_check`（イベントごとの runtime 検査）の両方が
+/// 範囲比較で使うため、ここに共通定義を置く。
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn yaml_to_f64(v: &serde_yml::Value) -> Option<f64> {
+    match v {
+        serde_yml::Value::Number(n) => n
+            .as_f64()
+            .or_else(|| n.as_i64().map(|i| i as f64))
+            .or_else(|| n.as_u64().map(|u| u as f64)),
+        _ => None,
+    }
 }

@@ -1,4 +1,5 @@
 mod error;
+mod events_pipeline;
 mod events_schema;
 
 use std::path::{Path, PathBuf};
