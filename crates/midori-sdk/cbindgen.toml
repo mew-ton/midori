@@ -14,6 +14,25 @@ include = ["midori-core"]
 
 [export]
 prefix = ""
+include = [
+    "ShmHeader",
+    "SlotHeader",
+    "RING_CAPACITY",
+    "DEFAULT_SLOT_SIZE",
+    "HARD_SLOT_SIZE",
+    "MIN_SLOT_SIZE",
+    "SLOT_HEADER_SIZE",
+    "SHM_LAYOUT_VERSION",
+    "MIN_SUPPORTED_SHM_VERSION",
+    "MAX_SUPPORTED_SHM_VERSION",
+]
+
+# `AtomicU64` は C 側で未定義型なので uint64_t に rename する（メモリ表現は
+# 同じ）。C 側で atomic 操作を直接書くなら C11 の <stdatomic.h> 経由で
+# `_Atomic uint64_t` として扱う前提。本ヘッダは layout 共有用に留め、
+# atomic 操作は Rust 側 / SDK 関数経由で行うのが原則。
+[export.rename]
+"AtomicU64" = "uint64_t"
 
 [fn]
 prefix = ""
