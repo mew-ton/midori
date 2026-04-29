@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use super::decode::{DecodedPayload, FieldValue};
-use crate::events_schema::{EventDef, EventsSchema, FieldSpec, FieldType, RangeBound};
+use crate::events_schema::{yaml_to_f64, EventDef, EventsSchema, FieldSpec, FieldType, RangeBound};
 
 /// schema 照合を通過したイベント。Layer 2 binding の入口に渡す形。
 #[derive(Debug, PartialEq)]
@@ -395,17 +395,6 @@ fn numeric_as_f64(value: &FieldValue) -> f64 {
         FieldValue::UInt(u) => *u as f64,
         FieldValue::Float(f) => *f,
         _ => unreachable!("caller has matched only on numeric variants"),
-    }
-}
-
-#[allow(clippy::cast_precision_loss)]
-fn yaml_to_f64(v: &serde_yml::Value) -> Option<f64> {
-    match v {
-        serde_yml::Value::Number(n) => n
-            .as_f64()
-            .or_else(|| n.as_i64().map(|i| i as f64))
-            .or_else(|| n.as_u64().map(|u| u as f64)),
-        _ => None,
     }
 }
 

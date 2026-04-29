@@ -506,6 +506,75 @@ fn it_should_drop_schema_violating_events_without_invoking_the_sink() {
 }
 
 #[test]
+fn it_should_render_decode_error_display_with_specific_diagnostic_text() {
+    let bytes = encode_map(&[
+        ("type", Value::String("noteOn".into())),
+        (
+            "inner",
+            Value::Map(vec![(Value::String("x".into()), Value::from(1u8))]),
+        ),
+    ]);
+    let err = decode_event(&bytes).expect_err("nested map");
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains("nested maps"),
+        "DecodeError display should describe the violation, got: {rendered}"
+    );
+}
+
+#[test]
+fn it_should_render_runtime_check_error_display_with_field_and_event_context() {
+    let schema = midi_schema();
+    let p = payload(&[
+        ("type", FieldValue::String("noteOn".into())),
+        ("channel", FieldValue::UInt(99)), // out of [1, 16]
+        ("note", FieldValue::UInt(60)),
+        ("velocity", FieldValue::UInt(100)),
+    ]);
+    let err = check_event("midi", &schema, p).expect_err("range");
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains("noteOn"),
+        "RuntimeCheckError display should mention the event type, got: {rendered}"
+    );
+    assert!(
+        rendered.contains("channel"),
+        "RuntimeCheckError display should mention the offending field, got: {rendered}"
+    );
+}
+
+#[test]
+fn it_should_render_process_error_display_distinguishing_each_pipeline_stage() {
+    let schema = midi_schema();
+    let bogus_msgpack = vec![0xc1u8];
+    let decode_err = try_process("midi", Some(&schema), &bogus_msgpack).expect_err("decode");
+    assert!(
+        decode_err.to_string().contains("msgpack decode failed"),
+        "ProcessError::Decode display, got: {decode_err}"
+    );
+
+    let missing_err = try_process("midi", None, &[0x80u8]).expect_err("missing");
+    assert!(
+        missing_err
+            .to_string()
+            .contains("driver has no events.yaml schema loaded"),
+        "ProcessError::SchemaMissing display, got: {missing_err}"
+    );
+
+    let bytes = encode_map(&[
+        ("type", Value::String("noteOn".into())),
+        ("channel", Value::from(1u8)),
+        ("note", Value::from(60u8)),
+        ("velocity", Value::from(200u8)), // out of range
+    ]);
+    let check_err = try_process("midi", Some(&schema), &bytes).expect_err("check");
+    assert!(
+        check_err.to_string().contains("schema check failed"),
+        "ProcessError::Check display, got: {check_err}"
+    );
+}
+
+#[test]
 fn it_should_drop_events_when_the_drivers_schema_is_unavailable() {
     let bytes = encode_map(&[
         ("type", Value::String("noteOn".into())),

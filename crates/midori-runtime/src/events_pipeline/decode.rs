@@ -81,9 +81,12 @@ impl std::error::Error for DecodeError {
 
 /// 1 inline payload（msgpack バイト列）を decode する。
 ///
-/// 戻り値は msgpack map のキー → 値の `BTreeMap`。値はキーごとに 1 つで
-/// 重複キーは msgpack 側の挙動に従う（rmpv が後勝ちで保持するためここでは
-/// 重複検出しない。重複判定は schema check 層の責務外）。
+/// 戻り値は msgpack map のキー → 値の `BTreeMap`。rmpv は重複キーを
+/// `Vec<(Value, Value)>` のまま返すが、本層は `BTreeMap::insert` の
+/// 後勝ちで暗黙にマージする（msgpack 規格上重複キーは未定義動作で、
+/// driver SDK が dict / struct から encode する正常経路では発生しない
+/// ため、防衛的検出までは行わない）。重複検出が必要になったらここで
+/// 早期 reject に切り替える。
 pub fn decode_event(bytes: &[u8]) -> Result<DecodedPayload, DecodeError> {
     let mut cursor: &[u8] = bytes;
     let value = rmpv::decode::read_value(&mut cursor).map_err(DecodeError::Parse)?;
