@@ -167,6 +167,22 @@ fn it_should_reject_nil_field_values() {
 }
 
 #[test]
+fn it_should_reject_msgpack_ext_field_values() {
+    // ext type は events.yaml 語彙外。`Value::Ext(type_id, payload)` を 1 件
+    // でも含む payload は decode 時点で reject されることを担保する。
+    let bytes = encode_map(&[
+        ("type", Value::String("noteOn".into())),
+        ("custom", Value::Ext(42, vec![0xde, 0xad, 0xbe, 0xef])),
+    ]);
+
+    let err = decode_event(&bytes).expect_err("ext must be rejected");
+    assert!(
+        matches!(err, DecodeError::UnsupportedValue { kind: "ext", .. }),
+        "expected UnsupportedValue(ext), got {err:?}"
+    );
+}
+
+#[test]
 fn it_should_reject_nested_maps_inside_a_field() {
     let nested = Value::Map(vec![(Value::String("x".into()), Value::from(1u8))]);
     let bytes = encode_map(&[("type", Value::String("noteOn".into())), ("inner", nested)]);
@@ -597,6 +613,45 @@ fn it_should_drop_schema_violating_events_without_invoking_the_sink() {
         panic!("expected ProcessError::Check, got {err:?}");
     };
     assert!(matches!(check_err, RuntimeCheckError::OutOfRange { .. }));
+}
+
+#[test]
+fn it_should_continue_processing_after_dropping_an_invalid_event() {
+    // 不正イベントを drop した後でも次の有効イベントが sink に届く（=
+    // pipeline は止まらない）ことを連続呼び出しで担保する。同じ sink を
+    // 共有することで「process_inline_payload が内部状態を持たず、失敗が
+    // 後続呼び出しを汚染しない」契約を回帰として固定する。
+    let schema = midi_schema();
+    let mut sink = RecordingSink::default();
+
+    // 1 件目: schema 違反（velocity が range 外）
+    let invalid = encode_map(&[
+        ("type", Value::String("noteOn".into())),
+        ("channel", Value::from(1u8)),
+        ("note", Value::from(60u8)),
+        ("velocity", Value::from(200u8)),
+    ]);
+    process_inline_payload("midi", Some(&schema), &invalid, &mut sink);
+    assert!(
+        sink.events.is_empty(),
+        "schema 違反は sink に届かない（drop）"
+    );
+
+    // 2 件目: 正常イベント
+    let valid = encode_map(&[
+        ("type", Value::String("noteOn".into())),
+        ("channel", Value::from(1u8)),
+        ("note", Value::from(60u8)),
+        ("velocity", Value::from(100u8)),
+    ]);
+    process_inline_payload("midi", Some(&schema), &valid, &mut sink);
+
+    assert_eq!(
+        sink.events.len(),
+        1,
+        "drop 後も後続イベントは dispatch される"
+    );
+    assert_eq!(sink.events[0].event_type, "noteOn");
 }
 
 #[test]
