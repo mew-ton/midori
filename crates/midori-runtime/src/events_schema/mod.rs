@@ -5,9 +5,8 @@
 //! startup. Schema violations are reported as startup errors (callers fail
 //! fast) rather than runtime drops.
 //!
-//! Out of scope here: msgpack decode of raw events, runtime feature-availability
-//! check for `tier: streamed`, and Layer 2 binding wiring. Those live in
-//! sibling modules.
+//! Out of scope here: msgpack decode of raw events, and Layer 2 binding wiring.
+//! Those live in sibling modules.
 //!
 //! 構成（責務別 sub-module + テスト分離）:
 //!
