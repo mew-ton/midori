@@ -218,7 +218,7 @@ mod tests {
                 raw.cast::<c_void>(),
                 out_buf.as_mut_ptr(),
                 out_buf.len(),
-                &raw mut out_len,
+                std::ptr::addr_of_mut!(out_len),
             )
         };
         assert_eq!(popped, 1);
@@ -230,7 +230,7 @@ mod tests {
                 raw.cast::<c_void>(),
                 out_buf.as_mut_ptr(),
                 out_buf.len(),
-                &raw mut out_len,
+                std::ptr::addr_of_mut!(out_len),
             )
         };
         assert_eq!(popped_empty, 0);
@@ -255,7 +255,7 @@ mod tests {
                 raw.cast::<c_void>(),
                 out_buf.as_mut_ptr(),
                 out_buf.len(),
-                &raw mut out_len,
+                std::ptr::addr_of_mut!(out_len),
             )
         };
         assert_eq!(popped, 1);
@@ -310,7 +310,7 @@ mod tests {
                     std::ptr::null::<c_void>(),
                     payload.as_mut_ptr(),
                     payload.len(),
-                    &raw mut out_len,
+                    std::ptr::addr_of_mut!(out_len),
                 )
             },
             0
@@ -328,7 +328,7 @@ mod tests {
                     raw.cast::<c_void>(),
                     std::ptr::null_mut::<u8>(),
                     4,
-                    &raw mut out_len,
+                    std::ptr::addr_of_mut!(out_len),
                 )
             },
             0
@@ -362,7 +362,7 @@ mod tests {
                 raw.cast::<c_void>(),
                 tiny_buf.as_mut_ptr(),
                 tiny_buf.len(),
-                &raw mut out_len,
+                std::ptr::addr_of_mut!(out_len),
             )
         };
         assert_eq!(popped, -3, "capacity 不足は -3 で empty と区別される");
@@ -374,7 +374,7 @@ mod tests {
                 raw.cast::<c_void>(),
                 large_buf.as_mut_ptr(),
                 large_buf.len(),
-                &raw mut out_len,
+                std::ptr::addr_of_mut!(out_len),
             )
         };
         assert_eq!(popped_again, 0, "slot は既に消費済みなので empty");
