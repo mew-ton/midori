@@ -298,6 +298,10 @@ mod tests {
              fields:\n      \
                payload: { type: bytes, max_length: 1024 }\n";
 
+    /// loader 段階の YAML パースで失敗する events.yaml フィクスチャ。
+    /// 末尾の `[` が閉じておらず `serde_yml::from_str` が Parse error を返す。
+    const EVENTS_YAML_MALFORMED: &str = "schema_version: [\n";
+
     #[test]
     fn it_should_pass_startup_when_driver_events_yaml_is_valid() {
         let profile = write_tmp_profile("happy");
@@ -510,6 +514,35 @@ mod tests {
         assert!(
             !rendered.ends_with('\n'),
             "Display must not end with a trailing newline, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_fail_startup_when_driver_events_yaml_cannot_be_loaded() {
+        // YAML 構文エラーは loader 段階で検出され、StartupCheckError::Load が
+        // CliError::StartupCheck に包まれて返る。3 variant のうち Validate /
+        // FeatureUnavailable は別テストで担保しているので、Load 分岐の回帰
+        // 経路を本テストで埋める。
+        let profile = write_tmp_profile("load-error");
+        let events = write_tmp_events_yaml("load-error", EVENTS_YAML_MALFORMED);
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("midi={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("malformed YAML must fail");
+        assert!(
+            matches!(
+                err,
+                CliError::StartupCheck {
+                    source: crate::events_pipeline::StartupCheckError::Load { .. }
+                }
+            ),
+            "expected StartupCheck::Load, got {err:?}"
         );
     }
 
