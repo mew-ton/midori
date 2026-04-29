@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::error::CliError;
+use crate::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -40,6 +41,12 @@ enum Command {
         /// プロファイル YAML へのパス
         #[arg(value_name = "PROFILE")]
         profile: PathBuf,
+
+        /// driver の events.yaml を `<name>=<path>` 形式で直接指定する。
+        /// profile YAML resolver 完成までの暫定経路で、CLI help では非露出。
+        /// 複数回指定可。
+        #[arg(long = "driver-events", value_name = "NAME=PATH", hide = true)]
+        driver_events: Vec<String>,
     },
 }
 
@@ -70,19 +77,61 @@ fn main() -> ExitCode {
 
 fn dispatch(cli: &Cli) -> Result<(), CliError> {
     match &cli.command {
-        Command::Run { profile } => run(profile),
+        Command::Run {
+            profile,
+            driver_events,
+        } => run(profile, driver_events),
     }
 }
 
-// パイプライン本体は MEW-23 以降で実装する。
-// ここではプロファイルが読み込めることだけを確認する骨格を置く。
-fn run(profile_path: &Path) -> Result<(), CliError> {
+// プロファイル本体のパイプラインは後続の subtask で実装する。
+// 本関数では (a) プロファイル YAML が読めること、(b) 暫定経路で渡された
+// `--driver-events` の events.yaml が起動時チェックを通過することのみ確認する。
+fn run(profile_path: &Path, driver_events_args: &[String]) -> Result<(), CliError> {
     let _profile_yaml =
         std::fs::read_to_string(profile_path).map_err(|source| CliError::ReadProfile {
             path: profile_path.to_path_buf(),
             source,
         })?;
+
+    for raw in driver_events_args {
+        let (name, path) = parse_driver_events_arg(raw)?;
+        match check_driver_schema(name, &path)
+            .map_err(|source| CliError::StartupCheck { source })?
+        {
+            DriverSchemaOutcome::Loaded(_) => {
+                eprintln!(
+                    "midori: driver `{name}` の events.yaml ({}) のチェックが完了しました",
+                    path.display()
+                );
+            }
+            DriverSchemaOutcome::Missing => {
+                // events.yaml が無い driver は spec 上「明示的な schema 未宣言モード」
+                // として warning に留めて起動を継続する。
+                eprintln!(
+                    "midori: warning: driver `{name}` の events.yaml ({}) が見つかりませんでした。schema 未宣言モードで起動します",
+                    path.display()
+                );
+            }
+        }
+    }
+
     Ok(())
+}
+
+/// `--driver-events <name>=<path>` 形式の引数を分解する。
+fn parse_driver_events_arg(raw: &str) -> Result<(&str, PathBuf), CliError> {
+    let (name, path) = raw
+        .split_once('=')
+        .ok_or_else(|| CliError::InvalidDriverEventsArg {
+            raw: raw.to_owned(),
+        })?;
+    if name.is_empty() || path.is_empty() {
+        return Err(CliError::InvalidDriverEventsArg {
+            raw: raw.to_owned(),
+        });
+    }
+    Ok((name, PathBuf::from(path)))
 }
 
 #[cfg(test)]
@@ -113,8 +162,12 @@ mod tests {
             .expect("run subcommand with positional profile must parse");
 
         match cli.command {
-            Command::Run { profile } => {
+            Command::Run {
+                profile,
+                driver_events,
+            } => {
                 assert_eq!(profile, PathBuf::from("/tmp/profile.yaml"));
+                assert!(driver_events.is_empty());
             }
         }
     }
@@ -176,5 +229,163 @@ mod tests {
         .expect("parse");
         let result = super::dispatch(&cli);
         assert!(result.is_err(), "missing profile should fail");
+    }
+
+    // --------------------------------------------------------------
+    // --driver-events startup chain (MEW-54)
+    // --------------------------------------------------------------
+
+    use crate::error::CliError;
+
+    /// 必要最小の profile YAML をテンポラリ生成し、その path を返す。
+    fn write_tmp_profile(tag: &str) -> tempfile::NamedTempFile {
+        let mut file = tempfile::Builder::new()
+            .prefix(&format!("midori-mew54-{tag}-"))
+            .suffix(".yaml")
+            .tempfile()
+            .expect("tempfile");
+        std::io::Write::write_all(&mut file, b"name: test\n").expect("write profile");
+        file
+    }
+
+    /// 任意の events.yaml 文字列を temp ファイルに書き出す。
+    fn write_tmp_events_yaml(tag: &str, body: &str) -> tempfile::NamedTempFile {
+        let mut file = tempfile::Builder::new()
+            .prefix(&format!("midori-mew54-events-{tag}-"))
+            .suffix(".yaml")
+            .tempfile()
+            .expect("tempfile");
+        std::io::Write::write_all(&mut file, body.as_bytes()).expect("write events.yaml");
+        file
+    }
+
+    #[test]
+    fn it_should_pass_startup_when_driver_events_yaml_is_valid() {
+        let profile = write_tmp_profile("happy");
+        let events = write_tmp_events_yaml(
+            "happy",
+            "schema_version: 1\n\
+             events:\n  \
+               noteOn:\n    \
+                 fields:\n      \
+                   channel: { type: uint8, range: [1, 16] }\n",
+        );
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("midi={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let result = super::dispatch(&cli);
+
+        assert!(result.is_ok(), "valid events.yaml should pass: {result:?}");
+    }
+
+    #[test]
+    fn it_should_fail_startup_when_driver_events_yaml_violates_schema() {
+        // `range:` の min > max は validator が違反として検出する。
+        let profile = write_tmp_profile("invalid");
+        let events = write_tmp_events_yaml(
+            "invalid",
+            "schema_version: 1\n\
+             events:\n  \
+               noteOn:\n    \
+                 fields:\n      \
+                   channel: { type: uint8, range: [16, 1] }\n",
+        );
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("midi={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("schema violation must fail");
+        assert!(
+            matches!(
+                err,
+                CliError::StartupCheck {
+                    source: crate::events_pipeline::StartupCheckError::Validate { .. }
+                }
+            ),
+            "expected StartupCheck::Validate, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_warn_and_continue_when_driver_events_yaml_is_missing() {
+        let profile = write_tmp_profile("missing");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "midi=/nonexistent/midori-mew54/events.yaml",
+        ])
+        .expect("parse");
+
+        let result = super::dispatch(&cli);
+
+        assert!(
+            result.is_ok(),
+            "missing events.yaml should be a warning, not a startup failure: {result:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_fail_startup_when_driver_declares_streamed_tier() {
+        let profile = write_tmp_profile("streamed");
+        let events = write_tmp_events_yaml(
+            "streamed",
+            "schema_version: 1\n\
+             events:\n  \
+               oscBlob:\n    \
+                 tier: streamed\n    \
+                 fields:\n      \
+                   payload: { type: bytes, max_length: 1024 }\n",
+        );
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("osc={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("streamed must be rejected at startup");
+        assert!(
+            matches!(
+                err,
+                CliError::StartupCheck {
+                    source: crate::events_pipeline::StartupCheckError::FeatureUnavailable { .. }
+                }
+            ),
+            "expected StartupCheck::FeatureUnavailable, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_malformed_driver_events_argument() {
+        let profile = write_tmp_profile("malformed");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "no-equals-sign",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("malformed arg must fail");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg, got {err:?}"
+        );
     }
 }
