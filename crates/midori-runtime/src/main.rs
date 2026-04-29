@@ -1,6 +1,7 @@
 mod error;
 mod events_pipeline;
 mod events_schema;
+mod ring_handshake;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

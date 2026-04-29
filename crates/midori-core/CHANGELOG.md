@@ -1,5 +1,28 @@
 # Changelog — midori-core
 
+## 0.3.0 — 2026-04-30
+
+### Breaking changes
+
+- **`shm` モジュールを variable-sized inline ring slot に再設計**（設計: `design/17-driver-comm/01-inline-ring.md`）。
+  - `RingSlot` 構造体を撤去。スロット内容は固定 8 byte の `SlotHeader` (`occupied: u8` / `_pad: [u8; 3]` / `payload_len: u32`) と raw payload バイト列 (`slot_size - 8` byte) に分離し、stride 計算で raw memory にアクセスする
+  - `ShmHeader` を 56 byte に拡張：`slot_size: u32` / `version: u32` / `_pad: [u8; 32]` を追加
+  - `PAYLOAD_INLINE_MAX` 定数を撤去。slot ごとの payload 容量は `ShmHeader.slot_size - 8` で決まる
+  - `RingSlot::side_offset` / `side_len` / `_pad2` を撤去。side channel 案は不採用（`design/17-driver-comm/00-overview.md` 参照）
+
+### Added
+
+- 定数: `DEFAULT_SLOT_SIZE = 1032` / `HARD_SLOT_SIZE = 65536` / `MIN_SLOT_SIZE = 12` / `SLOT_HEADER_SIZE = 8`
+- ABI version: `SHM_LAYOUT_VERSION = 1` / `MIN_SUPPORTED_SHM_VERSION` / `MAX_SUPPORTED_SHM_VERSION`
+- helper: `validate_slot_size` / `align_slot_size` / `shm_total_size` / `slot_offset_in_shm`
+- error: `SlotSizeError { NotAligned, TooSmall, TooLarge }`
+- `const_assert!` で `ShmHeader = 56 byte` / `SlotHeader = 8 byte` をコンパイル時 lock
+
+### Notes
+
+- `midori-sdk` は本変更に追従して `0.2.0` に bump。FFI 戻り値型も `u8` から `int32_t` に変更（`-2` payload too large の表現）
+- 実 driver↔Bridge 間の handshake control channel（`request_ring` メッセージの wire format）と、driver process spawn 経由での shm fd 確保 / `mmap(2)` 呼び出しは本 release のスコープ外。`midori-runtime::ring_handshake` で resolve / 検証 / ページ整列の関数群までを提供し、driver lifecycle 管理が入った段階で接続される
+
 ## 0.2.0 — 2026-04-27
 
 ### Breaking changes

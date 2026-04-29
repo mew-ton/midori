@@ -1,6 +1,6 @@
 [package]
 name = "midori-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Driver SDK for the Midori signal bridge: shared types, SPSC ring buffer, and CLI scaffolding"
 license = "MIT OR Apache-2.0"

@@ -16,7 +16,7 @@ pub use midori_core::shm::*;
 pub use midori_core::value::*;
 
 pub use driver::{ControlCommand, DeviceEntry, Driver, DriverError, ProtocolError, SDK_VERSION};
-pub use spsc::{Consumer, Full, Producer, SpscStorage};
+pub use spsc::{Consumer, Producer, PushResult, SpscStorage};
 
 #[cfg(test)]
 mod tests {
@@ -60,6 +60,9 @@ mod tests {
     #[test]
     fn it_should_expose_shm_layout_at_top_level() {
         let _ = RING_CAPACITY;
-        let _ = PAYLOAD_INLINE_MAX;
+        let _ = DEFAULT_SLOT_SIZE;
+        let _ = HARD_SLOT_SIZE;
+        let _ = SLOT_HEADER_SIZE;
+        let _ = SHM_LAYOUT_VERSION;
     }
 }
