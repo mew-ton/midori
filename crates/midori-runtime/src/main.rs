@@ -226,9 +226,11 @@ mod tests {
 
     use crate::error::CliError;
 
-    /// 与えた driver 名のリストを inputs/outputs として持つ profile YAML を
-    /// tempdir に書き出して path を返す。最初の name は input、2 つ目以降は
-    /// output に振り分ける（最低 1 件ずつが必要なため）。
+    /// 与えた `(kind, name)` ペアのリストから profile YAML を組み立てて
+    /// tempfile に書き出す。`kind == "input"` のものを `inputs[]`、
+    /// `kind == "output"` のものを `outputs[]` に振り分ける。spec 上 inputs
+    /// / outputs はそれぞれ最低 1 件必要なので、片方が空のときは dummy
+    /// エントリを補って `ProfileLoadError::Invalid` を回避する。
     fn write_tmp_profile(tag: &str, drivers: &[(&str, &str)]) -> tempfile::NamedTempFile {
         // drivers: (kind, name) where kind は "input" / "output"
         let mut yaml = String::from("inputs:\n");
@@ -270,7 +272,7 @@ mod tests {
             );
         }
         let mut file = tempfile::Builder::new()
-            .prefix(&format!("midori-mew55-{tag}-"))
+            .prefix(&format!("midori-profile-test-{tag}-"))
             .suffix(".yaml")
             .tempfile()
             .expect("tempfile");
@@ -282,7 +284,7 @@ mod tests {
     /// 用意する。`bodies` で `name -> events.yaml 内容` を渡す。
     fn setup_app_data_dir(bodies: &[(&str, &str)]) -> tempfile::TempDir {
         let dir = tempfile::Builder::new()
-            .prefix("midori-mew55-app-")
+            .prefix("midori-profile-test-app-")
             .tempdir()
             .expect("tempdir");
         for (name, body) in bodies {
@@ -321,6 +323,10 @@ mod tests {
     /// loader 段階の YAML パースで失敗する events.yaml フィクスチャ。
     /// 末尾の `[` が閉じておらず `serde_yml::from_str` が Parse error を返す。
     const EVENTS_YAML_MALFORMED: &str = "schema_version: [\n";
+
+    /// `transform` フィールドを欠いた profile YAML フィクスチャ。
+    /// `ProfileLoadError::Parse` 経路の回帰用。
+    const PROFILE_YAML_MISSING_TRANSFORM: &str = "inputs:\n  - adapter: a.yaml\n    connection: { driver: midi }\noutputs:\n  - adapter: b.yaml\n    connection: { driver: osc }\n";
 
     fn run_args(profile_path: &Path, app_data_dir: &Path) -> Vec<String> {
         vec![
@@ -453,19 +459,29 @@ mod tests {
 
     #[test]
     fn it_should_fail_when_profile_yaml_is_invalid() {
-        // 必須フィールド (transform) を欠いた profile YAML
+        // 必須フィールド (transform) を欠いた profile YAML は serde 段階で
+        // 弾かれ、ProfileLoadError::Parse として CliError::LoadProfile に
+        // 包まれる。inner variant も pin して Io / Invalid との取り違えを防ぐ。
         let app = setup_app_data_dir(&[]);
         let mut bad = tempfile::Builder::new()
-            .prefix("midori-mew55-bad-")
+            .prefix("midori-profile-test-bad-")
             .suffix(".yaml")
             .tempfile()
             .expect("tempfile");
-        let yaml = "inputs:\n  - adapter: a.yaml\n    connection: { driver: midi }\noutputs:\n  - adapter: b.yaml\n    connection: { driver: osc }\n";
-        std::io::Write::write_all(&mut bad, yaml.as_bytes()).expect("write");
+        std::io::Write::write_all(&mut bad, PROFILE_YAML_MISSING_TRANSFORM.as_bytes())
+            .expect("write");
 
         let cli = Cli::try_parse_from(run_args(bad.path(), app.path())).expect("parse");
         let err = super::dispatch(&cli).expect_err("missing transform");
-        assert!(matches!(err, CliError::LoadProfile { .. }));
+        assert!(
+            matches!(
+                err,
+                CliError::LoadProfile {
+                    source: crate::profile::ProfileLoadError::Parse { .. }
+                }
+            ),
+            "expected LoadProfile::Parse, got {err:?}"
+        );
     }
 
     #[test]
@@ -489,6 +505,12 @@ mod tests {
         let rendered = err.to_string();
         assert!(rendered.contains("osc"), "got: {rendered}");
         assert!(rendered.contains("streamed"), "got: {rendered}");
+        // 内側 FeatureUnavailable.reason の文言まで chain して観測できることを
+        // 担保する（feature_check.rs::STREAMED_REASON 由来）。
+        assert!(
+            rendered.contains("not implemented"),
+            "Display should include the inner reason phrase, got: {rendered}"
+        );
         assert!(!rendered.ends_with('\n'), "got: {rendered:?}");
     }
 }

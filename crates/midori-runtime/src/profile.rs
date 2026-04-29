@@ -38,8 +38,10 @@ pub struct ProfileYaml {
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ProfileEndpoint {
-    /// 変換グラフから参照する識別子。省略時はアダプターファイルのベース名。
-    /// 起動時 events.yaml チェックでは未使用。
+    /// 変換グラフから参照する識別子。省略可（spec では「省略時はアダプター
+    /// ファイルのベース名から自動生成」とされるが、その自動生成は別 module
+    /// （変換グラフ resolver）の責務で本 module は YAML 上の値だけを保持
+    /// する）。起動時 events.yaml チェックでは未使用。
     #[serde(default)]
     pub id: Option<String>,
     /// アダプター YAML への path。本 module ではロードしない。
@@ -135,7 +137,50 @@ pub fn load_from_path(path: &Path) -> Result<ProfileYaml, ProfileLoadError> {
             message: "outputs が空です（最低 1 件必要）".to_owned(),
         });
     }
+    for endpoint in profile.inputs.iter().chain(profile.outputs.iter()) {
+        validate_driver_name(&endpoint.connection.driver, path)?;
+    }
     Ok(profile)
+}
+
+/// driver 名がファイルシステム経路として安全な識別子であることを検証する。
+///
+/// driver 名は `<app-data-dir>/plugins/driver-<name>/events.yaml` の path 構築
+/// にそのまま使うため、path-traversal 攻撃（`../../etc/passwd` 等）や空白のみ
+/// の値、path セパレータ含みなど、想定外の文字列を受け入れると plugins
+/// ディレクトリ外を読み取ってしまう。安全側でホワイトリスト的に検査する。
+fn validate_driver_name(name: &str, profile_path: &Path) -> Result<(), ProfileLoadError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!("connection.driver が空白のみの値です: `{name}`"),
+        });
+    }
+    if trimmed != name {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!("connection.driver の前後に空白が含まれています: `{name}`"),
+        });
+    }
+    let invalid_char = name
+        .chars()
+        .find(|c| matches!(c, '/' | '\\' | '\0') || c.is_control() || c.is_whitespace());
+    if let Some(c) = invalid_char {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!("connection.driver に許容外の文字 `{c:?}` が含まれています: `{name}`"),
+        });
+    }
+    if name == "." || name == ".." || name.contains("..") {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!(
+                "connection.driver に path traversal 文字列を含めることはできません: `{name}`"
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// profile から driver 名のリストを抽出する。重複（input/output で同じ
@@ -162,7 +207,7 @@ mod tests {
         // 直接 from_str を呼ばず、load_from_path 経由の分岐も含めて検査する
         // ため tempfile を経由する。
         let mut file = tempfile::Builder::new()
-            .prefix("midori-mew55-profile-")
+            .prefix("midori-profile-test-")
             .suffix(".yaml")
             .tempfile()
             .expect("tempfile");
@@ -289,8 +334,64 @@ outputs:
 
     #[test]
     fn it_should_fail_when_profile_file_is_missing() {
-        let err = load_from_path(Path::new("/nonexistent/midori-mew55/profile.yaml"))
+        let err = load_from_path(Path::new("/nonexistent/midori-profile-test/profile.yaml"))
             .expect_err("missing");
         assert!(matches!(err, ProfileLoadError::Io { .. }));
+    }
+
+    #[test]
+    fn it_should_reject_driver_name_with_path_traversal() {
+        // `connection.driver` から `<app-data-dir>/plugins/driver-<name>/`
+        // の path を作るため、`..` / path separator が入った driver 名は
+        // plugins ディレクトリを脱出させ得る。`validate_driver_name` が
+        // `ProfileLoadError::Invalid` として弾くことを担保する。
+        // （null byte / 制御文字は serde-yml 側で `Parse` 段階で拒否される
+        // ため本テストの対象外。validate_driver_name の defensive check は
+        // serde-yml が将来仕様変更しても破綻しないための二段防御として
+        // 残してある。）
+        for bad in ["../etc/passwd", "midi/../../foo", "a/b", "a\\b", "..", "."] {
+            let yaml = format!(
+                "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"{bad}\"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: {{ driver: osc }}\n"
+            );
+            let outcome = parse(&yaml);
+            assert!(
+                matches!(outcome, Err(ProfileLoadError::Invalid { .. })),
+                "driver `{bad}` should be rejected by validate_driver_name as Invalid, got {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_should_reject_whitespace_only_driver_name() {
+        let yaml = "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"   \"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: { driver: osc }\n";
+        let err = parse(yaml).expect_err("whitespace driver");
+        assert!(matches!(err, ProfileLoadError::Invalid { .. }));
+    }
+
+    #[test]
+    fn it_should_reject_driver_name_with_surrounding_whitespace() {
+        let yaml = "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"  midi  \"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: { driver: osc }\n";
+        let err = parse(yaml).expect_err("padded driver");
+        assert!(matches!(err, ProfileLoadError::Invalid { .. }));
+    }
+
+    #[test]
+    fn it_should_render_profile_load_error_display_with_path_and_context() {
+        // Invalid 経路（inputs 空）で Display に path と理由を含むことを担保。
+        let yaml = "inputs: []\ntransform: t.yaml\noutputs:\n  - adapter: a.yaml\n    connection: { driver: osc }\n";
+        let err = parse(yaml).expect_err("invalid");
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("inputs が空"),
+            "Display should mention violation reason, got: {rendered}"
+        );
+        // Io 経路（profile が存在しない）でも path を含むことを担保。
+        let io_err = load_from_path(Path::new("/nonexistent/midori-profile-test/profile.yaml"))
+            .expect_err("io");
+        let io_rendered = io_err.to_string();
+        assert!(
+            io_rendered.contains("/nonexistent/"),
+            "Io display should mention path, got: {io_rendered}"
+        );
     }
 }
