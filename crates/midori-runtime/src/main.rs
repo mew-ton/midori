@@ -85,17 +85,26 @@ fn dispatch(cli: &Cli) -> Result<(), CliError> {
 }
 
 // プロファイル本体のパイプラインは後続の subtask で実装する。
-// 本関数では (a) プロファイル YAML が読めること、(b) 暫定経路で渡された
-// `--driver-events` の events.yaml が起動時チェックを通過することのみ確認する。
+// 本関数では (a) `--driver-events` の引数形式が正しいこと、(b) プロファイル
+// YAML が読めること、(c) 各 events.yaml が起動時チェックを通過すること、を
+// この順に確認する。
+//
+// 引数形式違反は I/O より先に弾き、CLI 入力ミスを root cause として安定して
+// 報告できるようにする（profile が無い + arg 不正のとき `ReadProfile` で
+// マスクされないようにするため）。
 fn run(profile_path: &Path, driver_events_args: &[String]) -> Result<(), CliError> {
+    let driver_events: Vec<(&str, PathBuf)> = driver_events_args
+        .iter()
+        .map(|raw| parse_driver_events_arg(raw))
+        .collect::<Result<_, _>>()?;
+
     let _profile_yaml =
         std::fs::read_to_string(profile_path).map_err(|source| CliError::ReadProfile {
             path: profile_path.to_path_buf(),
             source,
         })?;
 
-    for raw in driver_events_args {
-        let (name, path) = parse_driver_events_arg(raw)?;
+    for (name, path) in driver_events {
         match check_driver_schema(name, &path)
             .map_err(|source| CliError::StartupCheck { source })?
         {
@@ -501,6 +510,82 @@ mod tests {
         assert!(
             !rendered.ends_with('\n'),
             "Display must not end with a trailing newline, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_iterate_through_multiple_driver_events_and_fail_on_the_violating_entry() {
+        // 1 件目は通過、2 件目で schema 違反 → fail。複数 `--driver-events`
+        // を全件走査し、後続エントリの違反でも CliError::StartupCheck が
+        // 返ることを担保する。
+        let profile = write_tmp_profile("multi-fail");
+        let valid = write_tmp_events_yaml("multi-fail-ok", EVENTS_YAML_VALID_NOTEON);
+        let invalid = write_tmp_events_yaml("multi-fail-bad", EVENTS_YAML_INVALID_RANGE);
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("ok={}", valid.path().display()),
+            "--driver-events",
+            &format!("bad={}", invalid.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("second entry violates schema");
+        assert!(
+            matches!(
+                err,
+                CliError::StartupCheck {
+                    source: crate::events_pipeline::StartupCheckError::Validate { .. }
+                }
+            ),
+            "expected StartupCheck::Validate, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_continue_through_missing_entry_when_other_driver_events_are_valid() {
+        // Missing entry を挟んでも warning + 継続し、後続の正常 entry まで
+        // 全件走査することを担保する。
+        let profile = write_tmp_profile("multi-mixed");
+        let valid = write_tmp_events_yaml("multi-mixed-ok", EVENTS_YAML_VALID_NOTEON);
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "absent=/nonexistent/midori-mew54-multi/events.yaml",
+            "--driver-events",
+            &format!("ok={}", valid.path().display()),
+        ])
+        .expect("parse");
+
+        let result = super::dispatch(&cli);
+        assert!(
+            result.is_ok(),
+            "missing entry should warn + continue: {result:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_malformed_driver_events_argument_before_reading_profile() {
+        // profile path が存在しない + arg が不正なケース。引数検証が profile
+        // I/O より先に走るので、root cause の InvalidDriverEventsArg が返り
+        // ReadProfile でマスクされないことを担保する。
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            "/nonexistent/midori-mew54/profile.yaml",
+            "--driver-events",
+            "no-equals-sign",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("arg validation must fail first");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg (arg validated before profile I/O), got {err:?}"
         );
     }
 
