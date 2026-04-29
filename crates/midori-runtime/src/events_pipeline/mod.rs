@@ -1,14 +1,16 @@
 //! Inline payload を Layer 2 binding 入口まで運ぶ runtime パイプライン層。
 //!
-//! 役割は 3 段:
+//! 役割は 4 つ:
 //!
-//! 1. msgpack バイト列の decode（[`decode`] サブモジュール）
-//! 2. 1 イベント単位の events.yaml schema 照合（[`runtime_check`] サブモジュール）
-//! 3. 照合通過イベントを Layer 2 binding 側へ手渡す（本モジュールの [`EventSink`]）
+//! 1. Bridge 起動時に各 driver の events.yaml を整合性チェック
+//!    （[`startup`] サブモジュール、main から駆動）
+//! 2. msgpack バイト列の decode（[`decode`] サブモジュール）
+//! 3. 1 イベント単位の events.yaml schema 照合（[`runtime_check`] サブモジュール）
+//! 4. 照合通過イベントを Layer 2 binding 側へ手渡す（本モジュールの [`EventSink`]）
 //!
-//! Layer 2 binding 本体は MEW-50 のスコープ外。本層は **stub I/F** として
-//! `EventSink` trait と最小実装 [`LoggingSink`] を提供し、後続の binding 実装
-//! で差し替える前提。
+//! Layer 2 binding 本体はまだ未実装で、本層は **stub I/F** として `EventSink`
+//! trait と最小実装 [`LoggingSink`] を提供する。実 binding 経路の I/F が
+//! 固まり次第差し替える。
 //!
 //! 不正イベント（decode 失敗 / schema 違反 / events.yaml 未宣言 driver）は
 //! [`process_inline_payload`] が Error ログを出して drop する。パイプライン
@@ -16,33 +18,44 @@
 //!
 //! 構成:
 //!
+//! - [`startup`]: events.yaml の起動時整合性チェック（[`check_driver_schema`]）
 //! - [`decode`]: msgpack → [`DecodedPayload`]
 //! - [`runtime_check`]: [`DecodedPayload`] × `EventsSchema` → [`ValidatedEvent`]
 //! - 本ファイル: [`EventSink`] / [`LoggingSink`] / [`process_inline_payload`]
 //! - `tests`: 統合テスト
 
-// 本 module の公開 API は Bridge 起動 pipeline からまだ呼び出されておらず
-// （後続 subtask で接続予定）、binary crate 内の dead_code / unused_imports
-// 検出に引っかかるため module 全体で抑制する。実体は単体テストで網羅している。
-#![allow(dead_code, unused_imports)]
-
+// `decode` / `runtime_check` 経路は SPSC ring からの実 ingest 配線後に
+// 実 caller が付く予定。それまで本ファイル直下の SPSC 連携 stub
+// (`LoggingSink` / `process_inline_payload` / `try_process` / `ProcessError`)
+// と sub-module 群はいずれも dead_code 警告を生むので、type 単位で個別に
+// allow する。`startup` は main から駆動済みのため対象外。
+#[allow(dead_code, unused_imports)]
 mod decode;
+#[allow(dead_code, unused_imports)]
 mod runtime_check;
+mod startup;
 
+// `decode` / `runtime_check` の type は SPSC ingest 配線で表面に出るが
+// 本 subtask の段階では caller が居ない。再 export 自体は維持して、
+// 個別 import 警告は module 内 allow に委ねる。
+#[allow(unused_imports)]
 pub use decode::{decode_event, DecodeError, DecodedPayload, FieldValue};
+#[allow(unused_imports)]
 pub use runtime_check::{check_event, RuntimeCheckError, ValidatedEvent};
+pub use startup::{check_driver_schema, DriverSchemaOutcome, StartupCheckError};
 
 use crate::events_schema::EventsSchema;
 
 /// Layer 2 binding が schema 照合通過後のイベントを受け取る接点。
 ///
-/// 本 trait は MEW-50 段階の **stub**。実 binding 経路の I/F が固まり次第
-/// 差し替える（trait のままにするか、channel ベースへ移すかは後続 Issue で決定）。
+/// 本 trait は **stub**。実 binding 経路の I/F が固まり次第差し替える
+/// （trait のままにするか、channel ベースへ移すかは未定）。
 pub trait EventSink {
     fn dispatch(&mut self, event: ValidatedEvent);
 }
 
 /// stderr に最小情報だけ書き出す `EventSink` の素朴実装。trace 用途。
+#[allow(dead_code)]
 pub struct LoggingSink;
 
 impl EventSink for LoggingSink {
@@ -63,6 +76,7 @@ impl EventSink for LoggingSink {
 /// 値検証ができないため、wire format が偶然正しくても受理しない）。caller
 /// が `LoadOutcome::Missing` を warning として扱いつつパイプラインを継続
 /// したい場合も、本関数は payload を sink へ流さない。
+#[allow(dead_code)]
 pub fn process_inline_payload(
     driver_name: &str,
     schema: Option<&EventsSchema>,
@@ -77,6 +91,7 @@ pub fn process_inline_payload(
 
 /// `process_inline_payload` の純関数版。テストでログ捕捉に頼らず
 /// 失敗種別をパターンマッチで検査するために露出する。
+#[allow(dead_code)]
 pub(crate) fn try_process(
     driver_name: &str,
     schema: Option<&EventsSchema>,
@@ -89,6 +104,7 @@ pub(crate) fn try_process(
 }
 
 /// パイプラインの 3 段が出すエラーを集約した単一型（テスト・観測用）。
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum ProcessError {
     Decode(DecodeError),

@@ -16,9 +16,11 @@
 //! - [`feature_check`]: Bridge runtime が現状サポートしていない宣言の reject
 //! - `tests`:           sub-module すべての単体テスト
 
-// この module の公開 API は Bridge パイプラインからまだ呼び出されておらず
-// （後続 subtask で接続予定）、binary crate 内の dead_code / unused_imports
-// 検出に引っかかるため module 全体で抑制する。実体は単体テストで網羅している。
+// `events_pipeline::startup` 経由で `load_from_path` / `validate` /
+// `check_runtime_features` は実 caller を持つ。一方で `EventsSchema` /
+// `EventDef` / `FieldSpec` などの内部 field は Layer 2 binding 連携が
+// 完成するまで読み出されない。後続 subtask で本格 caller が付くため、
+// 当面は module 全体で抑制を残す（実体は単体テストで網羅している）。
 #![allow(dead_code, unused_imports)]
 
 mod feature_check;
