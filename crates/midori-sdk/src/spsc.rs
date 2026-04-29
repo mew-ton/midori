@@ -291,23 +291,46 @@ pub(crate) unsafe fn push_raw(base: *mut u8, slot_size: u32, payload: &[u8]) -> 
     PushResult::Ok
 }
 
-/// shm 領域 base ポインタを起点に payload を pop する low-level 関数。
+/// `pop_raw_into` の戻り値。FFI hot path で Vec allocate を回避するため
+/// `&mut [u8]` 互換の caller buffer を取り、結果だけ enum で返す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PopOutcome {
+    /// ring が空。`out_buf` には書き込まれない。
+    Empty,
+    /// payload を `out_buf` に書き込んだ。`usize` は実際に書いた byte 数。
+    Copied(usize),
+    /// `out_buf` の容量が payload より小さく、書き込めなかった。slot は
+    /// SPSC 規律に従い消費済み（再 pop 不可）。`usize` は本来必要だった
+    /// payload byte 数で、caller が次回 buffer を見積もる材料にする。
+    Truncated(usize),
+}
+
+/// shm 領域 base ポインタを起点に payload を caller buffer へ直接コピーする
+/// low-level 関数。FFI hot path 用に Vec allocate を回避する。
 ///
 /// # Safety
 ///
-/// [`push_raw`] と同じ契約。SPSC 規律は同時に 1 スレッドからのみ呼ばれる
-/// こと（生産者と読み取り経路は同時実行可）。
+/// - `base` は初期化済みの shm 領域先頭で、`shm_total_size(slot_size)` バイトを
+///   覆う読み取り可能領域を指すこと
+/// - `slot_size` は対象 shm の [`ShmHeader::slot_size`] と一致すること
+/// - `out_buf` は `out_buf_cap` バイト以上の書き込み可能領域を指すこと
+///   （`out_buf_cap == 0` のときは書き込みを行わない）
+/// - SPSC 規律: 同時に 1 スレッドからのみ呼ばれること
 #[allow(unsafe_code, clippy::cast_ptr_alignment)]
-pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>> {
+pub(crate) unsafe fn pop_raw_into(
+    base: *const u8,
+    slot_size: u32,
+    out_buf: *mut u8,
+    out_buf_cap: usize,
+) -> PopOutcome {
     let header = shm_header_ref(base);
     // 自プロセス内の消費者専用インデックスは Relaxed で十分。
     let read = header.read_index.load(Ordering::Relaxed);
     // 生産者の進捗を Acquire で取得（対応する Release はスロット書き込みの後）。
     let write = header.write_index.load(Ordering::Acquire);
     if read == write {
-        return None;
+        return PopOutcome::Empty;
     }
-    // 同上: 2 のべき乗での剰余に守られているのでターゲット間で結果は同じ。
     #[allow(clippy::cast_possible_truncation)]
     let idx = (read as usize) % RING_CAPACITY;
     let slot_ptr = slot_ptr_at(base.cast_mut(), slot_size, idx);
@@ -323,13 +346,48 @@ pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>>
     // (slot_size - SLOT_HEADER_SIZE) で clamp して被害を slot 内に閉じる。
     let max_payload = (slot_size as usize).saturating_sub(SLOT_HEADER_SIZE as usize);
     let payload_len = raw_payload_len.min(max_payload);
+    // capacity check の結果に関わらず slot は消費する（SPSC 規律上、消費者
+    // は自分の read_index を進める権限を持ち、再 pop はできない）。
+    if payload_len > out_buf_cap {
+        header
+            .read_index
+            .store(read.wrapping_add(1), Ordering::Release);
+        return PopOutcome::Truncated(payload_len);
+    }
     let payload_src = slot_ptr.add(SLOT_HEADER_SIZE as usize);
-    let mut buf = vec![0u8; payload_len];
-    std::ptr::copy_nonoverlapping(payload_src, buf.as_mut_ptr(), payload_len);
+    if payload_len > 0 {
+        std::ptr::copy_nonoverlapping(payload_src, out_buf, payload_len);
+    }
     header
         .read_index
         .store(read.wrapping_add(1), Ordering::Release);
-    Some(buf)
+    PopOutcome::Copied(payload_len)
+}
+
+/// shm 領域 base ポインタを起点に payload を `Vec<u8>` として pop する。
+/// Rust API の [`Consumer::pop`] が利用する経路。FFI 経由は Vec 経由を
+/// 避けるため [`pop_raw_into`] を直接使うこと。
+///
+/// # Safety
+///
+/// [`pop_raw_into`] と同じ契約。
+#[allow(unsafe_code)]
+pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>> {
+    // payload 長は最大でも slot_size - SLOT_HEADER_SIZE。最初に最大容量で
+    // 確保しておき、Truncated は発生しない経路にする。
+    let max_payload = (slot_size as usize).saturating_sub(SLOT_HEADER_SIZE as usize);
+    let mut buf = vec![0u8; max_payload];
+    match pop_raw_into(base, slot_size, buf.as_mut_ptr(), buf.len()) {
+        PopOutcome::Copied(len) => {
+            buf.truncate(len);
+            Some(buf)
+        }
+        // SAFETY: out_buf_cap = max_payload を渡しているため pop_raw_into
+        // は Truncated を返さない（payload_len は内部で max_payload に
+        // clamp 済み）。理論上到達しない Truncated と Empty をまとめて
+        // None で表現する。
+        PopOutcome::Empty | PopOutcome::Truncated(_) => None,
+    }
 }
 
 /// 単一の生産者ハンドル。`push` のみを提供する。

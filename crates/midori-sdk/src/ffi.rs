@@ -36,8 +36,8 @@ use std::ffi::c_void;
 
 use midori_core::shm::{self, validate_slot_size};
 
-use crate::spsc::{self, SpscStorage};
-use midori_core::shm::ShmHeader;
+use crate::spsc::{self, PopOutcome, SpscStorage};
+use midori_core::shm::{ShmHeader, MAX_SUPPORTED_SHM_VERSION, MIN_SUPPORTED_SHM_VERSION};
 
 /// 指定 `slot_size` の [`SpscStorage`] を確保するために必要なバイト数を返す。
 ///
@@ -122,13 +122,10 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(
         std::slice::from_raw_parts(payload, payload_len)
     };
     let header = &*storage.cast::<ShmHeader>();
-    let slot_size = header.slot_size;
-    // 共有メモリは別プロセスから書き換えられる可能性があるため、ヘッダの
-    // `slot_size` をそのまま stride 計算に使う前に防衛的 validate する。
-    // 不正値（汚染 / 未初期化）のときは `0` (= 一般的失敗) を返す。
-    if validate_slot_size(slot_size).is_err() {
+    if !is_header_compatible(header) {
         return 0;
     }
+    let slot_size = header.slot_size;
     spsc::push_raw(storage.cast::<u8>().cast_mut(), slot_size, bytes).as_ffi_code()
 }
 
@@ -168,28 +165,43 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
         return 0;
     }
     let header = &*storage.cast::<ShmHeader>();
+    if !is_header_compatible(header) {
+        return 0;
+    }
     let slot_size = header.slot_size;
-    // push 側と同様、ヘッダの `slot_size` を信用する前に validate して
-    // shm 汚染による out-of-bounds 読みを防ぐ。
-    if validate_slot_size(slot_size).is_err() {
-        return 0;
+    // FFI hot path では Vec allocate を避けるため `pop_raw_into` を直接
+    // 呼び、caller buffer に payload bytes をコピーする。slot は SPSC 規律
+    // により capacity check に関わらず消費されるが、`*out_payload_len` に
+    // 本来必要だった byte 数を書くことで caller は再 pop 不可な事実を観測
+    // 可能（戻り値 -3 で empty と区別）。
+    match spsc::pop_raw_into(
+        storage.cast::<u8>(),
+        slot_size,
+        out_payload,
+        out_payload_cap,
+    ) {
+        PopOutcome::Empty => 0,
+        PopOutcome::Copied(len) => {
+            *out_payload_len = len;
+            1
+        }
+        PopOutcome::Truncated(required) => {
+            *out_payload_len = required;
+            -3
+        }
     }
-    let Some(payload) = spsc::pop_raw(storage.cast::<u8>(), slot_size) else {
-        return 0;
-    };
-    *out_payload_len = payload.len();
-    if payload.len() > out_payload_cap {
-        // 契約違反: caller が小さすぎる buffer を渡した。SPSC 規律上 slot
-        // は既に消費されており再 pop できないため payload は破棄するが、
-        // `*out_payload_len` に本来のバイト長を残し、戻り値 -3 で「empty
-        // と区別可能な失敗」を示す。caller はログ出力 + buffer 拡大で
-        // 次回以降に備える。
-        return -3;
+}
+
+/// `ShmHeader` の `slot_size` と `version` が本 build の SDK で扱える範囲か
+/// を判定する。共有メモリの汚染 / 未初期化 / version 不一致を一括ガード
+/// する。
+#[inline]
+fn is_header_compatible(header: &ShmHeader) -> bool {
+    if validate_slot_size(header.slot_size).is_err() {
+        return false;
     }
-    if !payload.is_empty() {
-        std::ptr::copy_nonoverlapping(payload.as_ptr(), out_payload, payload.len());
-    }
-    1
+    let v = header.version;
+    (MIN_SUPPORTED_SHM_VERSION..=MAX_SUPPORTED_SHM_VERSION).contains(&v)
 }
 
 #[cfg(test)]
