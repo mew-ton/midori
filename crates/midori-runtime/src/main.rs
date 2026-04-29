@@ -120,12 +120,17 @@ fn run(profile_path: &Path, driver_events_args: &[String]) -> Result<(), CliErro
 }
 
 /// `--driver-events <name>=<path>` 形式の引数を分解する。
+///
+/// shell からの引数渡しで前後に空白が混じるケース（例: `"midi=   "`）を
+/// 防衛するため、`name` / `path` は `trim()` してから空判定する。
 fn parse_driver_events_arg(raw: &str) -> Result<(&str, PathBuf), CliError> {
     let (name, path) = raw
         .split_once('=')
         .ok_or_else(|| CliError::InvalidDriverEventsArg {
             raw: raw.to_owned(),
         })?;
+    let name = name.trim();
+    let path = path.trim();
     if name.is_empty() || path.is_empty() {
         return Err(CliError::InvalidDriverEventsArg {
             raw: raw.to_owned(),
@@ -421,6 +426,44 @@ mod tests {
         .expect("parse");
 
         let err = super::dispatch(&cli).expect_err("empty path must fail");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_driver_events_argument_with_whitespace_only_name() {
+        let profile = write_tmp_profile("ws-name");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "   =/tmp/events.yaml",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("whitespace-only name must fail");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_driver_events_argument_with_whitespace_only_path() {
+        let profile = write_tmp_profile("ws-path");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "midi=   ",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("whitespace-only path must fail");
         assert!(
             matches!(err, CliError::InvalidDriverEventsArg { .. }),
             "expected InvalidDriverEventsArg, got {err:?}"
