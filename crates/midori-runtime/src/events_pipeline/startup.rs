@@ -66,13 +66,13 @@ impl std::fmt::Display for StartupCheckError {
                 path,
                 violations,
             } => {
-                writeln!(
+                write!(
                     f,
                     "driver `{driver_name}` の events.yaml ({}) が schema 違反:",
                     path.display()
                 )?;
                 for v in violations {
-                    writeln!(f, "  - {v}")?;
+                    write!(f, "\n  - {v}")?;
                 }
                 Ok(())
             }
@@ -81,13 +81,13 @@ impl std::fmt::Display for StartupCheckError {
                 path,
                 reasons,
             } => {
-                writeln!(
+                write!(
                     f,
                     "driver `{driver_name}` の events.yaml ({}) が runtime 未対応な機能を宣言:",
                     path.display()
                 )?;
                 for r in reasons {
-                    writeln!(f, "  - {r}")?;
+                    write!(f, "\n  - {r}")?;
                 }
                 Ok(())
             }

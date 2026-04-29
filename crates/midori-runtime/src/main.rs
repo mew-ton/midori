@@ -232,7 +232,7 @@ mod tests {
     }
 
     // --------------------------------------------------------------
-    // --driver-events startup chain (MEW-54)
+    // --driver-events startup chain
     // --------------------------------------------------------------
 
     use crate::error::CliError;
@@ -386,6 +386,119 @@ mod tests {
         assert!(
             matches!(err, CliError::InvalidDriverEventsArg { .. }),
             "expected InvalidDriverEventsArg, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_driver_events_argument_with_empty_name() {
+        let profile = write_tmp_profile("empty-name");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "=/tmp/events.yaml",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("empty name must fail");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_reject_driver_events_argument_with_empty_path() {
+        let profile = write_tmp_profile("empty-path");
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            "midi=",
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("empty path must fail");
+        assert!(
+            matches!(err, CliError::InvalidDriverEventsArg { .. }),
+            "expected InvalidDriverEventsArg, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_render_startup_check_error_display_with_driver_and_violation_context() {
+        // schema 違反をわざと作って、Display 文字列に driver 名と違反内容が
+        // 両方含まれることを担保する。trailing newline がないことも検査する。
+        let profile = write_tmp_profile("display");
+        let events = write_tmp_events_yaml(
+            "display",
+            "schema_version: 1\n\
+             events:\n  \
+               noteOn:\n    \
+                 fields:\n      \
+                   channel: { type: uint8, range: [16, 1] }\n",
+        );
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("midi={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("schema violation");
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("midi"),
+            "Display should mention the driver name, got: {rendered}"
+        );
+        assert!(
+            rendered.contains("schema 違反"),
+            "Display should mention the violation kind, got: {rendered}"
+        );
+        assert!(
+            !rendered.ends_with('\n'),
+            "Display must not end with a trailing newline, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_render_startup_check_error_display_with_streamed_feature_reason() {
+        let profile = write_tmp_profile("display-streamed");
+        let events = write_tmp_events_yaml(
+            "display-streamed",
+            "schema_version: 1\n\
+             events:\n  \
+               oscBlob:\n    \
+                 tier: streamed\n    \
+                 fields:\n      \
+                   payload: { type: bytes, max_length: 1024 }\n",
+        );
+        let cli = Cli::try_parse_from([
+            "midori",
+            "run",
+            profile.path().to_str().expect("profile utf-8"),
+            "--driver-events",
+            &format!("osc={}", events.path().display()),
+        ])
+        .expect("parse");
+
+        let err = super::dispatch(&cli).expect_err("streamed");
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("osc"),
+            "Display should mention the driver name, got: {rendered}"
+        );
+        assert!(
+            rendered.contains("streamed"),
+            "Display should mention the unsupported feature, got: {rendered}"
+        );
+        assert!(
+            !rendered.ends_with('\n'),
+            "Display must not end with a trailing newline, got: {rendered:?}"
         );
     }
 }

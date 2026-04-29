@@ -1,14 +1,16 @@
 //! Inline payload を Layer 2 binding 入口まで運ぶ runtime パイプライン層。
 //!
-//! 役割は 3 段:
+//! 役割は 4 つ:
 //!
-//! 1. msgpack バイト列の decode（[`decode`] サブモジュール）
-//! 2. 1 イベント単位の events.yaml schema 照合（[`runtime_check`] サブモジュール）
-//! 3. 照合通過イベントを Layer 2 binding 側へ手渡す（本モジュールの [`EventSink`]）
+//! 1. Bridge 起動時に各 driver の events.yaml を整合性チェック
+//!    （[`startup`] サブモジュール、main から駆動）
+//! 2. msgpack バイト列の decode（[`decode`] サブモジュール）
+//! 3. 1 イベント単位の events.yaml schema 照合（[`runtime_check`] サブモジュール）
+//! 4. 照合通過イベントを Layer 2 binding 側へ手渡す（本モジュールの [`EventSink`]）
 //!
-//! Layer 2 binding 本体は MEW-50 のスコープ外。本層は **stub I/F** として
-//! `EventSink` trait と最小実装 [`LoggingSink`] を提供し、後続の binding 実装
-//! で差し替える前提。
+//! Layer 2 binding 本体はまだ未実装で、本層は **stub I/F** として `EventSink`
+//! trait と最小実装 [`LoggingSink`] を提供する。実 binding 経路の I/F が
+//! 固まり次第差し替える。
 //!
 //! 不正イベント（decode 失敗 / schema 違反 / events.yaml 未宣言 driver）は
 //! [`process_inline_payload`] が Error ログを出して drop する。パイプライン
@@ -16,13 +18,14 @@
 //!
 //! 構成:
 //!
+//! - [`startup`]: events.yaml の起動時整合性チェック（[`check_driver_schema`]）
 //! - [`decode`]: msgpack → [`DecodedPayload`]
 //! - [`runtime_check`]: [`DecodedPayload`] × `EventsSchema` → [`ValidatedEvent`]
 //! - 本ファイル: [`EventSink`] / [`LoggingSink`] / [`process_inline_payload`]
 //! - `tests`: 統合テスト
 
-// `decode` / `runtime_check` 経路は SPSC ring からの実 ingest が MEW-43
-// 完了後に配線される予定。それまで本ファイル直下の SPSC 連携 stub
+// `decode` / `runtime_check` 経路は SPSC ring からの実 ingest 配線後に
+// 実 caller が付く予定。それまで本ファイル直下の SPSC 連携 stub
 // (`LoggingSink` / `process_inline_payload` / `try_process` / `ProcessError`)
 // と sub-module 群はいずれも dead_code 警告を生むので、type 単位で個別に
 // allow する。`startup` は main から駆動済みのため対象外。
@@ -45,8 +48,8 @@ use crate::events_schema::EventsSchema;
 
 /// Layer 2 binding が schema 照合通過後のイベントを受け取る接点。
 ///
-/// 本 trait は MEW-50 段階の **stub**。実 binding 経路の I/F が固まり次第
-/// 差し替える（trait のままにするか、channel ベースへ移すかは後続 Issue で決定）。
+/// 本 trait は **stub**。実 binding 経路の I/F が固まり次第差し替える
+/// （trait のままにするか、channel ベースへ移すかは未定）。
 pub trait EventSink {
     fn dispatch(&mut self, event: ValidatedEvent);
 }
