@@ -264,17 +264,35 @@ mod tests {
         file
     }
 
+    /// 正常通過する最小 events.yaml フィクスチャ（noteOn の range が
+    /// `[1, 16]` で validator / feature check を全て通過する）。
+    const EVENTS_YAML_VALID_NOTEON: &str = "schema_version: 1\n\
+         events:\n  \
+           noteOn:\n    \
+             fields:\n      \
+               channel: { type: uint8, range: [1, 16] }\n";
+
+    /// schema validator が違反として検出する events.yaml フィクスチャ。
+    /// `range:` の min > max を含む。
+    const EVENTS_YAML_INVALID_RANGE: &str = "schema_version: 1\n\
+         events:\n  \
+           noteOn:\n    \
+             fields:\n      \
+               channel: { type: uint8, range: [16, 1] }\n";
+
+    /// runtime feature-availability check が reject する events.yaml
+    /// フィクスチャ。`tier: streamed` を 1 件含む。
+    const EVENTS_YAML_STREAMED_OSCBLOB: &str = "schema_version: 1\n\
+         events:\n  \
+           oscBlob:\n    \
+             tier: streamed\n    \
+             fields:\n      \
+               payload: { type: bytes, max_length: 1024 }\n";
+
     #[test]
     fn it_should_pass_startup_when_driver_events_yaml_is_valid() {
         let profile = write_tmp_profile("happy");
-        let events = write_tmp_events_yaml(
-            "happy",
-            "schema_version: 1\n\
-             events:\n  \
-               noteOn:\n    \
-                 fields:\n      \
-                   channel: { type: uint8, range: [1, 16] }\n",
-        );
+        let events = write_tmp_events_yaml("happy", EVENTS_YAML_VALID_NOTEON);
         let cli = Cli::try_parse_from([
             "midori",
             "run",
@@ -293,14 +311,7 @@ mod tests {
     fn it_should_fail_startup_when_driver_events_yaml_violates_schema() {
         // `range:` の min > max は validator が違反として検出する。
         let profile = write_tmp_profile("invalid");
-        let events = write_tmp_events_yaml(
-            "invalid",
-            "schema_version: 1\n\
-             events:\n  \
-               noteOn:\n    \
-                 fields:\n      \
-                   channel: { type: uint8, range: [16, 1] }\n",
-        );
+        let events = write_tmp_events_yaml("invalid", EVENTS_YAML_INVALID_RANGE);
         let cli = Cli::try_parse_from([
             "midori",
             "run",
@@ -345,15 +356,7 @@ mod tests {
     #[test]
     fn it_should_fail_startup_when_driver_declares_streamed_tier() {
         let profile = write_tmp_profile("streamed");
-        let events = write_tmp_events_yaml(
-            "streamed",
-            "schema_version: 1\n\
-             events:\n  \
-               oscBlob:\n    \
-                 tier: streamed\n    \
-                 fields:\n      \
-                   payload: { type: bytes, max_length: 1024 }\n",
-        );
+        let events = write_tmp_events_yaml("streamed", EVENTS_YAML_STREAMED_OSCBLOB);
         let cli = Cli::try_parse_from([
             "midori",
             "run",
@@ -475,14 +478,7 @@ mod tests {
         // schema 違反をわざと作って、Display 文字列に driver 名と違反内容が
         // 両方含まれることを担保する。trailing newline がないことも検査する。
         let profile = write_tmp_profile("display");
-        let events = write_tmp_events_yaml(
-            "display",
-            "schema_version: 1\n\
-             events:\n  \
-               noteOn:\n    \
-                 fields:\n      \
-                   channel: { type: uint8, range: [16, 1] }\n",
-        );
+        let events = write_tmp_events_yaml("display", EVENTS_YAML_INVALID_RANGE);
         let cli = Cli::try_parse_from([
             "midori",
             "run",
@@ -511,15 +507,7 @@ mod tests {
     #[test]
     fn it_should_render_startup_check_error_display_with_streamed_feature_reason() {
         let profile = write_tmp_profile("display-streamed");
-        let events = write_tmp_events_yaml(
-            "display-streamed",
-            "schema_version: 1\n\
-             events:\n  \
-               oscBlob:\n    \
-                 tier: streamed\n    \
-                 fields:\n      \
-                   payload: { type: bytes, max_length: 1024 }\n",
-        );
+        let events = write_tmp_events_yaml("display-streamed", EVENTS_YAML_STREAMED_OSCBLOB);
         let cli = Cli::try_parse_from([
             "midori",
             "run",
