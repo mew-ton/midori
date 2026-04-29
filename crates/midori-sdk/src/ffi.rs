@@ -97,7 +97,9 @@ pub unsafe extern "C" fn midori_sdk_spsc_init(storage: *mut c_void, slot_size: u
 ///
 /// # Safety
 ///
-/// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指すこと
+/// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指し、
+///   [`midori_sdk_spsc_storage_alignment`] (= 8 byte) のアラインメントを
+///   満たすこと（`ShmHeader` が cast 経由で参照されるため）
 /// - `payload` / `payload_len` は読み取り可能なバイト列を指すこと（`payload`
 ///   が NULL かつ `payload_len == 0` のときは empty payload として扱う）
 /// - 同時に 1 スレッドからのみ呼ばれること（SPSC 生産者規律）
@@ -128,11 +130,20 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(
 ///
 /// 戻り値:
 /// - `1`: 成功（`out_payload` に payload を書き、`*out_payload_len` に長さを書く）
-/// - `0`: バッファ空、引数 NULL、または `out_payload_cap < slot_size - 8`
+/// - `0`: バッファ空、または引数 NULL（`storage` / `out_payload_len`、または
+///   `out_payload == NULL && out_payload_cap > 0` の不整合）
+/// - `-3`: 契約違反による容量不足。`out_payload_cap < payload.len()` のときに
+///   発生する。SPSC 規律上 slot は既に消費されており **再 pop できない**
+///   ため、payload バイトは破棄される。`*out_payload_len` には消費された
+///   payload の本来のバイト長が書き込まれる（caller が次回必要 buffer を
+///   見積もるため）。caller は `ShmHeader::slot_size - 8` 以上の buffer を
+///   常に渡す契約だが、それを破ったときに **観測可能** なエラーで失敗する
 ///
 /// # Safety
 ///
-/// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指すこと
+/// - `storage` は [`midori_sdk_spsc_init`] 済みの領域を指し、
+///   [`midori_sdk_spsc_storage_alignment`] (= 8 byte) のアラインメントを
+///   満たすこと（`ShmHeader` が cast 経由で参照されるため）
 /// - `out_payload` は `out_payload_cap` バイト以上の書き込み可能領域を指すこと
 /// - `out_payload_len` は書き込み可能な `usize` を指すこと
 /// - 同時に 1 スレッドからのみ呼ばれること（SPSC 消費者規律）
@@ -155,17 +166,18 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
     let Some(payload) = spsc::pop_raw(storage.cast::<u8>(), slot_size) else {
         return 0;
     };
+    *out_payload_len = payload.len();
     if payload.len() > out_payload_cap {
-        // capacity 不足で書き込めない。caller は `slot_size - 8` 以上の buffer
-        // を渡す責務を持つ。本実装では payload は捨てた状態で 0 を返す
-        // （SPSC 規律上、再 pop はできない）。これは driver SDK が
-        // slot_size を知らずに小さい buffer を渡した契約違反を意味する。
-        return 0;
+        // 契約違反: caller が小さすぎる buffer を渡した。SPSC 規律上 slot
+        // は既に消費されており再 pop できないため payload は破棄するが、
+        // `*out_payload_len` に本来のバイト長を残し、戻り値 -3 で「empty
+        // と区別可能な失敗」を示す。caller はログ出力 + buffer 拡大で
+        // 次回以降に備える。
+        return -3;
     }
     if !payload.is_empty() {
         std::ptr::copy_nonoverlapping(payload.as_ptr(), out_payload, payload.len());
     }
-    *out_payload_len = payload.len();
     1
 }
 
@@ -331,6 +343,64 @@ mod tests {
     }
 
     #[test]
+    fn it_should_return_minus_three_when_pop_buffer_is_smaller_than_payload() {
+        // caller が `slot_size - 8` 未満の小さい buffer を渡したケース。slot は
+        // 消費されるが payload は破棄され、戻り値 -3 で empty (= 0) と区別する。
+        // `*out_payload_len` には本来必要だった payload バイト長が書かれる。
+        let (raw, layout) = alloc_storage(DEFAULT_SLOT_SIZE);
+
+        let payload: Vec<u8> = vec![0xAB; 64];
+        let pushed =
+            unsafe { midori_sdk_spsc_push(raw.cast::<c_void>(), payload.as_ptr(), payload.len()) };
+        assert_eq!(pushed, 1);
+
+        // buffer が 32 byte しか無い → pop は -3 を返し、出力長は 64 を伝える
+        let mut tiny_buf = vec![0u8; 32];
+        let mut out_len: usize = 0;
+        let popped = unsafe {
+            midori_sdk_spsc_pop(
+                raw.cast::<c_void>(),
+                tiny_buf.as_mut_ptr(),
+                tiny_buf.len(),
+                &raw mut out_len,
+            )
+        };
+        assert_eq!(popped, -3, "capacity 不足は -3 で empty と区別される");
+        assert_eq!(out_len, 64, "本来必要だった payload 長を伝える");
+        // slot は消費済みなので再 pop は empty を返す
+        let mut large_buf = vec![0u8; (DEFAULT_SLOT_SIZE - SLOT_HEADER_SIZE) as usize];
+        let popped_again = unsafe {
+            midori_sdk_spsc_pop(
+                raw.cast::<c_void>(),
+                large_buf.as_mut_ptr(),
+                large_buf.len(),
+                &raw mut out_len,
+            )
+        };
+        assert_eq!(popped_again, 0, "slot は既に消費済みなので empty");
+
+        dealloc_storage(raw, layout);
+    }
+
+    #[test]
+    fn it_should_return_zero_when_out_payload_len_pointer_is_null() {
+        // `out_payload_len NULL` 単体ケース。OR 条件 `storage.is_null() ||
+        // out_payload_len.is_null()` の後者ブランチを直接担保する。
+        let (raw, layout) = alloc_storage(DEFAULT_SLOT_SIZE);
+        let mut tiny_buf = [0u8; 4];
+        let popped = unsafe {
+            midori_sdk_spsc_pop(
+                raw.cast::<c_void>(),
+                tiny_buf.as_mut_ptr(),
+                tiny_buf.len(),
+                std::ptr::null_mut::<usize>(),
+            )
+        };
+        assert_eq!(popped, 0);
+        dealloc_storage(raw, layout);
+    }
+
+    #[test]
     fn it_should_storage_size_match_layout_for_default_slot() {
         let size = midori_sdk_spsc_storage_size(DEFAULT_SLOT_SIZE);
         let align = midori_sdk_spsc_storage_alignment();
@@ -354,7 +424,7 @@ mod tests {
         assert!(GENERATED_HEADER.contains("midori_sdk_spsc_init"));
         assert!(GENERATED_HEADER.contains("midori_sdk_spsc_push"));
         assert!(GENERATED_HEADER.contains("midori_sdk_spsc_pop"));
-        // 新レイアウトの構造体型
+        // 新レイアウトの構造体型（C 側で layout 計算に必須）
         assert!(GENERATED_HEADER.contains("ShmHeader"));
         assert!(GENERATED_HEADER.contains("SlotHeader"));
         // 戻り値型の breaking change：旧 u8 ではなく i32 (= int32_t)
@@ -364,5 +434,11 @@ mod tests {
         assert!(!GENERATED_HEADER.contains("PAYLOAD_INLINE_MAX"));
         assert!(!GENERATED_HEADER.contains("side_offset"));
         assert!(!GENERATED_HEADER.contains("side_len"));
+        // 注: ABI 定数群（DEFAULT_SLOT_SIZE / HARD_SLOT_SIZE / SLOT_HEADER_SIZE
+        // / SHM_LAYOUT_VERSION 等）は cbindgen.toml の [export].include に
+        // 列挙してあるが、cbindgen 0.29 の現行設定では const が C ヘッダに
+        // 出力されない（parse.expand の追加調整が必要）。C 側 binding 作者は
+        // 当面これらの値を C 側で重複定義する運用となる。本検証では struct
+        // と FFI 関数の出力までを担保する。
     }
 }

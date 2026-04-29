@@ -1,12 +1,6 @@
 //! Bridge 側で driver からの `request_ring(slot_size)` 受領を処理する経路。
 //!
-//! 公開 API は driver process spawn / control channel 経由で接続される予定で、
-//! 現状 main から caller が居ないため module 全体で `dead_code` を抑制する。
-//! 単体テストで挙動を担保している。
-#![allow(dead_code)]
-
-//!
-//! design/17-driver-comm/01-inline-ring.md の handshake プロトコルに従い:
+//! `design/17-driver-comm/01-inline-ring.md` の handshake プロトコルに従い:
 //!
 //! 1. driver が events.yaml の inline tier 全イベントから `max_payload_size`
 //!    と必要 `slot_size = ((max_payload_size + 8) + 3) & !3` を計算
@@ -14,13 +8,18 @@
 //!    sentinel `0` で「default 要求なし」を示す
 //! 3. Bridge: 受信値が `0` なら `DEFAULT_SLOT_SIZE` を採用、それ以外は受信値
 //!    をそのまま採用したうえで alignment / 上限を validate
-//! 4. Bridge: shm 領域全体を 4 KiB ページに切り上げて mmap（実装は本 module
-//!    では in-process Box backing でモックし、実 fd / mmap 確保は driver
-//!    process spawn の subtask に委ねる）
+//! 4. Bridge: shm 領域全体を 4 KiB ページに切り上げて mmap
 //!
 //! 本 module はステップ 3-4 のうち「`slot_size` の解決と検証」「ページ整列
-//! 計算」までを担う。control channel の wire format（serde 等）と実 shm fd
-//! 確保は別 subtask の責務。
+//! 計算」までを担う。**範囲外**: control channel の wire format（serde 等で
+//! 通信する `request_ring` メッセージ構造）と、実 driver process spawn 経由
+//! での shm fd 確保 / `mmap(2)` 呼び出し。これらは driver lifecycle 管理が
+//! 入った段階で別 module から本 module の関数を呼ぶ形で接続する。
+//!
+//! 公開 API は driver process spawn / control channel 経由で接続される予定で、
+//! 現状 main から caller が居ないため module 全体で `dead_code` を抑制する。
+//! 単体テストで挙動を担保している。
+#![allow(dead_code)]
 
 use std::error::Error;
 use std::fmt;
@@ -169,13 +168,19 @@ mod tests {
     }
 
     #[test]
-    fn it_should_render_handshake_error_display_with_slot_size_context() {
+    fn it_should_render_handshake_error_display_with_slot_size_and_inner_reason() {
+        // 4 byte 倍数違反のケース。Display は外側の handshake 文脈に加えて
+        // 内側 SlotSizeError の理由フレーズも含むことを担保する。
         let err = resolve_requested_slot_size(13).expect_err("alignment");
         let rendered = err.to_string();
         assert!(rendered.contains("13"), "Display に値を含む: {rendered}");
         assert!(
             rendered.contains("request_ring"),
             "Display に handshake 文脈を含む: {rendered}"
+        );
+        assert!(
+            rendered.contains("4 byte 倍数"),
+            "Display に SlotSizeError の理由フレーズを含む: {rendered}"
         );
     }
 }

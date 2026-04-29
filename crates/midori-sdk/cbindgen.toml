@@ -14,6 +14,15 @@ include = ["midori-core"]
 
 [export]
 prefix = ""
+# C 側 binding 作者が shm レイアウトを直接計算するために最小限必要な型・定数
+# のみを明示列挙する。具体的には:
+#   - ShmHeader / SlotHeader: layout 確認 / 自前 cast に必要な構造体
+#   - RING_CAPACITY: ring buffer のスロット数
+#   - DEFAULT_SLOT_SIZE / HARD_SLOT_SIZE / MIN_SLOT_SIZE / SLOT_HEADER_SIZE:
+#     handshake で交換する slot_size の境界
+#   - SHM_LAYOUT_VERSION / MIN/MAX_SUPPORTED_SHM_VERSION: ABI 互換性チェック
+# midori-core に他にも公開シンボルはあるが、driver / Bridge プロセス境界を
+# またがない型（Value / Signal / IpcEvent 等）はあえて出さない。
 include = [
     "ShmHeader",
     "SlotHeader",

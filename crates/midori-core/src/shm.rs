@@ -135,6 +135,12 @@ pub struct ShmHeader {
 const _: () = assert!(std::mem::size_of::<ShmHeader>() == 56);
 const _: () = assert!(std::mem::align_of::<ShmHeader>() == 8);
 
+// design/17-driver-comm/01-inline-ring.md の暫定値を ABI 定数として lock
+// する。値変更は major bump 案件のため、compile-time でドリフトを検出する。
+const _: () = assert!(DEFAULT_SLOT_SIZE == 1032);
+const _: () = assert!(HARD_SLOT_SIZE == 65_536);
+const _: () = assert!(SLOT_HEADER_SIZE == 8);
+
 /// `slot_size` 検証で検出される失敗種別。
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SlotSizeError {
@@ -220,11 +226,13 @@ pub const fn shm_total_size(slot_size: u32) -> usize {
     std::mem::size_of::<ShmHeader>() + RING_CAPACITY * slot_size as usize
 }
 
-/// 0-origin の slot 番号（`index % RING_CAPACITY`）から、`ShmHeader` 末尾を
-/// 起点としたスロット先頭までのバイトオフセットを返す。
+/// 0-origin の slot 番号（`index % RING_CAPACITY`）から、shm 領域先頭
+/// （`ShmHeader` 先頭 = base ポインタ）を起点としたスロット先頭までの
+/// バイトオフセットを返す。
 ///
-/// caller は `base_ptr.add(slot_offset_in_shm(slot_size, idx))` で raw byte
-/// アクセスを開始する。
+/// 戻り値には `sizeof(ShmHeader)` (= 56 byte) が常に含まれる。caller は
+/// `base_ptr.add(slot_offset_in_shm(slot_size, idx))` で raw byte アクセスを
+/// 開始する。
 #[must_use]
 pub const fn slot_offset_in_shm(slot_size: u32, slot_index: usize) -> usize {
     std::mem::size_of::<ShmHeader>() + slot_index * slot_size as usize
@@ -251,10 +259,31 @@ mod tests {
     }
 
     #[test]
-    fn it_should_default_slot_size_match_design_spec() {
+    fn it_should_lock_default_and_hard_slot_size_to_design_spec_values() {
         // design/17-driver-comm/01-inline-ring.md の暫定値と整合するか。
+        // compile-time guard はモジュール末尾の `const _: () = assert!(...)`
+        // で固定し、本テストは runtime 値も runtime で確認する dual-check。
         assert_eq!(DEFAULT_SLOT_SIZE, 1032);
         assert_eq!(HARD_SLOT_SIZE, 65_536);
+    }
+
+    #[test]
+    fn it_should_render_slot_size_error_display_with_explanatory_text() {
+        // Display に「offending slot_size 値」と「違反種別の意味」が両方
+        // 含まれることを担保する（API consumer が log 経路で意味を読み取れる）。
+        let err = validate_slot_size(13).expect_err("alignment");
+        let rendered = err.to_string();
+        assert!(rendered.contains("13"), "got: {rendered}");
+        assert!(
+            rendered.contains("4 byte 倍数"),
+            "alignment 違反の説明を含む: {rendered}"
+        );
+
+        let err_small = validate_slot_size(8).expect_err("min");
+        assert!(err_small.to_string().contains("最小値"));
+
+        let err_large = validate_slot_size(HARD_SLOT_SIZE + 4).expect_err("hard");
+        assert!(err_large.to_string().contains("HARD_SLOT_SIZE"));
     }
 
     #[test]

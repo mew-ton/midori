@@ -150,9 +150,9 @@ impl SpscStorage {
         (Producer { storage }, Consumer { storage })
     }
 
-    /// shm 領域 base ポインタ。`push_raw` / `pop_raw` の `base` 引数として
-    /// 渡せる先頭アドレス。[`ShmHeader`] が先頭に配置され、続いて
-    /// `RING_CAPACITY × slot_size` のスロット領域が並ぶ。
+    /// テスト専用の `ShmHeader` アクセサ。本番経路では `push_raw` / `pop_raw`
+    /// が直接 buffer 先頭からアクセスするため不要だが、`SpscStorage::new` が
+    /// 初期化したヘッダ値（`slot_size` / `version`）の検証に使う。
     #[cfg(test)]
     fn header(&self) -> &ShmHeader {
         // SAFETY: buffer 先頭は ShmHeader としてアラインかつ初期化済み。
@@ -163,7 +163,7 @@ impl SpscStorage {
     }
 }
 
-/// `try_push` の結果。FFI 戻り値（`i32`）は `as_ffi_code` で取り出す。
+/// `push_raw` の結果。FFI 戻り値（`i32`）は `as_ffi_code` で取り出す。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PushResult {
     /// payload を slot に書き込めた。
@@ -202,10 +202,15 @@ fn slot_ptr_at(base: *mut u8, slot_size: u32, slot_index: usize) -> *mut u8 {
 ///
 /// # Safety
 ///
-/// `base` は初期化済みの shm 領域先頭で、`shm_total_size(slot_size)` バイトの
-/// 書き込み可能領域を指していること。`base` は `ShmHeader` の 8-byte
-/// alignment を満たすこと（`SpscStorage::new` の `Box<[u64]>` および
-/// FFI `aligned_alloc` 経由で担保）。
+/// caller は以下を満たす責任を負う:
+///
+/// - `base` は初期化済みの shm 領域先頭で、`shm_total_size(slot_size)` バイトの
+///   書き込み可能領域を指す
+/// - `base` は `ShmHeader` の 8-byte alignment を満たす（`SpscStorage::new` の
+///   `Box<[u64]>` および FFI `aligned_alloc` 経由で担保）
+/// - **戻り値の `&'a ShmHeader` が backing storage より長生きしないこと**。
+///   返却される lifetime `'a` は caller 指定で型レベルでは無拘束のため、
+///   実際の生存期間は呼び出し側コンテキストで担保すること
 #[allow(unsafe_code, clippy::cast_ptr_alignment)]
 unsafe fn shm_header_ref<'a>(base: *const u8) -> &'a ShmHeader {
     &*base.cast::<ShmHeader>()

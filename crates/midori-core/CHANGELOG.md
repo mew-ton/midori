@@ -21,7 +21,7 @@
 ### Notes
 
 - `midori-sdk` は本変更に追従して `0.2.0` に bump。FFI 戻り値型も `u8` から `int32_t` に変更（`-2` payload too large の表現）
-- 実 driver↔Bridge 間の handshake control channel と shm fd 確保は別 Issue（後続 subtask）の責務
+- 実 driver↔Bridge 間の handshake control channel（`request_ring` メッセージの wire format）と、driver process spawn 経由での shm fd 確保 / `mmap(2)` 呼び出しは本 release のスコープ外。`midori-runtime::ring_handshake` で resolve / 検証 / ページ整列の関数群までを提供し、driver lifecycle 管理が入った段階で接続される
 
 ## 0.2.0 — 2026-04-27
 
