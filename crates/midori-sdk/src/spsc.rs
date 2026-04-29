@@ -26,6 +26,7 @@
 //! 競合する書き込みは発生しない。スロット側は同じインデックスへの同時
 //! アクセスをインデックス比較で排除している。
 
+use std::cell::UnsafeCell;
 use std::sync::atomic::Ordering;
 
 use midori_core::shm::{
@@ -44,16 +45,19 @@ use midori_core::shm::{
 /// ...
 /// ```
 ///
-/// `Box<[u64]>` で確保することで、`ShmHeader` の 8 byte alignment を満たし
-/// つつ、合計バイト数を `slot_size × RING_CAPACITY + 56` にできる。
+/// `Box<[UnsafeCell<u64>]>` で確保することで、`ShmHeader` の 8 byte alignment
+/// を満たしつつ、Producer / Consumer が共有 `&SpscStorage` 経由で interior
+/// mutability を行使する根拠を型レベルで明示する。`u64` 単位の配列なので
+/// 合計バイト数は `slot_size × RING_CAPACITY + 56` を 8 byte 境界へ切り上げ。
 ///
 /// FFI 経由で C 側が確保した buffer に対しては、本構造体ではなく
 /// [`push_raw`] / [`pop_raw`] を直接使う。両者は内部で共通の low-level
 /// 関数を呼び出すため、Rust API と FFI で挙動が一致する。
 pub struct SpscStorage {
-    // u64 配列で確保することで `ShmHeader` の 8-byte alignment を保証する。
-    // 中身は raw bytes で、ヘッダ領域と各スロットを stride 計算で参照する。
-    buffer: Box<[u64]>,
+    // 各セルを `UnsafeCell` で包むことで「共有参照経由の内部書き込み」が
+    // Rust の aliasing rule に違反しない正規ルートになる。生バイト経由で
+    // ヘッダ領域と各スロットを stride 計算で参照する。
+    buffer: Box<[UnsafeCell<u64>]>,
     // ヘッダ書き込み / stride 計算のキャッシュ。`ShmHeader.slot_size` と
     // 一致する。
     slot_size: u32,
@@ -79,7 +83,10 @@ impl SpscStorage {
         let total_bytes = shm::shm_total_size(slot_size);
         // u64 単位に切り上げて確保することで 8-byte alignment を保証する。
         let total_u64 = total_bytes.div_ceil(std::mem::size_of::<u64>());
-        let buffer = vec![0u64; total_u64].into_boxed_slice();
+        let buffer: Box<[UnsafeCell<u64>]> = (0..total_u64)
+            .map(|_| UnsafeCell::new(0u64))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let storage = Self { buffer, slot_size };
         // ヘッダ初期化（write/read = 0、slot_size、version、_pad は 0 のまま）
         #[allow(unsafe_code)]
@@ -87,6 +94,18 @@ impl SpscStorage {
             storage.write_header();
         }
         Ok(storage)
+    }
+
+    /// backing buffer 先頭を指す raw pointer。`UnsafeCell::get()` 経由で
+    /// 取り出すことで、共有参照下の内部書き込みが Rust aliasing rule を
+    /// 守った形になる。`buffer` が空の場合は dangling だが本構造体は
+    /// 必ず `ShmHeader` を含む `total_u64 >= 7` を確保しているため空にならない。
+    fn buffer_base(&self) -> *mut u8 {
+        // SAFETY: buffer は非空（new で必ず ShmHeader 分以上確保）。
+        // UnsafeCell::get は安全な API で、得たポインタへの実 access は
+        // SPSC 規律下の caller 責任。
+        debug_assert!(!self.buffer.is_empty());
+        self.buffer[0].get().cast::<u8>()
     }
 
     /// 確保済みのメモリ領域に SPSC ストレージを **その場で** 初期化する。
@@ -132,8 +151,10 @@ impl SpscStorage {
     #[allow(unsafe_code)]
     unsafe fn write_header(&self) {
         // SAFETY: buffer は u64 配列なので 8-byte aligned かつ `shm_total_size`
-        // 以上を確保している。`init_in_place` と同じ手順で in-place 初期化する。
-        Self::init_in_place(self.buffer.as_ptr().cast::<u8>().cast_mut(), self.slot_size);
+        // 以上を確保している。UnsafeCell::get 経由で取り出した raw pointer
+        // への書き込みは aliasing rule 上正規ルート。`init_in_place` と
+        // 同じ手順で in-place 初期化する。
+        Self::init_in_place(self.buffer_base(), self.slot_size);
     }
 
     /// 確定済みの `slot_size`。
@@ -156,9 +177,10 @@ impl SpscStorage {
     #[cfg(test)]
     fn header(&self) -> &ShmHeader {
         // SAFETY: buffer 先頭は ShmHeader としてアラインかつ初期化済み。
-        #[allow(unsafe_code)]
+        // UnsafeCell::get で取り出した raw pointer 経由で参照する。
+        #[allow(unsafe_code, clippy::cast_ptr_alignment)]
         unsafe {
-            &*self.buffer.as_ptr().cast::<ShmHeader>()
+            &*self.buffer_base().cast::<ShmHeader>()
         }
     }
 }
@@ -293,7 +315,14 @@ pub(crate) unsafe fn pop_raw(base: *const u8, slot_size: u32) -> Option<Vec<u8>>
     // ここで読む `slots[read % CAP]` は read < write の不変条件より既に
     // 書き込みが完了している。Acquire ロードによりその書き込みが可視。
     let slot_header_ptr = slot_ptr.cast::<SlotHeader>();
-    let payload_len = (*slot_header_ptr).payload_len as usize;
+    let raw_payload_len = (*slot_header_ptr).payload_len as usize;
+    // 防衛的 bounds check: 共有メモリ上の SlotHeader.payload_len が
+    // shm 汚染や悪意ある producer により slot 容量を超える値になっている
+    // ケースで、そのまま信用すると `copy_nonoverlapping` で隣接スロット
+    // 領域 / shm 範囲外を読み取ってしまう。最大 payload 容量
+    // (slot_size - SLOT_HEADER_SIZE) で clamp して被害を slot 内に閉じる。
+    let max_payload = (slot_size as usize).saturating_sub(SLOT_HEADER_SIZE as usize);
+    let payload_len = raw_payload_len.min(max_payload);
     let payload_src = slot_ptr.add(SLOT_HEADER_SIZE as usize);
     let mut buf = vec![0u8; payload_len];
     std::ptr::copy_nonoverlapping(payload_src, buf.as_mut_ptr(), payload_len);
@@ -314,13 +343,10 @@ impl Producer<'_> {
         // SAFETY: SpscStorage は新規生成時に slot_size を validate 済みで、
         // buffer は shm_total_size(slot_size) バイト以上を確保している。
         // SPSC 生産者規律は &mut Producer により型レベルで担保される。
+        // buffer_base は UnsafeCell::get 経由で aliasing rule を守る。
         #[allow(unsafe_code)]
         unsafe {
-            push_raw(
-                self.storage.buffer.as_ptr().cast::<u8>().cast_mut(),
-                self.storage.slot_size,
-                payload,
-            )
+            push_raw(self.storage.buffer_base(), self.storage.slot_size, payload)
         }
     }
 }
@@ -334,12 +360,10 @@ impl Consumer<'_> {
     /// 先頭スロットの payload バイト列を返す。空なら `None`。
     pub fn pop(&mut self) -> Option<Vec<u8>> {
         // SAFETY: 同上。SPSC 消費者規律は &mut Consumer で担保。
+        // buffer_base は UnsafeCell::get 経由で aliasing rule を守る。
         #[allow(unsafe_code)]
         unsafe {
-            pop_raw(
-                self.storage.buffer.as_ptr().cast::<u8>(),
-                self.storage.slot_size,
-            )
+            pop_raw(self.storage.buffer_base(), self.storage.slot_size)
         }
     }
 }

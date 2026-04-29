@@ -123,6 +123,12 @@ pub unsafe extern "C" fn midori_sdk_spsc_push(
     };
     let header = &*storage.cast::<ShmHeader>();
     let slot_size = header.slot_size;
+    // 共有メモリは別プロセスから書き換えられる可能性があるため、ヘッダの
+    // `slot_size` をそのまま stride 計算に使う前に防衛的 validate する。
+    // 不正値（汚染 / 未初期化）のときは `0` (= 一般的失敗) を返す。
+    if validate_slot_size(slot_size).is_err() {
+        return 0;
+    }
     spsc::push_raw(storage.cast::<u8>().cast_mut(), slot_size, bytes).as_ffi_code()
 }
 
@@ -163,6 +169,11 @@ pub unsafe extern "C" fn midori_sdk_spsc_pop(
     }
     let header = &*storage.cast::<ShmHeader>();
     let slot_size = header.slot_size;
+    // push 側と同様、ヘッダの `slot_size` を信用する前に validate して
+    // shm 汚染による out-of-bounds 読みを防ぐ。
+    if validate_slot_size(slot_size).is_err() {
+        return 0;
+    }
     let Some(payload) = spsc::pop_raw(storage.cast::<u8>(), slot_size) else {
         return 0;
     };

@@ -33,6 +33,10 @@ use midori_core::shm::{shm_total_size, validate_slot_size, SlotSizeError, DEFAUL
 /// driver 側 SDK は本値を仮定して buffer alignment を計算する規約になっている。
 pub const PAGE_SIZE: usize = 4096;
 
+// `page_aligned_shm_size` の bit-mask 計算は `PAGE_SIZE` が 2 のべき乗である
+// ことを前提とする。値変更時に静かに崩れないよう compile-time で固定する。
+const _: () = assert!(PAGE_SIZE.is_power_of_two());
+
 /// driver の `request_ring` メッセージで sentinel として使う値。
 ///
 /// `requested_slot_size == 0` のとき driver は「default で確保してくれ」を
