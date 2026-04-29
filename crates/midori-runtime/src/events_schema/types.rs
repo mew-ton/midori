@@ -190,11 +190,11 @@ impl FieldType {
     }
 
     /// Default integer/float bounds (inclusive). `None` for non-numeric types.
-    /// 整数の `f64` 化は schema validator の境界比較用なので、`i64::MAX`
-    /// 付近で 1 ulp ずれても実害がない（events.yaml で `int64` ぴったり
-    /// 境界の `range` を書く driver は事実上いない）と判断して許容する。
+    /// 整数の `f64` 化は境界比較用なので、`i64::MAX` 付近で 1 ulp ずれても
+    /// 実害がない（events.yaml で `int64` ぴったり境界の `range` を書く driver
+    /// は事実上いない）と判断して許容する。
     #[allow(clippy::cast_precision_loss)]
-    pub(super) fn default_range(&self) -> Option<(f64, f64)> {
+    pub(crate) fn default_range(&self) -> Option<(f64, f64)> {
         Some(match self {
             Self::Int8 => (f64::from(i8::MIN), f64::from(i8::MAX)),
             Self::Uint8 => (0.0, f64::from(u8::MAX)),
