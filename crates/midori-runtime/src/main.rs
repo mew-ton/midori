@@ -1,4 +1,5 @@
 mod error;
+mod events_schema;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
