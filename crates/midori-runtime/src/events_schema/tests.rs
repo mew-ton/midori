@@ -623,3 +623,79 @@ fn it_should_resolve_events_yaml_next_to_driver_yaml() {
         PathBuf::from("/path/to/drivers/midi/events.yaml")
     );
 }
+
+// ---------------------------------------------------------------------------
+// feature_check::check_runtime_features
+// ---------------------------------------------------------------------------
+
+#[test]
+fn it_should_pass_runtime_check_for_inline_only_schema() {
+    let schema = parse(
+        r"
+schema_version: 1
+events:
+  noteOn:
+    fields:
+      channel: { type: uint8, range: [1, 16] }
+",
+    );
+    assert!(check_runtime_features("midi", &schema).is_ok());
+}
+
+#[test]
+fn it_should_reject_runtime_check_when_any_event_is_streamed() {
+    let schema = parse(
+        r"
+schema_version: 1
+events:
+  noteOn:
+    fields:
+      channel: { type: uint8, range: [1, 16] }
+  oscBlob:
+    tier: streamed
+    fields:
+      payload: { type: bytes, max_length: 65536 }
+",
+    );
+    let errors = check_runtime_features("osc", &schema)
+        .expect_err("streamed-tier event must be rejected at runtime");
+    assert_eq!(errors.len(), 1);
+    let err = &errors[0];
+    assert_eq!(err.driver_name, "osc");
+    assert_eq!(err.event_name, "oscBlob");
+    assert_eq!(err.feature, "streamed");
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains("driver `osc`")
+            && rendered.contains("event `oscBlob`")
+            && rendered.contains("feature `streamed`")
+            && rendered.contains("streamed tier is not implemented yet"),
+        "display must include driver, event, feature and reason, got: {rendered}"
+    );
+}
+
+#[test]
+fn it_should_collect_all_streamed_tier_violations() {
+    let schema = parse(
+        r"
+schema_version: 1
+events:
+  big1:
+    tier: streamed
+    fields:
+      payload: { type: bytes, max_length: 4096 }
+  big2:
+    tier: streamed
+    fields:
+      payload: { type: bytes, max_length: 4096 }
+  small:
+    fields:
+      x: { type: uint8 }
+",
+    );
+    let errors = check_runtime_features("driver-x", &schema).expect_err("must collect all");
+    assert_eq!(errors.len(), 2);
+    let names: Vec<&str> = errors.iter().map(|e| e.event_name.as_str()).collect();
+    assert!(names.contains(&"big1"));
+    assert!(names.contains(&"big2"));
+}
