@@ -410,6 +410,100 @@ fn it_should_reject_field_with_wrong_kind() {
 }
 
 #[test]
+fn it_should_reject_uint_value_above_i64_max_for_int64_field() {
+    // f64 経由の比較だと `i64::MAX` と `i64::MAX as u64 + 1` が同じ値に丸まり、
+    // out-of-range が誤って通過する。整数比較で確実に reject されることを担保する。
+    let yaml = r"
+schema_version: 1
+events:
+  ping:
+    fields:
+      v: { type: int64 }
+    binding_filter: [type]
+";
+    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+
+    #[allow(clippy::cast_sign_loss)]
+    let just_above_i64_max: u64 = i64::MAX as u64 + 1;
+    let p = payload(&[
+        ("type", FieldValue::String("ping".into())),
+        ("v", FieldValue::UInt(just_above_i64_max)),
+    ]);
+
+    let err = check_event("drv", &schema, p).expect_err("UInt > i64::MAX must be rejected");
+    assert!(
+        matches!(err, RuntimeCheckError::OutOfRange { .. }),
+        "expected OutOfRange, got {err:?}"
+    );
+}
+
+#[test]
+fn it_should_accept_i64_max_as_int64_field() {
+    let yaml = r"
+schema_version: 1
+events:
+  ping:
+    fields:
+      v: { type: int64 }
+    binding_filter: [type]
+";
+    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+
+    #[allow(clippy::cast_sign_loss)]
+    let i64_max_as_u: u64 = i64::MAX as u64;
+    let p = payload(&[
+        ("type", FieldValue::String("ping".into())),
+        ("v", FieldValue::UInt(i64_max_as_u)),
+    ]);
+
+    check_event("drv", &schema, p).expect("i64::MAX exact must pass");
+}
+
+#[test]
+fn it_should_reject_uint64_value_above_explicit_range_with_integer_precision() {
+    // `range: [0, 9000000000000000000]` の境界 +1 は f64 では同一に丸まるが、
+    // 整数比較なら確実に弾ける。
+    let yaml = r"
+schema_version: 1
+events:
+  ping:
+    fields:
+      v: { type: uint64, range: [0, 9000000000000000000] }
+    binding_filter: [type]
+";
+    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+
+    let p = payload(&[
+        ("type", FieldValue::String("ping".into())),
+        ("v", FieldValue::UInt(9_000_000_000_000_000_001)),
+    ]);
+
+    let err = check_event("drv", &schema, p).expect_err("just-above range must be rejected");
+    assert!(matches!(err, RuntimeCheckError::OutOfRange { .. }));
+}
+
+#[test]
+fn it_should_reject_negative_signed_for_uint64_field() {
+    let yaml = r"
+schema_version: 1
+events:
+  ping:
+    fields:
+      v: { type: uint64 }
+    binding_filter: [type]
+";
+    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+
+    let p = payload(&[
+        ("type", FieldValue::String("ping".into())),
+        ("v", FieldValue::Int(-1)),
+    ]);
+
+    let err = check_event("drv", &schema, p).expect_err("negative for uint64");
+    assert!(matches!(err, RuntimeCheckError::TypeMismatch { .. }));
+}
+
+#[test]
 fn it_should_apply_defaults_block_required_check_to_every_event() {
     // defaults 宣言の required field は全 event で required 扱い。
     let yaml = r"

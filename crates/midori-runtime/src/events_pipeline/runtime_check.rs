@@ -246,14 +246,42 @@ fn check_field(
     value: &FieldValue,
 ) -> Result<(), RuntimeCheckError> {
     match (&spec.ty, value) {
+        // 64-bit 整数は f64 経由だと precision loss で `i64::MAX + 1` 等を見逃す
+        // ため、整数演算で直接比較する。範囲は `range:` 宣言が無ければ型の最大幅。
+        (FieldType::Int64, FieldValue::Int(i)) => {
+            check_int64_bounds(event_type, field_name, spec.range.as_ref(), *i)?;
+        }
+        (FieldType::Int64, FieldValue::UInt(u)) => {
+            let Ok(i) = i64::try_from(*u) else {
+                return Err(out_of_range_for_int64(event_type, field_name, *u));
+            };
+            check_int64_bounds(event_type, field_name, spec.range.as_ref(), i)?;
+        }
+        (FieldType::Uint64, FieldValue::UInt(u)) => {
+            check_uint64_bounds(event_type, field_name, spec.range.as_ref(), *u)?;
+        }
+        (FieldType::Uint64, FieldValue::Int(i)) => {
+            // 負値は msgpack 上必ず Int になるため、ここで unsigned 型への
+            // 負値混入を弾く。正の signed は u64 へキャストして整数比較に流す。
+            if *i < 0 {
+                return Err(RuntimeCheckError::TypeMismatch {
+                    event_type: event_type.to_owned(),
+                    field: field_name.to_owned(),
+                    expected: ty_label(&spec.ty),
+                    actual: value_label(value),
+                });
+            }
+            #[allow(clippy::cast_sign_loss)]
+            let u = *i as u64;
+            check_uint64_bounds(event_type, field_name, spec.range.as_ref(), u)?;
+        }
+        // 32-bit 以下の整数 / 浮動小数は f64 比較で precision loss が起きないため
+        // 共通経路で扱う（mantissa 52 bit は i32 / u32 を完全に表現できる）。
         (
-            FieldType::Int8 | FieldType::Int16 | FieldType::Int32 | FieldType::Int64,
+            FieldType::Int8 | FieldType::Int16 | FieldType::Int32,
             FieldValue::Int(_) | FieldValue::UInt(_),
         )
-        | (
-            FieldType::Uint8 | FieldType::Uint16 | FieldType::Uint32 | FieldType::Uint64,
-            FieldValue::UInt(_),
-        )
+        | (FieldType::Uint8 | FieldType::Uint16 | FieldType::Uint32, FieldValue::UInt(_))
         | (
             FieldType::Float32 | FieldType::Float64,
             FieldValue::Float(_) | FieldValue::Int(_) | FieldValue::UInt(_),
@@ -261,10 +289,7 @@ fn check_field(
             let n = numeric_as_f64(value);
             check_numeric_range(event_type, field_name, &spec.ty, spec.range.as_ref(), n)?;
         }
-        (
-            FieldType::Uint8 | FieldType::Uint16 | FieldType::Uint32 | FieldType::Uint64,
-            FieldValue::Int(i),
-        ) => {
+        (FieldType::Uint8 | FieldType::Uint16 | FieldType::Uint32, FieldValue::Int(i)) => {
             // signed-positive を unsigned 型として受け入れる（負値は msgpack 上
             // 必ず Int になるため、ここで弾けば「unsigned 型に負値」を防げる）。
             if *i < 0 {
@@ -395,6 +420,107 @@ fn numeric_as_f64(value: &FieldValue) -> f64 {
         FieldValue::UInt(u) => *u as f64,
         FieldValue::Float(f) => *f,
         _ => unreachable!("caller has matched only on numeric variants"),
+    }
+}
+
+/// `Int64` フィールド値を整数演算で `range:`（または型のデフォルト i64 全域）
+/// と比較する。`f64` 経由だと `i64::MAX` 近傍の値が precision loss で誤って
+/// 通過してしまうため、本経路は f64 を使わない。
+fn check_int64_bounds(
+    event_type: &str,
+    field_name: &str,
+    range: Option<&RangeBound>,
+    value: i64,
+) -> Result<(), RuntimeCheckError> {
+    let (lo, hi) = int64_bounds_from_range(range);
+    if value < lo || value > hi {
+        #[allow(clippy::cast_precision_loss)]
+        return Err(RuntimeCheckError::OutOfRange {
+            event_type: event_type.to_owned(),
+            field: field_name.to_owned(),
+            value: value as f64,
+            lo: lo as f64,
+            hi: hi as f64,
+        });
+    }
+    Ok(())
+}
+
+/// `Uint64` フィールド値を整数演算で `range:`（または型のデフォルト u64 全域）
+/// と比較する。f64 を使わない理由は [`check_int64_bounds`] と同じ。
+fn check_uint64_bounds(
+    event_type: &str,
+    field_name: &str,
+    range: Option<&RangeBound>,
+    value: u64,
+) -> Result<(), RuntimeCheckError> {
+    let (lo, hi) = uint64_bounds_from_range(range);
+    if value < lo || value > hi {
+        #[allow(clippy::cast_precision_loss)]
+        return Err(RuntimeCheckError::OutOfRange {
+            event_type: event_type.to_owned(),
+            field: field_name.to_owned(),
+            value: value as f64,
+            lo: lo as f64,
+            hi: hi as f64,
+        });
+    }
+    Ok(())
+}
+
+/// `range:` を整数 i64 ペアに解決する。schema validator が範囲妥当性を担保
+/// しているため、ここでは「整数として読み取れない」（小数記法等）の場合は
+/// 安全側に倒して型のデフォルト全域へ fallback する。
+fn int64_bounds_from_range(range: Option<&RangeBound>) -> (i64, i64) {
+    range
+        .and_then(|r| {
+            let lo = yaml_as_i64(&r.min)?;
+            let hi = yaml_as_i64(&r.max)?;
+            if lo <= hi {
+                Some((lo, hi))
+            } else {
+                None
+            }
+        })
+        .unwrap_or((i64::MIN, i64::MAX))
+}
+
+fn uint64_bounds_from_range(range: Option<&RangeBound>) -> (u64, u64) {
+    range
+        .and_then(|r| {
+            let lo = yaml_as_u64(&r.min)?;
+            let hi = yaml_as_u64(&r.max)?;
+            if lo <= hi {
+                Some((lo, hi))
+            } else {
+                None
+            }
+        })
+        .unwrap_or((0, u64::MAX))
+}
+
+fn yaml_as_i64(v: &serde_yml::Value) -> Option<i64> {
+    match v {
+        serde_yml::Value::Number(n) => n.as_i64(),
+        _ => None,
+    }
+}
+
+fn yaml_as_u64(v: &serde_yml::Value) -> Option<u64> {
+    match v {
+        serde_yml::Value::Number(n) => n.as_u64(),
+        _ => None,
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn out_of_range_for_int64(event_type: &str, field_name: &str, value: u64) -> RuntimeCheckError {
+    RuntimeCheckError::OutOfRange {
+        event_type: event_type.to_owned(),
+        field: field_name.to_owned(),
+        value: value as f64,
+        lo: i64::MIN as f64,
+        hi: i64::MAX as f64,
     }
 }
 
