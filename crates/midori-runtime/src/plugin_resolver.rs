@@ -11,9 +11,10 @@
 //!   各 `driver.yaml` の `name` フィールドを driver 識別子として採用する
 //! - `events.yaml` は `driver.yaml` の隣に置かれている前提で path を組む
 //!
-//! 公開 API は [`resolve_drivers`] のみ。caller（main）は profile から得た
-//! driver 名を引数に [`ResolvedDrivers::events_yaml_path_for`] で events.yaml
-//! path を引ける。
+//! 主要エントリは [`resolve_drivers`]。caller（main）は profile から得た
+//! driver 名を引数に [`ResolvedDrivers::get`] / [`ResolvedDrivers::events_yaml_path_for`]
+//! で events.yaml path を引く。`events_yaml_path_for` は driver process spawn
+//! 経路（後続 subtask）から直接呼ぶ前提で `pub` のまま残している。
 //!
 //! 失敗ポリシー:
 //!
@@ -71,13 +72,18 @@ struct DriverManifest {
 /// ディレクトリで、caller は [`ResolvedDriver::events_yaml_path`] で events.yaml
 /// path を取得する。
 ///
-/// `driver_name` / `plugin_name` は現在 main の起動経路では直接参照されない
-/// が、driver process spawn 経路（別 subtask）で binary path 解決や診断
-/// メッセージに使う想定で公開フィールドとして残す。
+/// `driver_name` / `plugin_name` はどちらも driver process spawn 経路（別
+/// subtask）で binary path 解決や診断メッセージに使う想定で公開フィールド
+/// として残しているが、`#[allow(dead_code)]` の付き方が両者で異なる:
+/// `plugin_name` は本 module 内 ([`ResolveError::DuplicateDriver`] の構築)
+/// で参照されるため production build でも warning が出ず attribute 不要、
+/// `driver_name` は production code 側に caller がまだ存在しないため
+/// attribute で suppress している。
 #[derive(Debug, Clone)]
 pub struct ResolvedDriver {
     /// driver.yaml の `name` フィールド値。profile の `connection.driver` と
-    /// 突き合わせる。
+    /// 突き合わせる。production code 側からはまだ参照されないため
+    /// `#[allow(dead_code)]` 付き（後続 driver spawn subtask で外す）。
     #[allow(dead_code)]
     pub driver_name: String,
     /// この driver を提供するプラグイン名（衝突レポート等で表示）。
@@ -133,13 +139,17 @@ pub enum ResolveError {
         path: PathBuf,
         source: std::io::Error,
     },
-    /// 同名の driver が複数の plugin から提供されている。どちらを起動
-    /// すべきか曖昧なので fail-fast する。
+    /// 同名の driver が **異なる** plugin から複数提供されている。どちらを
+    /// 起動すべきか曖昧なので fail-fast する。
     DuplicateDriver {
         driver_name: String,
         first_plugin: String,
         second_plugin: String,
     },
+    /// 同名の driver が **同じ plugin の `drivers[]` 配列内**で重複宣言
+    /// されている。これは plugin.yaml 自体の記述ミスで、上記の plugin 間
+    /// 衝突とは原因も対処も違うため別 variant にして明示する。
+    DuplicateDriverInPlugin { driver_name: String, plugin: String },
 }
 
 impl std::fmt::Display for ResolveError {
@@ -159,6 +169,14 @@ impl std::fmt::Display for ResolveError {
                 "driver `{driver_name}` が複数のプラグインから提供されています \
                  (`{first_plugin}` と `{second_plugin}`)。どちらか一方を無効化してください"
             ),
+            Self::DuplicateDriverInPlugin {
+                driver_name,
+                plugin,
+            } => write!(
+                f,
+                "プラグイン `{plugin}` の plugin.yaml 内で driver `{driver_name}` が \
+                 複数回宣言されています。同じ driver を二度書かないよう plugin.yaml を修正してください"
+            ),
         }
     }
 }
@@ -167,7 +185,7 @@ impl std::error::Error for ResolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ScanPluginsDir { source, .. } => Some(source),
-            Self::DuplicateDriver { .. } => None,
+            Self::DuplicateDriver { .. } | Self::DuplicateDriverInPlugin { .. } => None,
         }
     }
 }
@@ -330,6 +348,17 @@ fn load_driver_entry_into(
         plugin_yaml_dir.join(driver_yaml_rel)
     };
 
+    // log メッセージ用の driver ディレクトリ名（`<plugin>/drivers/<name>/driver.yaml`
+    // の `<name>` 部）。driver.yaml の `name` フィールドが読めない段階の warn に
+    // traceability を与えるため、慣例的なディレクトリ名を message に含める。
+    // `design/00-naming.md` の `device` は driver.yaml の `name` を入れる枠なので、
+    // 識別前のこの段階では `device=None` のまま、message 本文側で補う。
+    let driver_dir_label = driver_yaml_path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|s| s.to_str())
+        .unwrap_or("?");
+
     let driver_yaml = match fs::read_to_string(&driver_yaml_path) {
         Ok(s) => s,
         Err(err) => {
@@ -337,7 +366,7 @@ fn load_driver_entry_into(
                 LOG_LAYER,
                 None,
                 format_args!(
-                    "driver.yaml ({}) の読み込みに失敗しました (plugin=`{plugin_name}`): {err}。このエントリを skip します",
+                    "driver.yaml ({}) の読み込みに失敗しました (plugin=`{plugin_name}`, driver_dir=`{driver_dir_label}`): {err}。このエントリを skip します",
                     driver_yaml_path.display()
                 ),
             );
@@ -352,7 +381,7 @@ fn load_driver_entry_into(
                 LOG_LAYER,
                 None,
                 format_args!(
-                    "driver.yaml ({}) のパースに失敗しました (plugin=`{plugin_name}`): {err}。このエントリを skip します",
+                    "driver.yaml ({}) のパースに失敗しました (plugin=`{plugin_name}`, driver_dir=`{driver_dir_label}`): {err}。このエントリを skip します",
                     driver_yaml_path.display()
                 ),
             );
@@ -360,11 +389,24 @@ fn load_driver_entry_into(
         }
     };
 
+    // `parent()` が None になるのは「root だけ」「コンポーネントが空」のような
+    // 病的ケースのみ。`plugin_yaml_dir.join(driver_yaml_rel)` の結果では実用上
+    // 起きないが、起きたとしても events.yaml を file path 自身に join する形に
+    // 落ちないよう、plugin_yaml_dir を fallback として返しておく。
     let driver_yaml_dir = driver_yaml_path
         .parent()
-        .map_or_else(|| driver_yaml_path.clone(), Path::to_path_buf);
+        .map_or_else(|| plugin_yaml_dir.to_path_buf(), Path::to_path_buf);
 
     if let Some(existing) = acc.get(&driver.name) {
+        // 同 plugin 内 `drivers[]` の重複宣言と、別 plugin 間の衝突は
+        // 原因が違うので別 variant にして区別する。前者は plugin.yaml の
+        // 記述ミス、後者はインストール構成上の衝突。
+        if existing.plugin_name == plugin_name {
+            return Err(ResolveError::DuplicateDriverInPlugin {
+                driver_name: driver.name,
+                plugin: plugin_name.to_owned(),
+            });
+        }
         return Err(ResolveError::DuplicateDriver {
             driver_name: driver.name,
             first_plugin: existing.plugin_name.clone(),
@@ -550,10 +592,74 @@ mod tests {
                 assert_eq!(first_plugin, "a-plugin");
                 assert_eq!(second_plugin, "b-plugin");
             }
-            other @ ResolveError::ScanPluginsDir { .. } => {
+            other @ (ResolveError::ScanPluginsDir { .. }
+            | ResolveError::DuplicateDriverInPlugin { .. }) => {
                 panic!("expected DuplicateDriver, got {other:?}")
             }
         }
+    }
+
+    #[test]
+    fn it_should_detect_duplicate_driver_within_single_plugin() {
+        // 1 つの plugin.yaml が同じ driver.yaml を 2 回参照しているケース。
+        // 別 plugin 間の衝突 (`DuplicateDriver`) ではなく、plugin.yaml 自身の
+        // 記述ミスとして `DuplicateDriverInPlugin` で報告されること。
+        let tmp = tempfile::Builder::new()
+            .prefix("midori-resolver-dup-in-plugin-")
+            .tempdir()
+            .expect("tempdir");
+
+        let plugin_root = tmp.path().join("plugins").join("self-dup");
+        std::fs::create_dir_all(plugin_root.join(".midori")).expect("mkdir");
+        std::fs::write(
+            plugin_root.join(".midori").join("plugin.yaml"),
+            "name: self-dup\n\
+             drivers:\n  \
+               - driver: ../drivers/midi/driver.yaml\n  \
+               - driver: ../drivers/midi/driver.yaml\n",
+        )
+        .expect("write plugin.yaml");
+        let driver_dir = plugin_root.join("drivers").join("midi");
+        std::fs::create_dir_all(&driver_dir).expect("mkdir driver");
+        std::fs::write(
+            driver_dir.join("driver.yaml"),
+            "name: midi\nmodality: midi\n",
+        )
+        .expect("write driver");
+
+        let err = resolve_drivers(tmp.path()).expect_err("self-duplicate must error");
+        match err {
+            ResolveError::DuplicateDriverInPlugin {
+                driver_name,
+                plugin,
+            } => {
+                assert_eq!(driver_name, "midi");
+                assert_eq!(plugin, "self-dup");
+            }
+            other
+            @ (ResolveError::DuplicateDriver { .. } | ResolveError::ScanPluginsDir { .. }) => {
+                panic!("expected DuplicateDriverInPlugin, got {other:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn it_should_render_duplicate_driver_in_plugin_error_with_single_plugin_name() {
+        // `DuplicateDriver` と表示が紛れないこと（誤解を招く「X と X」の旧挙動が
+        // 出ていないこと）を Display レイヤで担保する。
+        let err = ResolveError::DuplicateDriverInPlugin {
+            driver_name: "midi".to_owned(),
+            plugin: "self-dup".to_owned(),
+        };
+        let rendered = err.to_string();
+        assert!(rendered.contains("midi"), "got: {rendered}");
+        assert!(rendered.contains("`self-dup`"), "got: {rendered}");
+        // 「X と X」の重複表記が出ていないこと（旧 `DuplicateDriver` の文言を流用
+        // していないこと）。
+        assert!(
+            !rendered.contains("`self-dup` と `self-dup`"),
+            "should not look like cross-plugin collision: {rendered}"
+        );
     }
 
     #[test]

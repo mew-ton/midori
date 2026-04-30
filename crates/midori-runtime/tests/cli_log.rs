@@ -35,8 +35,14 @@ fn setup_app_data_dir_with_driver(driver: &str, events_yaml: Option<&str>) -> te
     dir
 }
 
-/// 完全に空の app-data-dir。`DriverNotInstalled` 経路で error log を出す
-/// テストで使用する。
+/// 完全に空の app-data-dir。
+///
+/// 用途は 2 系統:
+/// - profile path 不在ケースの error log テスト（`CliError::LoadProfile` 経路）
+/// - 任意 driver を要求した時の `DriverNotInstalled` 経路のテスト
+///   （plugin manifest が一切無い状態で profile が driver を指定すると
+///   `resolve_drivers` の戻り値に対象 driver が居ないため `DriverNotInstalled`
+///   になる）
 fn setup_empty_app_data_dir() -> tempfile::TempDir {
     tempfile::Builder::new()
         .prefix("midori-cli-log-app-empty-")
@@ -153,6 +159,42 @@ fn it_should_emit_error_log_when_profile_is_invalid() {
     assert_eq!(value["type"], "log");
     assert_eq!(value["level"], "error");
     assert_eq!(value["layer"], "bridge");
+}
+
+#[test]
+fn it_should_emit_error_log_when_driver_is_not_installed() {
+    // app-data-dir に plugin manifest を一切置かない状態で profile が
+    // `driver: midi` を要求すると、resolver が見つけられず
+    // `CliError::DriverNotInstalled` で fail する。dispatch がこれを
+    // bridge layer の error log として出力することを担保する。
+    let app = setup_empty_app_data_dir();
+    let profile = write_tmp_profile("midi");
+    let output = spawn(profile.path(), app.path(), "json");
+    assert!(
+        !output.status.success(),
+        "missing driver must fail: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let error_line = stdout
+        .lines()
+        .find(|line| line.contains("\"level\":\"error\""))
+        .unwrap_or_else(|| panic!("error line missing in stdout: {stdout}"));
+    let value: serde_json::Value =
+        serde_json::from_str(error_line).expect("error line is valid json");
+    assert_eq!(value["type"], "log");
+    assert_eq!(value["level"], "error");
+    assert_eq!(value["layer"], "bridge");
+    let message = value["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("midi"),
+        "error message should mention requested driver: {message}"
+    );
+    assert!(
+        message.contains("見つかりません"),
+        "error message should describe missing driver plugin: {message}"
+    );
 }
 
 #[test]
