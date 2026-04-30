@@ -131,6 +131,8 @@ impl ResolvedDrivers {
 
 /// resolver の失敗種別。**個別 plugin の malformed は失敗にしない**
 /// （warn ログを出して skip する）ため、本 enum には含まれない。
+/// 同 plugin 内 `drivers[]` の重複宣言も plugin 単位の malformed として
+/// 扱い（warn + その plugin 全体を skip）、本 enum には現れない。
 #[derive(Debug)]
 pub enum ResolveError {
     /// `<app-data-dir>/plugins/` 自体の I/O 失敗。directory listing が
@@ -146,10 +148,6 @@ pub enum ResolveError {
         first_plugin: String,
         second_plugin: String,
     },
-    /// 同名の driver が **同じ plugin の `drivers[]` 配列内**で重複宣言
-    /// されている。これは plugin.yaml 自体の記述ミスで、上記の plugin 間
-    /// 衝突とは原因も対処も違うため別 variant にして明示する。
-    DuplicateDriverInPlugin { driver_name: String, plugin: String },
 }
 
 impl std::fmt::Display for ResolveError {
@@ -169,14 +167,6 @@ impl std::fmt::Display for ResolveError {
                 "driver `{driver_name}` が複数のプラグインから提供されています \
                  (`{first_plugin}` と `{second_plugin}`)。どちらか一方を無効化してください"
             ),
-            Self::DuplicateDriverInPlugin {
-                driver_name,
-                plugin,
-            } => write!(
-                f,
-                "プラグイン `{plugin}` の plugin.yaml 内で driver `{driver_name}` が \
-                 複数回宣言されています。同じ driver を二度書かないよう plugin.yaml を修正してください"
-            ),
         }
     }
 }
@@ -185,9 +175,23 @@ impl std::error::Error for ResolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ScanPluginsDir { source, .. } => Some(source),
-            Self::DuplicateDriver { .. } | Self::DuplicateDriverInPlugin { .. } => None,
+            Self::DuplicateDriver { .. } => None,
         }
     }
+}
+
+/// 1 つの `drivers[]` エントリを staging に取り込む際の結果。
+///
+/// - `Loaded`: staging に登録された
+/// - `Skipped`: その entry だけ skip（driver.yaml 不在 / malformed /
+///   plugin root 外を指している等の **エントリ単位の問題**）
+/// - `PluginInvalid`: plugin 全体を skip すべき（同 plugin 内 `drivers[]`
+///   重複宣言など、plugin.yaml 自体の整合性問題）
+#[derive(Debug)]
+enum DriverEntryOutcome {
+    Loaded,
+    Skipped,
+    PluginInvalid,
 }
 
 /// `<app-data-dir>/plugins/` 配下を走査して driver manifest 群を解決する。
@@ -266,8 +270,15 @@ pub fn resolve_drivers(app_data_dir: &Path) -> Result<ResolvedDrivers, ResolveEr
 }
 
 /// 1 plugin ディレクトリを処理し、解決できた driver を `acc` に追記する。
-/// plugin.yaml / driver.yaml の不在 / malformed は warn ログを出して skip
-/// するが、衝突は呼び出し元へ `ResolveError` で伝播する。
+///
+/// 同 plugin 内 `drivers[]` の **重複宣言** や **plugin root 外を指す path** は
+/// plugin 単位の整合性問題として扱い、warn を出して **その plugin 全体を skip**
+/// する（既に staging に登録済の他 driver も rollback される）。これは
+/// module docstring の「個別 plugin の malformed は warn + skip」方針に揃える
+/// ための実装で、staging map → 確定 map のマージ phase で実現する。
+///
+/// 別 plugin 間の同名衝突 ([`ResolveError::DuplicateDriver`]) は呼び出し元へ
+/// `Err` で伝播する。
 fn load_plugin_into(
     plugin_dir: &Path,
     acc: &mut HashMap<String, ResolvedDriver>,
@@ -327,26 +338,86 @@ fn load_plugin_into(
         .parent()
         .map_or_else(|| plugin_dir.join(".midori"), Path::to_path_buf);
 
+    // plugin root の正規化済 path。driver.yaml の path 解決時に
+    // 「正規化後も plugin root 配下に収まる」ことを担保するために使う。
+    // plugin_dir 自体が canonicalize できない（broken symlink 等）ときは
+    // plugin 全体を skip する。
+    let plugin_root_canon = match plugin_dir.canonicalize() {
+        Ok(p) => p,
+        Err(err) => {
+            logging::warn(
+                LOG_LAYER,
+                None,
+                format_args!(
+                    "プラグインルート ({}) のキャノニカル化に失敗しました (plugin=`{plugin_name}`): {err}。このプラグインを skip します",
+                    plugin_dir.display()
+                ),
+            );
+            return Ok(());
+        }
+    };
+
+    // 同 plugin 内の driver を一旦 staging に蓄積し、最後に `acc` へマージする。
+    // staging を介すことで「同 plugin 内重複 / plugin root 外参照」が見つかった
+    // ときに plugin 全体を rollback でき、`acc` を半端に汚染しないで済む。
+    let mut staged: HashMap<String, ResolvedDriver> = HashMap::new();
+
     for entry in &manifest.drivers {
-        load_driver_entry_into(&plugin_name, &plugin_yaml_dir, &entry.driver, acc)?;
+        match load_driver_entry_into_staged(
+            &plugin_name,
+            &plugin_yaml_dir,
+            &plugin_root_canon,
+            &entry.driver,
+            &mut staged,
+        ) {
+            DriverEntryOutcome::Loaded | DriverEntryOutcome::Skipped => {}
+            DriverEntryOutcome::PluginInvalid => {
+                // この plugin 全体を skip。staging はそのまま破棄（acc に
+                // マージしない）。
+                return Ok(());
+            }
+        }
+    }
+
+    // staging を確定 map にマージ。別 plugin との同名衝突はここで fail-fast。
+    for (driver_name, resolved) in staged {
+        if let Some(existing) = acc.get(&driver_name) {
+            return Err(ResolveError::DuplicateDriver {
+                driver_name,
+                first_plugin: existing.plugin_name.clone(),
+                second_plugin: plugin_name.clone(),
+            });
+        }
+        acc.insert(driver_name, resolved);
     }
 
     Ok(())
 }
 
-/// 1 つの `drivers[]` エントリ（driver.yaml の path）を処理する。
-fn load_driver_entry_into(
+/// 1 つの `drivers[]` エントリ（driver.yaml の path）を staging map に
+/// 取り込む。戻り値で「entry 単位の skip」「plugin 全体 skip」を分けて返す。
+fn load_driver_entry_into_staged(
     plugin_name: &str,
     plugin_yaml_dir: &Path,
+    plugin_root_canon: &Path,
     driver_yaml_rel: &Path,
-    acc: &mut HashMap<String, ResolvedDriver>,
-) -> Result<(), ResolveError> {
-    // `plugin.yaml` 起点の相対パスを解決。絶対パスが渡されたらそのまま使う。
-    let driver_yaml_path = if driver_yaml_rel.is_absolute() {
-        driver_yaml_rel.to_path_buf()
-    } else {
-        plugin_yaml_dir.join(driver_yaml_rel)
-    };
+    staged: &mut HashMap<String, ResolvedDriver>,
+) -> DriverEntryOutcome {
+    // 絶対パスは plugin の境界を越えうるため reject。`drivers[].driver` は
+    // 必ず `plugin.yaml` 起点の相対パス（`design/10-driver-plugin.md`）。
+    if driver_yaml_rel.is_absolute() {
+        logging::warn(
+            LOG_LAYER,
+            None,
+            format_args!(
+                "driver.yaml の path が絶対パスです (plugin=`{plugin_name}`, path=`{}`)。`drivers[].driver` は plugin.yaml 起点の相対パスのみ許可されます。このエントリを skip します",
+                driver_yaml_rel.display()
+            ),
+        );
+        return DriverEntryOutcome::Skipped;
+    }
+
+    let driver_yaml_path = plugin_yaml_dir.join(driver_yaml_rel);
 
     // log メッセージ用の driver ディレクトリ名（`<plugin>/drivers/<name>/driver.yaml`
     // の `<name>` 部）。driver.yaml の `name` フィールドが読めない段階の warn に
@@ -359,7 +430,38 @@ fn load_driver_entry_into(
         .and_then(|s| s.to_str())
         .unwrap_or("?");
 
-    let driver_yaml = match fs::read_to_string(&driver_yaml_path) {
+    // canonicalize して plugin_root 配下に収まることを確認する。`..` での脱出や
+    // symlink で plugin 外を指すパスを reject するため。canonicalize はファイル
+    // が存在しないと失敗するので、driver.yaml 不在ケースもここで warn + skip。
+    let driver_yaml_canon = match driver_yaml_path.canonicalize() {
+        Ok(p) => p,
+        Err(err) => {
+            logging::warn(
+                LOG_LAYER,
+                None,
+                format_args!(
+                    "driver.yaml ({}) のキャノニカル化に失敗しました (plugin=`{plugin_name}`, driver_dir=`{driver_dir_label}`): {err}。このエントリを skip します",
+                    driver_yaml_path.display()
+                ),
+            );
+            return DriverEntryOutcome::Skipped;
+        }
+    };
+
+    if !driver_yaml_canon.starts_with(plugin_root_canon) {
+        logging::warn(
+            LOG_LAYER,
+            None,
+            format_args!(
+                "driver.yaml ({}) が plugin root ({}) の外を指しています (plugin=`{plugin_name}`)。`..` や symlink で plugin の境界を越える path は許可されません。このエントリを skip します",
+                driver_yaml_canon.display(),
+                plugin_root_canon.display()
+            ),
+        );
+        return DriverEntryOutcome::Skipped;
+    }
+
+    let driver_yaml = match fs::read_to_string(&driver_yaml_canon) {
         Ok(s) => s,
         Err(err) => {
             logging::warn(
@@ -367,10 +469,10 @@ fn load_driver_entry_into(
                 None,
                 format_args!(
                     "driver.yaml ({}) の読み込みに失敗しました (plugin=`{plugin_name}`, driver_dir=`{driver_dir_label}`): {err}。このエントリを skip します",
-                    driver_yaml_path.display()
+                    driver_yaml_canon.display()
                 ),
             );
-            return Ok(());
+            return DriverEntryOutcome::Skipped;
         }
     };
 
@@ -382,39 +484,37 @@ fn load_driver_entry_into(
                 None,
                 format_args!(
                     "driver.yaml ({}) のパースに失敗しました (plugin=`{plugin_name}`, driver_dir=`{driver_dir_label}`): {err}。このエントリを skip します",
-                    driver_yaml_path.display()
+                    driver_yaml_canon.display()
                 ),
             );
-            return Ok(());
+            return DriverEntryOutcome::Skipped;
         }
     };
 
     // `parent()` が None になるのは「root だけ」「コンポーネントが空」のような
-    // 病的ケースのみ。`plugin_yaml_dir.join(driver_yaml_rel)` の結果では実用上
-    // 起きないが、起きたとしても events.yaml を file path 自身に join する形に
-    // 落ちないよう、plugin_yaml_dir を fallback として返しておく。
-    let driver_yaml_dir = driver_yaml_path
+    // 病的ケースのみ。canonicalize 済 path では実用上起きないが、起きたとしても
+    // events.yaml を file path 自身に join する形に落ちないよう、plugin_yaml_dir
+    // を fallback として返しておく。
+    let driver_yaml_dir = driver_yaml_canon
         .parent()
         .map_or_else(|| plugin_yaml_dir.to_path_buf(), Path::to_path_buf);
 
-    if let Some(existing) = acc.get(&driver.name) {
-        // 同 plugin 内 `drivers[]` の重複宣言と、別 plugin 間の衝突は
-        // 原因が違うので別 variant にして区別する。前者は plugin.yaml の
-        // 記述ミス、後者はインストール構成上の衝突。
-        if existing.plugin_name == plugin_name {
-            return Err(ResolveError::DuplicateDriverInPlugin {
-                driver_name: driver.name,
-                plugin: plugin_name.to_owned(),
-            });
-        }
-        return Err(ResolveError::DuplicateDriver {
-            driver_name: driver.name,
-            first_plugin: existing.plugin_name.clone(),
-            second_plugin: plugin_name.to_owned(),
-        });
+    // 同 plugin 内 `drivers[]` 重複は plugin.yaml の記述ミス。skip 方針との
+    // 整合性のため、ここで早期 return せずに caller に PluginInvalid を伝え、
+    // plugin 全体を rollback してもらう。
+    if staged.contains_key(&driver.name) {
+        logging::warn(
+            LOG_LAYER,
+            None,
+            format_args!(
+                "プラグイン `{plugin_name}` の plugin.yaml 内で driver `{driver_name}` が複数回宣言されています。このプラグイン全体を skip します",
+                driver_name = driver.name
+            ),
+        );
+        return DriverEntryOutcome::PluginInvalid;
     }
 
-    acc.insert(
+    staged.insert(
         driver.name.clone(),
         ResolvedDriver {
             driver_name: driver.name,
@@ -422,7 +522,7 @@ fn load_driver_entry_into(
             driver_yaml_dir,
         },
     );
-    Ok(())
+    DriverEntryOutcome::Loaded
 }
 
 #[cfg(test)]
@@ -592,73 +692,153 @@ mod tests {
                 assert_eq!(first_plugin, "a-plugin");
                 assert_eq!(second_plugin, "b-plugin");
             }
-            other @ (ResolveError::ScanPluginsDir { .. }
-            | ResolveError::DuplicateDriverInPlugin { .. }) => {
+            other @ ResolveError::ScanPluginsDir { .. } => {
                 panic!("expected DuplicateDriver, got {other:?}")
             }
         }
     }
 
     #[test]
-    fn it_should_detect_duplicate_driver_within_single_plugin() {
+    fn it_should_skip_whole_plugin_when_drivers_array_has_duplicates() {
         // 1 つの plugin.yaml が同じ driver.yaml を 2 回参照しているケース。
-        // 別 plugin 間の衝突 (`DuplicateDriver`) ではなく、plugin.yaml 自身の
-        // 記述ミスとして `DuplicateDriverInPlugin` で報告されること。
+        // 別 plugin 間の衝突は fail-fast (`DuplicateDriver`) だが、同 plugin 内
+        // の `drivers[]` 重複は plugin.yaml の記述ミスなので、その plugin 全体を
+        // warn + skip する（`ResolveError` には現れない）。他に正常な plugin が
+        // あれば継続できることも担保する。
         let tmp = tempfile::Builder::new()
             .prefix("midori-resolver-dup-in-plugin-")
             .tempdir()
             .expect("tempdir");
 
-        let plugin_root = tmp.path().join("plugins").join("self-dup");
-        std::fs::create_dir_all(plugin_root.join(".midori")).expect("mkdir");
+        // 1 件目: 同 plugin 内重複。staging で巻き戻り、resolved には出ない
+        let bad_root = tmp.path().join("plugins").join("self-dup");
+        std::fs::create_dir_all(bad_root.join(".midori")).expect("mkdir");
         std::fs::write(
-            plugin_root.join(".midori").join("plugin.yaml"),
+            bad_root.join(".midori").join("plugin.yaml"),
             "name: self-dup\n\
              drivers:\n  \
                - driver: ../drivers/midi/driver.yaml\n  \
                - driver: ../drivers/midi/driver.yaml\n",
         )
         .expect("write plugin.yaml");
-        let driver_dir = plugin_root.join("drivers").join("midi");
-        std::fs::create_dir_all(&driver_dir).expect("mkdir driver");
+        let bad_driver_dir = bad_root.join("drivers").join("midi");
+        std::fs::create_dir_all(&bad_driver_dir).expect("mkdir driver");
         std::fs::write(
-            driver_dir.join("driver.yaml"),
+            bad_driver_dir.join("driver.yaml"),
             "name: midi\nmodality: midi\n",
         )
         .expect("write driver");
 
-        let err = resolve_drivers(tmp.path()).expect_err("self-duplicate must error");
-        match err {
-            ResolveError::DuplicateDriverInPlugin {
-                driver_name,
-                plugin,
-            } => {
-                assert_eq!(driver_name, "midi");
-                assert_eq!(plugin, "self-dup");
-            }
-            other
-            @ (ResolveError::DuplicateDriver { .. } | ResolveError::ScanPluginsDir { .. }) => {
-                panic!("expected DuplicateDriverInPlugin, got {other:?}")
-            }
-        }
+        // 2 件目: 別 plugin の正常 driver。plugin 単位 skip 後も resolver が
+        // 続行できることを担保する。bad-plugin の midi が登録されないため
+        // good-plugin の midi は衝突せず登録される。
+        write_plugin(
+            tmp.path(),
+            "good-plugin",
+            "midi",
+            "name: good-plugin\n\
+             drivers:\n  \
+               - driver: ../drivers/midi/driver.yaml\n",
+            Some("name: midi\nmodality: midi\n"),
+            None,
+        );
+
+        let resolved = resolve_drivers(tmp.path())
+            .expect("self-duplicate must NOT fail the resolver (skip whole plugin)");
+        // self-dup は丸ごと skip、good-plugin の midi だけが残る
+        assert_eq!(resolved.len(), 1);
+        let entry = resolved.get("midi").expect("good-plugin midi must remain");
+        assert_eq!(entry.plugin_name, "good-plugin");
     }
 
     #[test]
-    fn it_should_render_duplicate_driver_in_plugin_error_with_single_plugin_name() {
-        // `DuplicateDriver` と表示が紛れないこと（誤解を招く「X と X」の旧挙動が
-        // 出ていないこと）を Display レイヤで担保する。
-        let err = ResolveError::DuplicateDriverInPlugin {
-            driver_name: "midi".to_owned(),
-            plugin: "self-dup".to_owned(),
-        };
-        let rendered = err.to_string();
-        assert!(rendered.contains("midi"), "got: {rendered}");
-        assert!(rendered.contains("`self-dup`"), "got: {rendered}");
-        // 「X と X」の重複表記が出ていないこと（旧 `DuplicateDriver` の文言を流用
-        // していないこと）。
-        assert!(
-            !rendered.contains("`self-dup` と `self-dup`"),
-            "should not look like cross-plugin collision: {rendered}"
+    fn it_should_skip_driver_entry_with_absolute_path() {
+        // `drivers[].driver` に絶対パスを渡すと、当該エントリだけ warn + skip
+        // される（plugin 全体は continue する）。canonicalize 不能 / plugin
+        // root 外 と並ぶ「entry 単位の skip」経路。
+        let tmp = tempfile::Builder::new()
+            .prefix("midori-resolver-abspath-")
+            .tempdir()
+            .expect("tempdir");
+
+        let plugin_root = tmp.path().join("plugins").join("abs-plugin");
+        std::fs::create_dir_all(plugin_root.join(".midori")).expect("mkdir .midori");
+        // 1 件目に絶対パス、2 件目に正常な相対パス。後者だけが登録される。
+        let valid_driver_dir = plugin_root.join("drivers").join("midi");
+        std::fs::create_dir_all(&valid_driver_dir).expect("mkdir driver");
+        std::fs::write(
+            valid_driver_dir.join("driver.yaml"),
+            "name: midi\nmodality: midi\n",
+        )
+        .expect("write driver");
+        std::fs::write(
+            plugin_root.join(".midori").join("plugin.yaml"),
+            "name: abs-plugin\n\
+             drivers:\n  \
+               - driver: /etc/passwd\n  \
+               - driver: ../drivers/midi/driver.yaml\n",
+        )
+        .expect("write plugin.yaml");
+
+        let resolved = resolve_drivers(tmp.path()).expect("absolute entry must skip, not fail");
+        assert_eq!(resolved.len(), 1);
+        assert!(resolved.get("midi").is_some());
+    }
+
+    #[test]
+    fn it_should_skip_driver_entry_pointing_outside_plugin_root() {
+        // `../` で plugin 境界を越えて別 plugin の driver.yaml を指す path は
+        // canonicalize 後 plugin_root_canon 配下に収まらないため reject される。
+        // 越境した entry は warn + skip、plugin 自体は他の正常 entry を続けて処理
+        // できる。
+        let tmp = tempfile::Builder::new()
+            .prefix("midori-resolver-traversal-")
+            .tempdir()
+            .expect("tempdir");
+
+        // ターゲット側 plugin: ここの driver.yaml を別 plugin から参照させる
+        write_plugin(
+            tmp.path(),
+            "victim-plugin",
+            "shared",
+            "name: victim-plugin\n\
+             drivers:\n  \
+               - driver: ../drivers/shared/driver.yaml\n",
+            Some("name: shared\nmodality: midi\n"),
+            None,
+        );
+
+        // 越境元 plugin: `../../victim-plugin/drivers/shared/driver.yaml` を参照
+        let evil_root = tmp.path().join("plugins").join("evil-plugin");
+        std::fs::create_dir_all(evil_root.join(".midori")).expect("mkdir .midori");
+        // 1 件目に越境 path、2 件目に自身の plugin 内の正常 path。後者のみ登録。
+        let evil_driver_dir = evil_root.join("drivers").join("local");
+        std::fs::create_dir_all(&evil_driver_dir).expect("mkdir local driver");
+        std::fs::write(
+            evil_driver_dir.join("driver.yaml"),
+            "name: local\nmodality: midi\n",
+        )
+        .expect("write local driver");
+        std::fs::write(
+            evil_root.join(".midori").join("plugin.yaml"),
+            "name: evil-plugin\n\
+             drivers:\n  \
+               - driver: ../../victim-plugin/drivers/shared/driver.yaml\n  \
+               - driver: ../drivers/local/driver.yaml\n",
+        )
+        .expect("write evil plugin.yaml");
+
+        let resolved = resolve_drivers(tmp.path()).expect("traversal must skip, not fail");
+        // victim 側の `shared` と evil 側の `local` だけが登録される
+        // （evil の越境 entry は skip）
+        assert_eq!(resolved.len(), 2);
+        assert_eq!(
+            resolved.get("shared").map(|d| d.plugin_name.as_str()),
+            Some("victim-plugin")
+        );
+        assert_eq!(
+            resolved.get("local").map(|d| d.plugin_name.as_str()),
+            Some("evil-plugin")
         );
     }
 
