@@ -11,6 +11,12 @@ readme = "README.md"
 keywords = ["midi", "osc", "ipc", "driver", "sdk"]
 categories = ["api-bindings", "external-ffi-bindings", "development-tools"]
 
+# `staticlib` は C/C++ などの外部ツールチェーンから `lib*.a` (Linux/macOS) /
+# `*.lib` (Windows MSVC) としてリンクするために必要。`rlib` は workspace 内の
+# Rust crate（midori-runtime / midori-driver-* など）が引き続き使う。
+[lib]
+crate-type = ["staticlib", "rlib"]
+
 [dependencies]
 midori-core = { workspace = true }
 serde = { version = "1", features = ["derive"] }
@@ -19,6 +25,9 @@ signal-hook = "0.4"
 
 [build-dependencies]
 cbindgen = { version = "0.29", default-features = false }
+
+[dev-dependencies]
+cc = "1"
 
 # midori-sdk は SPSC リングバッファ実装で UnsafeCell を扱うため、
 # workspace の `unsafe_code = "forbid"` をクレート単位で `deny` に緩める。
