@@ -72,23 +72,25 @@ struct DriverManifest {
 /// ディレクトリで、caller は [`ResolvedDriver::events_yaml_path`] で events.yaml
 /// path を取得する。
 ///
-/// `driver_name` / `plugin_name` はどちらも driver process spawn 経路（別
-/// subtask）で binary path 解決や診断メッセージに使う想定で公開フィールド
-/// として残しているが、`#[allow(dead_code)]` の付き方が両者で異なる:
-/// `plugin_name` は本 module 内 ([`ResolveError::DuplicateDriver`] の構築)
-/// で参照されるため production build でも warning が出ず attribute 不要、
-/// `driver_name` は production code 側に caller がまだ存在しないため
-/// attribute で suppress している。
+/// 各フィールドの役割:
+///
+/// - `driver_name`: driver.yaml の `name`（profile `connection.driver` の
+///   突き合わせ用）。production code 側に caller がまだ存在しないため
+///   `#[allow(dead_code)]` 付き（後続 driver spawn subtask で外す）
+/// - `plugin_name`: 表示用の plugin 名（衝突レポート等の人間向け文字列）。
+///   `plugin.yaml` の `name` フィールド値。複数 plugin が同じ `name` を
+///   宣言できる（fallback でディレクトリ名を使うため通常は唯一）
+/// - `plugin_root`: plugin の実体を特定する canonicalize 済 path。同名
+///   plugin が衝突した場合に「どちらの dir を無効化すれば良いか」を診断
+///   できるよう、表示名 (`plugin_name`) と分けて保持する
+/// - `driver_yaml_dir`: driver.yaml が置かれている canonicalize 済
+///   ディレクトリ。events.yaml もここに同居する想定
 #[derive(Debug, Clone)]
 pub struct ResolvedDriver {
-    /// driver.yaml の `name` フィールド値。profile の `connection.driver` と
-    /// 突き合わせる。production code 側からはまだ参照されないため
-    /// `#[allow(dead_code)]` 付き（後続 driver spawn subtask で外す）。
     #[allow(dead_code)]
     pub driver_name: String,
-    /// この driver を提供するプラグイン名（衝突レポート等で表示）。
     pub plugin_name: String,
-    /// driver.yaml が置かれているディレクトリ。events.yaml もここにある想定。
+    pub plugin_root: PathBuf,
     pub driver_yaml_dir: PathBuf,
 }
 
@@ -143,10 +145,17 @@ pub enum ResolveError {
     },
     /// 同名の driver が **異なる** plugin から複数提供されている。どちらを
     /// 起動すべきか曖昧なので fail-fast する。
+    ///
+    /// `*_plugin` は plugin の表示名（`plugin.yaml` の `name`）、
+    /// `*_plugin_path` は実体を特定するための canonicalize 済 plugin root path。
+    /// 複数 plugin が同じ表示名を宣言しているケースで「どちらの dir を
+    /// 無効化すれば良いか」を診断できるよう両方保持する。
     DuplicateDriver {
         driver_name: String,
         first_plugin: String,
+        first_plugin_path: PathBuf,
         second_plugin: String,
+        second_plugin_path: PathBuf,
     },
 }
 
@@ -161,11 +170,15 @@ impl std::fmt::Display for ResolveError {
             Self::DuplicateDriver {
                 driver_name,
                 first_plugin,
+                first_plugin_path,
                 second_plugin,
+                second_plugin_path,
             } => write!(
                 f,
                 "driver `{driver_name}` が複数のプラグインから提供されています \
-                 (`{first_plugin}` と `{second_plugin}`)。どちらか一方を無効化してください"
+                 (`{first_plugin}` ({}) と `{second_plugin}` ({}))。どちらか一方を無効化してください",
+                first_plugin_path.display(),
+                second_plugin_path.display()
             ),
         }
     }
@@ -385,7 +398,9 @@ fn load_plugin_into(
             return Err(ResolveError::DuplicateDriver {
                 driver_name,
                 first_plugin: existing.plugin_name.clone(),
+                first_plugin_path: existing.plugin_root.clone(),
                 second_plugin: plugin_name.clone(),
+                second_plugin_path: plugin_root_canon.clone(),
             });
         }
         acc.insert(driver_name, resolved);
@@ -519,6 +534,7 @@ fn load_driver_entry_into_staged(
         ResolvedDriver {
             driver_name: driver.name,
             plugin_name: plugin_name.to_owned(),
+            plugin_root: plugin_root_canon.to_path_buf(),
             driver_yaml_dir,
         },
     );
@@ -685,12 +701,28 @@ mod tests {
             ResolveError::DuplicateDriver {
                 driver_name,
                 first_plugin,
+                first_plugin_path,
                 second_plugin,
+                second_plugin_path,
             } => {
                 assert_eq!(driver_name, "midi");
                 // sort 順で a-plugin が先、b-plugin が後。
                 assert_eq!(first_plugin, "a-plugin");
                 assert_eq!(second_plugin, "b-plugin");
+                // path は canonicalize 済 (= tempdir 配下の plugin dir に一致)。
+                assert!(
+                    first_plugin_path.ends_with("a-plugin"),
+                    "first path should point to a-plugin dir: {}",
+                    first_plugin_path.display()
+                );
+                assert!(
+                    second_plugin_path.ends_with("b-plugin"),
+                    "second path should point to b-plugin dir: {}",
+                    second_plugin_path.display()
+                );
+                // 表示名と path は別物として保持されている（同名 fallback ケースで
+                // dir 名による diagnose ができることを担保）。
+                assert_ne!(first_plugin_path, second_plugin_path);
             }
             other @ ResolveError::ScanPluginsDir { .. } => {
                 panic!("expected DuplicateDriver, got {other:?}")
@@ -952,16 +984,22 @@ mod tests {
     }
 
     #[test]
-    fn it_should_render_duplicate_driver_error_with_both_plugin_names() {
+    fn it_should_render_duplicate_driver_error_with_both_plugin_names_and_paths() {
+        // 複数 plugin が同じ表示名を宣言しているケースで、dir path が出力に
+        // 含まれていれば「どちらの実体を無効化すれば良いか」を診断できる。
         let err = ResolveError::DuplicateDriver {
             driver_name: "midi".to_owned(),
-            first_plugin: "a".to_owned(),
-            second_plugin: "b".to_owned(),
+            first_plugin: "shared-name".to_owned(),
+            first_plugin_path: PathBuf::from("/opt/midori/plugins/installed-a"),
+            second_plugin: "shared-name".to_owned(),
+            second_plugin_path: PathBuf::from("/opt/midori/plugins/installed-b"),
         };
         let rendered = err.to_string();
         assert!(rendered.contains("midi"), "got: {rendered}");
-        assert!(rendered.contains("`a`"), "got: {rendered}");
-        assert!(rendered.contains("`b`"), "got: {rendered}");
+        assert!(rendered.contains("`shared-name`"), "got: {rendered}");
+        // 表示名が同じでも path で区別がつくこと
+        assert!(rendered.contains("installed-a"), "got: {rendered}");
+        assert!(rendered.contains("installed-b"), "got: {rendered}");
     }
 
     #[test]
