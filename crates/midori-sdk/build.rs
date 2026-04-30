@@ -22,6 +22,14 @@ fn main() {
 
     bindings.write_to_file(&header_path);
 
+    // 生成ヘッダの絶対 path を `MIDORI_SDK_HEADER_PATH` 環境変数として下流に
+    // 公開する。`tests/c_smoke.rs` はこれを `env!("MIDORI_SDK_HEADER_PATH")`
+    // で取り出し、ホスト C コンパイラの `-I` ディレクトリに渡す。
+    println!(
+        "cargo:rustc-env=MIDORI_SDK_HEADER_PATH={}",
+        header_path.display()
+    );
+
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=src/spsc.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");

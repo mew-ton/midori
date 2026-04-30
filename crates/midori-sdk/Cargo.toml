@@ -11,6 +11,12 @@ readme = "README.md"
 keywords = ["midi", "osc", "ipc", "driver", "sdk"]
 categories = ["api-bindings", "external-ffi-bindings", "development-tools"]
 
+# `staticlib` は C/C++ などの外部ツールチェーンから `lib*.a` (Linux/macOS) /
+# `*.lib` (Windows MSVC) としてリンクするために必要。`rlib` は workspace 内の
+# Rust crate（midori-runtime / midori-driver-* など）が引き続き使う。
+[lib]
+crate-type = ["staticlib", "rlib"]
+
 [dependencies]
 midori-core = { workspace = true }
 serde = { version = "1", features = ["derive"] }
