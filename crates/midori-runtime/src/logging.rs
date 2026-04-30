@@ -17,6 +17,7 @@
 //! 本 module は `type: log` のみを扱う。
 
 use std::fmt;
+use std::io::{self, Write};
 use std::sync::OnceLock;
 
 use clap::ValueEnum;
@@ -136,26 +137,38 @@ fn render_json(
 /// process-wide な logger。`init` で一度設定したらそれ以降は固定。
 static LOGGER: OnceLock<Logger> = OnceLock::new();
 
+/// `init` 前に呼ばれた場合の fallback。**`OnceLock` を初期化せず**に値だけ
+/// を返すので、後続の `init` が成功する。
+const DEFAULT_LOGGER: Logger = Logger::new(LogLevel::Info, LogFormat::Text);
+
 /// CLI parse 直後に 1 度だけ呼んで logger を確定する。再呼び出し（テストで
 /// 連続 init するケース等）は **silent に無視**して先勝ちを採用する。
 pub fn init(level: LogLevel, format: LogFormat) {
     let _ = LOGGER.set(Logger::new(level, format));
 }
 
-/// global logger を取得する。`init` 前に呼ばれた場合は default
-/// (`Info` / `Text`) を返す。default が固定されるのは「`main` で init する
-/// 前にログが出される経路」を防ぐ防衛的挙動で、運用上 main からは必ず init
-/// される前提。
+/// global logger を取得する。`init` 前に呼ばれた場合は [`DEFAULT_LOGGER`]
+/// を返す。`get_or_init` を使うと cell が永久に Default で固定され、後続の
+/// `init` が silent fail（`set` は初期化済 cell に Err を返す）して
+/// `--log-level` / `--log-format` が無視されるため、`get().copied()` で
+/// **read-only に取得**して fallback を返す形にしている。
 fn current() -> Logger {
-    *LOGGER.get_or_init(|| Logger::new(LogLevel::Info, LogFormat::Text))
+    LOGGER.get().copied().unwrap_or(DEFAULT_LOGGER)
 }
 
 /// 1 件のログを **stdout** に書く（`design/04-runtime-cli.md`「ログは JSON
 /// 形式で stdout に出力する」、Electron 側 stdout pipe ingestion との整合
 /// のため）。filter 通過時のみ実出力する。
+///
+/// `println!` は stdout が closed なとき panic する（Rust std は SIGPIPE を
+/// ignore する仕様）が、本 logger では stdout が IPC transport なので
+/// consumer 側 pipe が閉じた瞬間に runtime プロセスが abort してしまう。
+/// `io::stdout().lock()` + `writeln!` で書き込み、`Err` は握り潰して
+/// panic を避ける（broken pipe は consumer 終了の正常経路）。
 pub fn log(level: LogLevel, layer: &str, device: Option<&str>, message: impl fmt::Display) {
     if let Some(line) = current().render(level, layer, device, &message) {
-        println!("{line}");
+        let mut stdout = io::stdout().lock();
+        let _ = writeln!(stdout, "{line}");
     }
 }
 

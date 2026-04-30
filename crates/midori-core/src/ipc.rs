@@ -11,13 +11,16 @@ pub enum Direction {
     Output,
 }
 
-/// Log severity level.
+/// Log severity level. `--log-level` の正式値は
+/// `design/04-runtime-cli.md` で `error | warn | info | debug` と定義されて
+/// いるため、wire 仕様もそれに合わせる。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LogLevel {
     Error,
     Warn,
     Info,
+    Debug,
 }
 
 /// Events streamed as JSON Lines from the runtime to the GUI over stdout.
