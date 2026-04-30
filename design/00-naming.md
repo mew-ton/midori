@@ -81,12 +81,15 @@
 
 | `layer` 値 | 対応する層 | `device` フィールド |
 |---|---|---|
+| `bridge` | Bridge プロセス本体（CLI 入力 / プロファイル読込 / events.yaml 起動チェック等、特定 driver / パイプライン層に紐づかない汎用ログ） | 任意（特定 driver に関連するときのみ driver 名を入れる） |
 | `input-profile` | Layer 2: binding.input の処理 | 入力デバイスID |
 | `mapper` | Layer 3: 変換グラフの処理 | なし（複数デバイス横断） |
 | `output-profile` | Layer 4: binding.output の処理 | 出力デバイスID |
 | `driver/<name>` | Layer 1/5: ドライバー外部プロセスの出力を Bridge が転送 | 対象デバイスID |
 
 ```json
+{"type":"log","level":"error","layer":"bridge",                                "message":"failed to load profile: ..."}
+{"type":"log","level":"info", "layer":"bridge",        "device":"midi",        "message":"events.yaml のチェックが完了しました"}
 {"type":"log","level":"error","layer":"input-profile", "device":"yamaha-els03","message":"unknown component: foo"}
 {"type":"log","level":"warn", "layer":"output-profile","device":"vrchat-osc",  "message":"unknown signal: bar"}
 {"type":"log","level":"error","layer":"mapper",                                "message":"division by zero","node":"vel_scale"}
