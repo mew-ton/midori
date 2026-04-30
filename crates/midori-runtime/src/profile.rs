@@ -148,7 +148,9 @@ pub fn load_from_path(path: &Path) -> Result<ProfileYaml, ProfileLoadError> {
 /// driver 名は `<app-data-dir>/plugins/driver-<name>/events.yaml` の path 構築
 /// にそのまま使うため、path-traversal 攻撃（`../../etc/passwd` 等）や空白のみ
 /// の値、path セパレータ含みなど、想定外の文字列を受け入れると plugins
-/// ディレクトリ外を読み取ってしまう。安全側でホワイトリスト的に検査する。
+/// ディレクトリ外を読み取ってしまう。Windows reserved characters / device
+/// names もクロスプラットフォーム対応として全プラットフォームで一律 reject
+/// する（POSIX 環境で書かれた profile が Windows でも安全に読めることを担保）。
 fn validate_driver_name(name: &str, profile_path: &Path) -> Result<(), ProfileLoadError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -163,9 +165,15 @@ fn validate_driver_name(name: &str, profile_path: &Path) -> Result<(), ProfileLo
             message: format!("connection.driver の前後に空白が含まれています: `{name}`"),
         });
     }
-    let invalid_char = name
-        .chars()
-        .find(|c| matches!(c, '/' | '\\' | '\0') || c.is_control() || c.is_whitespace());
+    // POSIX 系で危険な文字（path separator / 制御文字 / 空白）+ Windows で
+    // ファイル名に使えない文字（`< > : " | ? *`）を一括で弾く。
+    let invalid_char = name.chars().find(|c| {
+        matches!(
+            c,
+            '/' | '\\' | '\0' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+        ) || c.is_control()
+            || c.is_whitespace()
+    });
     if let Some(c) = invalid_char {
         return Err(ProfileLoadError::Invalid {
             path: profile_path.to_path_buf(),
@@ -180,7 +188,44 @@ fn validate_driver_name(name: &str, profile_path: &Path) -> Result<(), ProfileLo
             ),
         });
     }
+    // Windows のファイル名末尾 `.` / ` ` は OS が無視するため、`midi.` /
+    // `midi ` は実質 `midi` と同名のディレクトリを指す。あらかじめ拒否する。
+    if name.ends_with('.') || name.ends_with(' ') {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!(
+                "connection.driver の末尾に `.` または空白を含めることはできません: `{name}`"
+            ),
+        });
+    }
+    // Windows の予約デバイス名（拡張子の有無にかかわらず予約）。実際には
+    // `driver-<name>/` と prefix が付くため Windows 上で衝突する可能性は低い
+    // が、defense in depth として一律拒否する。
+    if is_windows_reserved_device_name(name) {
+        return Err(ProfileLoadError::Invalid {
+            path: profile_path.to_path_buf(),
+            message: format!("connection.driver に Windows 予約デバイス名は使えません: `{name}`"),
+        });
+    }
     Ok(())
+}
+
+/// Windows の予約デバイス名（`CON` / `PRN` / `AUX` / `NUL` / `COM1`〜`COM9`
+/// / `LPT1`〜`LPT9`）に該当するかを大文字小文字を問わず判定する。拡張子
+/// （`CON.txt` 等）が付いても予約扱いになるため、拡張子部分を除いた本体
+/// （最初の `.` まで）で照合する。
+fn is_windows_reserved_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name);
+    let upper = stem.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || matches!(
+            upper.as_str(),
+            "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9"
+        )
+        || matches!(
+            upper.as_str(),
+            "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9"
+        )
 }
 
 /// profile から driver 名のリストを抽出する。重複（input/output で同じ
@@ -366,6 +411,62 @@ outputs:
         let yaml = "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"   \"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: { driver: osc }\n";
         let err = parse(yaml).expect_err("whitespace driver");
         assert!(matches!(err, ProfileLoadError::Invalid { .. }));
+    }
+
+    #[test]
+    fn it_should_reject_driver_name_with_windows_reserved_characters() {
+        // Windows のファイル名で許容されない文字を含む driver 名を一律 reject。
+        // `"` は YAML 文字列終端と衝突するため serde-yml 側で `Parse` エラーに
+        // なるが、いずれにしても driver 名としては受理されないため両 variant
+        // を許容する。
+        for bad in [
+            "midi:foo", "midi*x", "midi?", "midi\"q", "midi<", "midi>", "midi|x",
+        ] {
+            let yaml = format!(
+                "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"{bad}\"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: {{ driver: osc }}\n"
+            );
+            let outcome = parse(&yaml);
+            assert!(
+                matches!(
+                    outcome,
+                    Err(ProfileLoadError::Invalid { .. } | ProfileLoadError::Parse { .. })
+                ),
+                "driver `{bad}` should be rejected (Windows reserved char), got {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_should_reject_driver_name_ending_with_dot_or_space() {
+        // Windows は末尾の `.` / 空白を無視するため、`midi.` と `midi` が同一
+        // ディレクトリを指してしまう。一律拒否する。
+        for bad in ["midi.", "midi "] {
+            let yaml = format!(
+                "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"{bad}\"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: {{ driver: osc }}\n"
+            );
+            let outcome = parse(&yaml);
+            assert!(
+                matches!(outcome, Err(ProfileLoadError::Invalid { .. })),
+                "driver `{bad}` should be rejected (trailing dot/space), got {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_should_reject_driver_name_matching_windows_reserved_device_name() {
+        // 大文字小文字を問わず Windows 予約デバイス名を拒否する。
+        for bad in [
+            "con", "CON", "PRN", "Aux", "nul", "COM1", "lpt9", "CON.txt", "com5.log",
+        ] {
+            let yaml = format!(
+                "inputs:\n  - adapter: a.yaml\n    connection:\n      driver: \"{bad}\"\ntransform: t.yaml\noutputs:\n  - adapter: b.yaml\n    connection: {{ driver: osc }}\n"
+            );
+            let outcome = parse(&yaml);
+            assert!(
+                matches!(outcome, Err(ProfileLoadError::Invalid { .. })),
+                "driver `{bad}` should be rejected (Windows reserved device name), got {outcome:?}"
+            );
+        }
     }
 
     #[test]
