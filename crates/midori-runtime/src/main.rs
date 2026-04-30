@@ -55,7 +55,7 @@ fn main() -> ExitCode {
     match dispatch(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            logging::error("cli", None, err);
+            logging::error("bridge", None, err);
             ExitCode::FAILURE
         }
     }
@@ -83,7 +83,7 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
         {
             DriverSchemaOutcome::Loaded(_) => {
                 logging::info(
-                    "startup",
+                    "bridge",
                     Some(name),
                     format_args!(
                         "events.yaml ({}) のチェックが完了しました",
@@ -95,7 +95,7 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
                 // events.yaml が無い driver は spec 上「明示的な schema 未宣言モード」
                 // として warning に留めて起動を継続する。
                 logging::warn(
-                    "startup",
+                    "bridge",
                     Some(name),
                     format_args!(
                         "events.yaml ({}) が見つかりませんでした。schema 未宣言モードで起動します",

@@ -1,6 +1,6 @@
 //! CLI 経由で `--log-format json` の structured logger 出力を検証する統合
 //! テスト。`main()` 内で `logging::init` が動くこと、`logging::warn` 等が
-//! 実バイナリの stderr に 1 行 JSON を吐くことを end-to-end で担保する。
+//! 実バイナリの stdout に 1 行 JSON を吐くことを end-to-end で担保する。
 //!
 //! 単体テスト（`logging.rs::tests`）は `Logger` 値直接で format / filter を
 //! 検証するため、本ファイルは実バイナリ spawn 経路（`OnceLock` 経由）に絞る。
@@ -57,16 +57,16 @@ fn it_should_emit_warn_log_as_single_json_line_when_events_yaml_is_missing() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let stderr = String::from_utf8(output.stderr).expect("utf-8");
-    let warn_line = stderr
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let warn_line = stdout
         .lines()
         .find(|line| line.contains("\"level\":\"warn\""))
-        .unwrap_or_else(|| panic!("warn line missing in stderr: {stderr}"));
+        .unwrap_or_else(|| panic!("warn line missing in stdout: {stdout}"));
     let value: serde_json::Value =
         serde_json::from_str(warn_line).expect("warn line is valid json");
     assert_eq!(value["type"], "log");
     assert_eq!(value["level"], "warn");
-    assert_eq!(value["layer"], "startup");
+    assert_eq!(value["layer"], "bridge");
     assert_eq!(value["device"], "midi");
     let message = value["message"].as_str().unwrap_or("");
     assert!(
@@ -81,16 +81,16 @@ fn it_should_emit_text_format_when_log_format_is_text() {
     let profile = write_tmp_profile("osc");
     let output = spawn(profile.path(), app.path(), "text");
     assert!(output.status.success(), "exit success");
-    let stderr = String::from_utf8(output.stderr).expect("utf-8");
-    // text 形式は `midori [warn] startup (osc): ...` の形
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    // text 形式は `midori [warn] bridge (osc): ...` の形
     assert!(
-        stderr.contains("midori [warn] startup (osc)"),
-        "text-format warn line missing: {stderr}"
+        stdout.contains("midori [warn] bridge (osc)"),
+        "text-format warn line missing: {stdout}"
     );
     // text 形式は JSON シンボルを含まないこと（JSON 形式と排他）
     assert!(
-        !stderr.contains("\"type\":\"log\""),
-        "text format should not emit json: {stderr}"
+        !stdout.contains("\"type\":\"log\""),
+        "text format should not emit json: {stdout}"
     );
 }
 
@@ -115,16 +115,16 @@ fn it_should_emit_error_log_when_profile_is_invalid() {
         !output.status.success(),
         "missing profile must fail: {output:?}"
     );
-    let stderr = String::from_utf8(output.stderr).expect("utf-8");
-    let error_line = stderr
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let error_line = stdout
         .lines()
         .find(|line| line.contains("\"level\":\"error\""))
-        .unwrap_or_else(|| panic!("error line missing: {stderr}"));
+        .unwrap_or_else(|| panic!("error line missing: {stdout}"));
     let value: serde_json::Value =
         serde_json::from_str(error_line).expect("error line is valid json");
     assert_eq!(value["type"], "log");
     assert_eq!(value["level"], "error");
-    assert_eq!(value["layer"], "cli");
+    assert_eq!(value["layer"], "bridge");
 }
 
 #[test]
@@ -162,9 +162,9 @@ fn it_should_filter_out_info_when_log_level_is_warn() {
         .output()
         .expect("spawn");
     assert!(output.status.success(), "valid setup should succeed");
-    let stderr = String::from_utf8(output.stderr).expect("utf-8");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
     assert!(
-        !stderr.contains("\"level\":\"info\""),
-        "info should be filtered out by --log-level warn: {stderr}"
+        !stdout.contains("\"level\":\"info\""),
+        "info should be filtered out by --log-level warn: {stdout}"
     );
 }

@@ -1,6 +1,8 @@
 //! Bridge 起動経路で使う中央集約 logger。`design/04-runtime-cli.md` の
 //! 「ログフォーマット」表に従い、`type: log` の JSON 行（`json` 形式）または
-//! 人間可読の 1 行（`text` 形式）を stderr に出す。
+//! 人間可読の 1 行（`text` 形式）を **stdout** に出す。Electron 側が stdout
+//! pipe で受信して GUI に転送する経路と整合させるため、stderr ではなく
+//! stdout を使う（spec line 33: 「ログは JSON 形式で stdout に出力する」）。
 //!
 //! 設計上の役割分担:
 //!
@@ -73,7 +75,7 @@ impl Logger {
 
     /// 1 件のログを「出すべき行」（filter を通過する場合）の文字列として返す。
     /// `None` のとき severity が filter で落とされたことを示す。caller は
-    /// 戻り値をそのまま `eprintln!` するか、テストで内容検証する。
+    /// 戻り値をそのまま `println!` するか、テストで内容検証する。
     #[must_use]
     pub fn render(
         self,
@@ -148,10 +150,12 @@ fn current() -> Logger {
     *LOGGER.get_or_init(|| Logger::new(LogLevel::Info, LogFormat::Text))
 }
 
-/// 1 件のログを stderr に書く。filter 通過時のみ実出力する。
+/// 1 件のログを **stdout** に書く（`design/04-runtime-cli.md`「ログは JSON
+/// 形式で stdout に出力する」、Electron 側 stdout pipe ingestion との整合
+/// のため）。filter 通過時のみ実出力する。
 pub fn log(level: LogLevel, layer: &str, device: Option<&str>, message: impl fmt::Display) {
     if let Some(line) = current().render(level, layer, device, &message) {
-        eprintln!("{line}");
+        println!("{line}");
     }
 }
 
@@ -193,16 +197,16 @@ mod tests {
     #[test]
     fn it_should_render_text_format_with_layer_and_message() {
         let logger = Logger::new(LogLevel::Info, LogFormat::Text);
-        let line = render(logger, LogLevel::Info, "startup", None, "hello").expect("info passes");
-        assert_eq!(line, "midori [info] startup: hello");
+        let line = render(logger, LogLevel::Info, "bridge", None, "hello").expect("info passes");
+        assert_eq!(line, "midori [info] bridge: hello");
     }
 
     #[test]
     fn it_should_render_text_format_with_device_segment() {
         let logger = Logger::new(LogLevel::Info, LogFormat::Text);
-        let line = render(logger, LogLevel::Warn, "startup", Some("midi"), "missing")
-            .expect("warn passes");
-        assert_eq!(line, "midori [warn] startup (midi): missing");
+        let line =
+            render(logger, LogLevel::Warn, "bridge", Some("midi"), "missing").expect("warn passes");
+        assert_eq!(line, "midori [warn] bridge (midi): missing");
     }
 
     #[test]
@@ -227,7 +231,7 @@ mod tests {
         let line = render(
             logger,
             LogLevel::Info,
-            "startup",
+            "bridge",
             Some("midi"),
             "events.yaml loaded",
         )
