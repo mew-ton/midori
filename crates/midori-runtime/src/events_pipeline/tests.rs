@@ -41,7 +41,7 @@ events:
       payload: { type: bytes, max_length: 8 }
     binding_filter: [type]
 ";
-    serde_yml::from_str(yaml).expect("fixture parses")
+    serde_yaml_ng::from_str(yaml).expect("fixture parses")
 }
 
 fn encode_map(entries: &[(&str, Value)]) -> Vec<u8> {
@@ -344,7 +344,7 @@ events:
       v: { type: uint8 }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
     let p = payload(&[
         ("type", FieldValue::String("raw".into())),
         ("v", FieldValue::UInt(300)), // uint8 default は 0..=255
@@ -437,7 +437,7 @@ events:
       v: { type: int64 }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
 
     #[allow(clippy::cast_sign_loss)]
     let just_above_i64_max: u64 = i64::MAX as u64 + 1;
@@ -463,7 +463,7 @@ events:
       v: { type: int64 }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
 
     #[allow(clippy::cast_sign_loss)]
     let i64_max_as_u: u64 = i64::MAX as u64;
@@ -487,7 +487,7 @@ events:
       v: { type: uint64, range: [0, 9000000000000000000] }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
 
     let p = payload(&[
         ("type", FieldValue::String("ping".into())),
@@ -508,7 +508,7 @@ events:
       v: { type: uint64 }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
 
     let p = payload(&[
         ("type", FieldValue::String("ping".into())),
@@ -532,7 +532,7 @@ events:
       payload: { type: uint8 }
     binding_filter: [type]
 ";
-    let schema: EventsSchema = serde_yml::from_str(yaml).expect("parse");
+    let schema: EventsSchema = serde_yaml_ng::from_str(yaml).expect("parse");
 
     // ts 抜けは required missing
     let missing = payload(&[

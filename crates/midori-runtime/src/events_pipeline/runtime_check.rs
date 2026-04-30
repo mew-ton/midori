@@ -499,16 +499,16 @@ fn uint64_bounds_from_range(range: Option<&RangeBound>) -> (u64, u64) {
         .unwrap_or((0, u64::MAX))
 }
 
-fn yaml_as_i64(v: &serde_yml::Value) -> Option<i64> {
+fn yaml_as_i64(v: &serde_yaml_ng::Value) -> Option<i64> {
     match v {
-        serde_yml::Value::Number(n) => n.as_i64(),
+        serde_yaml_ng::Value::Number(n) => n.as_i64(),
         _ => None,
     }
 }
 
-fn yaml_as_u64(v: &serde_yml::Value) -> Option<u64> {
+fn yaml_as_u64(v: &serde_yaml_ng::Value) -> Option<u64> {
     match v {
-        serde_yml::Value::Number(n) => n.as_u64(),
+        serde_yaml_ng::Value::Number(n) => n.as_u64(),
         _ => None,
     }
 }

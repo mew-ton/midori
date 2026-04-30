@@ -333,7 +333,7 @@ mod tests {
                payload: { type: bytes, max_length: 1024 }\n";
 
     /// loader 段階の YAML パースで失敗する events.yaml フィクスチャ。
-    /// 末尾の `[` が閉じておらず `serde_yml::from_str` が Parse error を返す。
+    /// 末尾の `[` が閉じておらず `serde_yaml_ng::from_str` が Parse error を返す。
     const EVENTS_YAML_MALFORMED: &str = "schema_version: [\n";
 
     /// `transform` フィールドを欠いた profile YAML フィクスチャ。

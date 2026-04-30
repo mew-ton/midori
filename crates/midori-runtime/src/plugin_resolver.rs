@@ -318,7 +318,7 @@ fn load_plugin_into(
         }
     };
 
-    let manifest: PluginManifest = match serde_yml::from_str(&plugin_yaml) {
+    let manifest: PluginManifest = match serde_yaml_ng::from_str(&plugin_yaml) {
         Ok(m) => m,
         Err(err) => {
             logging::warn(
@@ -491,7 +491,7 @@ fn load_driver_entry_into_staged(
         }
     };
 
-    let driver: DriverManifest = match serde_yml::from_str(&driver_yaml) {
+    let driver: DriverManifest = match serde_yaml_ng::from_str(&driver_yaml) {
         Ok(d) => d,
         Err(err) => {
             logging::warn(
