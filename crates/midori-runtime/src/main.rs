@@ -2,6 +2,7 @@ mod error;
 mod events_pipeline;
 mod events_schema;
 mod logging;
+mod plugin_resolver;
 mod profile;
 mod ring_handshake;
 
@@ -13,6 +14,7 @@ use clap::{Parser, Subcommand};
 use crate::error::CliError;
 use crate::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
 use crate::logging::{LogFormat, LogLevel};
+use crate::plugin_resolver::{resolve_drivers, ResolvedDrivers};
 use crate::profile::{collect_driver_names, load_from_path as load_profile};
 
 #[derive(Parser, Debug)]
@@ -69,15 +71,24 @@ fn dispatch(cli: &Cli) -> Result<(), CliError> {
 
 // プロファイル本体のパイプラインは後続の subtask で実装する。
 // 本関数では (a) profile YAML を読み、(b) inputs/outputs から driver 名を
-// 抽出して (c) 各 driver の events.yaml を起動時整合性チェックする、まで
-// を担う。実 driver process spawn / SPSC 連携は別 subtask の責務。
+// 抽出して (c) `<app-data-dir>/plugins/*/.midori/plugin.yaml` ベースで
+// driver manifest を解決し、(d) 各 driver の events.yaml を起動時整合性
+// チェックする、までを担う。実 driver process spawn / SPSC 連携は別 subtask
+// の責務。
 fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), CliError> {
     let profile = load_profile(profile_path).map_err(|source| CliError::LoadProfile { source })?;
     let driver_names = collect_driver_names(&profile);
     let app_data_dir = resolve_app_data_dir(app_data_dir_override)?;
+    let resolved: ResolvedDrivers =
+        resolve_drivers(&app_data_dir).map_err(|source| CliError::ResolvePlugins { source })?;
 
     for name in &driver_names {
-        let events_yaml_path = events_yaml_path_for(&app_data_dir, name);
+        let Some(driver) = resolved.get(name) else {
+            return Err(CliError::DriverNotInstalled {
+                driver_name: name.clone(),
+            });
+        };
+        let events_yaml_path = driver.events_yaml_path();
         match check_driver_schema(name, &events_yaml_path)
             .map_err(|source| CliError::StartupCheck { source })?
         {
@@ -108,15 +119,6 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
 
     let _ = profile; // adapter / transform の本格ロードは別 subtask
     Ok(())
-}
-
-/// `<app-data-dir>/plugins/driver-<name>/events.yaml` の規約で events.yaml
-/// path を組み立てる。本格 plugin.yaml resolver は別 subtask で導入予定。
-fn events_yaml_path_for(app_data_dir: &Path, driver_name: &str) -> PathBuf {
-    app_data_dir
-        .join("plugins")
-        .join(format!("driver-{driver_name}"))
-        .join("events.yaml")
 }
 
 /// CLI override が無ければ OS 標準のアプリデータディレクトリを `dirs` 経由
@@ -277,17 +279,30 @@ mod tests {
         file
     }
 
-    /// `<app-data-dir>/plugins/driver-<name>/events.yaml` 構造を tempdir に
-    /// 用意する。`bodies` で `name -> events.yaml 内容` を渡す。
+    /// `<app-data-dir>/plugins/<plugin>/.midori/plugin.yaml` +
+    /// `<app-data-dir>/plugins/<plugin>/drivers/<driver>/driver.yaml` +
+    /// `events.yaml` の三層構造を tempdir に用意する。`bodies` で
+    /// `name -> events.yaml 内容` を渡す（プラグイン名は `<name>-plugin`、
+    /// driver サブディレクトリ名は `<name>` と固定する）。
     fn setup_app_data_dir(bodies: &[(&str, &str)]) -> tempfile::TempDir {
         let dir = tempfile::Builder::new()
             .prefix("midori-profile-test-app-")
             .tempdir()
             .expect("tempdir");
-        for (name, body) in bodies {
-            let plugin_dir = dir.path().join("plugins").join(format!("driver-{name}"));
-            std::fs::create_dir_all(&plugin_dir).expect("mkdir plugin");
-            std::fs::write(plugin_dir.join("events.yaml"), body).expect("write events.yaml");
+        for (name, events_body) in bodies {
+            let plugin_root = dir.path().join("plugins").join(format!("{name}-plugin"));
+            let dot_midori = plugin_root.join(".midori");
+            std::fs::create_dir_all(&dot_midori).expect("mkdir .midori");
+            let plugin_yaml = format!(
+                "name: {name}-plugin\ndrivers:\n  - driver: ../drivers/{name}/driver.yaml\n"
+            );
+            std::fs::write(dot_midori.join("plugin.yaml"), plugin_yaml).expect("write plugin.yaml");
+
+            let driver_dir = plugin_root.join("drivers").join(name);
+            std::fs::create_dir_all(&driver_dir).expect("mkdir driver");
+            let driver_yaml = format!("name: {name}\nmodality: {name}\n");
+            std::fs::write(driver_dir.join("driver.yaml"), driver_yaml).expect("write driver.yaml");
+            std::fs::write(driver_dir.join("events.yaml"), events_body).expect("write events.yaml");
         }
         dir
     }
@@ -363,14 +378,50 @@ mod tests {
 
     #[test]
     fn it_should_warn_and_continue_when_driver_events_yaml_is_missing() {
-        // app-data-dir 配下に該当 driver の events.yaml を配置しない → Missing 扱い
-        let app = setup_app_data_dir(&[]);
+        // driver 自体は plugin manifest からは解決できる（driver.yaml はある）が、
+        // 隣接する events.yaml だけ無い → Missing 扱いで warn + 起動継続。
+        let app = tempfile::Builder::new()
+            .prefix("midori-profile-test-app-missing-")
+            .tempdir()
+            .expect("tempdir");
+        let plugin_root = app.path().join("plugins").join("midi-plugin");
+        let dot_midori = plugin_root.join(".midori");
+        std::fs::create_dir_all(&dot_midori).expect("mkdir");
+        std::fs::write(
+            dot_midori.join("plugin.yaml"),
+            "name: midi-plugin\ndrivers:\n  - driver: ../drivers/midi/driver.yaml\n",
+        )
+        .expect("write plugin.yaml");
+        let driver_dir = plugin_root.join("drivers").join("midi");
+        std::fs::create_dir_all(&driver_dir).expect("mkdir driver");
+        std::fs::write(
+            driver_dir.join("driver.yaml"),
+            "name: midi\nmodality: midi\n",
+        )
+        .expect("write driver.yaml");
+        // events.yaml は **置かない**
+
         let profile = write_tmp_profile("missing", &[("input", "midi"), ("output", "midi")]);
         let cli = Cli::try_parse_from(run_args(profile.path(), app.path())).expect("parse");
         let result = super::dispatch(&cli);
         assert!(
             result.is_ok(),
             "missing events.yaml should be a warning: {result:?}"
+        );
+    }
+
+    #[test]
+    fn it_should_fail_when_profile_driver_is_not_installed_as_plugin() {
+        // plugin が 1 件も無い → profile の driver 名は plugin manifest から
+        // 解決できず DriverNotInstalled。spec 上「未インストール driver は
+        // 起動時エラー」(`design/09-plugin.md`)。
+        let app = setup_app_data_dir(&[]);
+        let profile = write_tmp_profile("absent-plugin", &[("input", "midi"), ("output", "midi")]);
+        let cli = Cli::try_parse_from(run_args(profile.path(), app.path())).expect("parse");
+        let err = super::dispatch(&cli).expect_err("missing plugin must fail");
+        assert!(
+            matches!(err, CliError::DriverNotInstalled { ref driver_name } if driver_name == "midi"),
+            "expected DriverNotInstalled, got {err:?}"
         );
     }
 
@@ -430,15 +481,35 @@ mod tests {
     }
 
     #[test]
-    fn it_should_continue_through_missing_driver_when_others_are_valid() {
-        // input は events.yaml 配置済、output は Missing
+    fn it_should_continue_through_missing_events_yaml_when_others_are_valid() {
+        // input (`midi`) は events.yaml 配置済。output (`absent`) は plugin /
+        // driver.yaml は配置するが events.yaml だけ欠落 → Missing 扱いで継続。
         let app = setup_app_data_dir(&[("midi", EVENTS_YAML_VALID_NOTEON)]);
+        // `absent` driver を plugin manifest からは解決できるよう用意するが、
+        // events.yaml だけ追加で削除する。
+        let absent_plugin = app.path().join("plugins").join("absent-plugin");
+        let dot_midori = absent_plugin.join(".midori");
+        std::fs::create_dir_all(&dot_midori).expect("mkdir");
+        std::fs::write(
+            dot_midori.join("plugin.yaml"),
+            "name: absent-plugin\ndrivers:\n  - driver: ../drivers/absent/driver.yaml\n",
+        )
+        .expect("write plugin.yaml");
+        let driver_dir = absent_plugin.join("drivers").join("absent");
+        std::fs::create_dir_all(&driver_dir).expect("mkdir");
+        std::fs::write(
+            driver_dir.join("driver.yaml"),
+            "name: absent\nmodality: absent\n",
+        )
+        .expect("write driver.yaml");
+        // events.yaml は意図的に書かない
+
         let profile = write_tmp_profile("multi-mixed", &[("input", "midi"), ("output", "absent")]);
         let cli = Cli::try_parse_from(run_args(profile.path(), app.path())).expect("parse");
         let result = super::dispatch(&cli);
         assert!(
             result.is_ok(),
-            "missing entry should warn + continue: {result:?}"
+            "missing events.yaml should warn + continue: {result:?}"
         );
     }
 
