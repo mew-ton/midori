@@ -1,16 +1,18 @@
 mod error;
 mod events_pipeline;
 mod events_schema;
+mod logging;
 mod profile;
 mod ring_handshake;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 
 use crate::error::CliError;
 use crate::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
+use crate::logging::{LogFormat, LogLevel};
 use crate::profile::{collect_driver_names, load_from_path as load_profile};
 
 #[derive(Parser, Debug)]
@@ -47,26 +49,13 @@ enum Command {
     },
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-enum LogFormat {
-    Text,
-    Json,
-}
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    logging::init(cli.log_level, cli.log_format);
     match dispatch(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("midori: {err}");
+            logging::error("cli", None, err);
             ExitCode::FAILURE
         }
     }
@@ -93,17 +82,25 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
             .map_err(|source| CliError::StartupCheck { source })?
         {
             DriverSchemaOutcome::Loaded(_) => {
-                eprintln!(
-                    "midori: driver `{name}` の events.yaml ({}) のチェックが完了しました",
-                    events_yaml_path.display()
+                logging::info(
+                    "startup",
+                    Some(name),
+                    format_args!(
+                        "events.yaml ({}) のチェックが完了しました",
+                        events_yaml_path.display()
+                    ),
                 );
             }
             DriverSchemaOutcome::Missing => {
                 // events.yaml が無い driver は spec 上「明示的な schema 未宣言モード」
                 // として warning に留めて起動を継続する。
-                eprintln!(
-                    "midori: warning: driver `{name}` の events.yaml ({}) が見つかりませんでした。schema 未宣言モードで起動します",
-                    events_yaml_path.display()
+                logging::warn(
+                    "startup",
+                    Some(name),
+                    format_args!(
+                        "events.yaml ({}) が見つかりませんでした。schema 未宣言モードで起動します",
+                        events_yaml_path.display()
+                    ),
                 );
             }
         }
