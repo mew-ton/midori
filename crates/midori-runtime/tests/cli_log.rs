@@ -9,11 +9,43 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-/// `<app-data-dir>/plugins/driver-<name>/events.yaml` を持たない app-data-dir
-/// を temp dir で作る。startup chain が "Missing → warn" の経路に入る。
+/// `<app-data-dir>/plugins/<driver>-plugin/.midori/plugin.yaml` +
+/// `drivers/<driver>/driver.yaml` までを置き、events.yaml だけ意図的に
+/// 配置しない。startup chain が "Missing → warn" の経路に入る。
+///
+/// `events_yaml` を `Some` にすると `Loaded → info` 経路まで到達できる。
+fn setup_app_data_dir_with_driver(driver: &str, events_yaml: Option<&str>) -> tempfile::TempDir {
+    let dir = tempfile::Builder::new()
+        .prefix("midori-cli-log-app-")
+        .tempdir()
+        .expect("tempdir");
+    let plugin_root = dir.path().join("plugins").join(format!("{driver}-plugin"));
+    let dot_midori = plugin_root.join(".midori");
+    std::fs::create_dir_all(&dot_midori).expect("mkdir .midori");
+    let plugin_yaml =
+        format!("name: {driver}-plugin\ndrivers:\n  - driver: ../drivers/{driver}/driver.yaml\n");
+    std::fs::write(dot_midori.join("plugin.yaml"), plugin_yaml).expect("write plugin.yaml");
+    let driver_dir = plugin_root.join("drivers").join(driver);
+    std::fs::create_dir_all(&driver_dir).expect("mkdir driver");
+    let driver_yaml = format!("name: {driver}\nmodality: {driver}\n");
+    std::fs::write(driver_dir.join("driver.yaml"), driver_yaml).expect("write driver.yaml");
+    if let Some(events_yaml) = events_yaml {
+        std::fs::write(driver_dir.join("events.yaml"), events_yaml).expect("write events.yaml");
+    }
+    dir
+}
+
+/// 完全に空の app-data-dir。
+///
+/// 用途は 2 系統:
+/// - profile path 不在ケースの error log テスト（`CliError::LoadProfile` 経路）
+/// - 任意 driver を要求した時の `DriverNotInstalled` 経路のテスト
+///   （plugin manifest が一切無い状態で profile が driver を指定すると
+///   `resolve_drivers` の戻り値に対象 driver が居ないため `DriverNotInstalled`
+///   になる）
 fn setup_empty_app_data_dir() -> tempfile::TempDir {
     tempfile::Builder::new()
-        .prefix("midori-cli-log-app-")
+        .prefix("midori-cli-log-app-empty-")
         .tempdir()
         .expect("tempdir")
 }
@@ -48,7 +80,8 @@ fn spawn(profile: &Path, app_data_dir: &Path, format: &str) -> std::process::Out
 
 #[test]
 fn it_should_emit_warn_log_as_single_json_line_when_events_yaml_is_missing() {
-    let app = setup_empty_app_data_dir();
+    // plugin manifest と driver.yaml は配置するが、events.yaml だけ欠落させる。
+    let app = setup_app_data_dir_with_driver("midi", None);
     let profile = write_tmp_profile("midi");
     let output = spawn(profile.path(), app.path(), "json");
     assert!(
@@ -77,7 +110,8 @@ fn it_should_emit_warn_log_as_single_json_line_when_events_yaml_is_missing() {
 
 #[test]
 fn it_should_emit_text_format_when_log_format_is_text() {
-    let app = setup_empty_app_data_dir();
+    // events.yaml 欠落 → warn の text format 出力をテスト。
+    let app = setup_app_data_dir_with_driver("osc", None);
     let profile = write_tmp_profile("osc");
     let output = spawn(profile.path(), app.path(), "text");
     assert!(output.status.success(), "exit success");
@@ -128,23 +162,52 @@ fn it_should_emit_error_log_when_profile_is_invalid() {
 }
 
 #[test]
+fn it_should_emit_error_log_when_driver_is_not_installed() {
+    // app-data-dir に plugin manifest を一切置かない状態で profile が
+    // `driver: midi` を要求すると、resolver が見つけられず
+    // `CliError::DriverNotInstalled` で fail する。dispatch がこれを
+    // bridge layer の error log として出力することを担保する。
+    let app = setup_empty_app_data_dir();
+    let profile = write_tmp_profile("midi");
+    let output = spawn(profile.path(), app.path(), "json");
+    assert!(
+        !output.status.success(),
+        "missing driver must fail: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("utf-8");
+    let error_line = stdout
+        .lines()
+        .find(|line| line.contains("\"level\":\"error\""))
+        .unwrap_or_else(|| panic!("error line missing in stdout: {stdout}"));
+    let value: serde_json::Value =
+        serde_json::from_str(error_line).expect("error line is valid json");
+    assert_eq!(value["type"], "log");
+    assert_eq!(value["level"], "error");
+    assert_eq!(value["layer"], "bridge");
+    let message = value["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("midi"),
+        "error message should mention requested driver: {message}"
+    );
+    assert!(
+        message.contains("見つかりません"),
+        "error message should describe missing driver plugin: {message}"
+    );
+}
+
+#[test]
 fn it_should_filter_out_info_when_log_level_is_warn() {
     // level=warn 設定下では Info / Debug は出ず、Warn のみが出る。
-    // events.yaml Missing は warn なので 1 件出るが、Loaded info は出ないこと
-    // を別 fixture（events.yaml が valid な driver）で確認する。
-    let app = tempfile::Builder::new()
-        .prefix("midori-cli-log-filter-")
-        .tempdir()
-        .expect("tempdir");
-    // valid な events.yaml を配置 → Loaded info 経路
-    let plugin_dir = app.path().join("plugins").join("driver-midi");
-    std::fs::create_dir_all(&plugin_dir).expect("mkdir plugin");
+    // valid events.yaml を配置（Loaded → info 経路）した上で `--log-level warn`
+    // を指定し、info 行が消えていることを確認する。
     let valid_events = "schema_version: 1\n\
          events:\n  \
            noteOn:\n    \
              fields:\n      \
                channel: { type: uint8, range: [1, 16] }\n";
-    std::fs::write(plugin_dir.join("events.yaml"), valid_events).expect("write events.yaml");
+    let app = setup_app_data_dir_with_driver("midi", Some(valid_events));
     let profile = write_tmp_profile("midi");
 
     let bin = env!("CARGO_BIN_EXE_midori");
