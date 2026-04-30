@@ -26,10 +26,22 @@
         }                                                                       \
     } while (0)
 
-int main(void) {
-    /* DEFAULT_SLOT_SIZE = 1032 を使う（C 側に const は出力されないため
-     * 数値を直接書く。値は midori-core::shm::DEFAULT_SLOT_SIZE と一致）。 */
-    const uint32_t slot_size = 1032;
+int main(int argc, char **argv) {
+    /* slot_size は Rust test harness (`tests/c_smoke.rs`) から argv[1] で
+     * 渡される。harness 側で `midori_core::shm::DEFAULT_SLOT_SIZE` を
+     * 直接 stringify するため、C 側にハードコードを残さず Rust 側 const
+     * との silent drift を防ぐ。argv[1] が無い場合は default 1032 で
+     * 単独実行も可能（手動デバッグ用 fallback）。 */
+    uint32_t slot_size = 1032;
+    if (argc >= 2) {
+        unsigned long parsed = strtoul(argv[1], NULL, 10);
+        EXPECT(parsed > 0 && parsed <= 0x10000UL, "slot_size argv must be in (0, 65536]");
+        slot_size = (uint32_t)parsed;
+    }
+    /* 本テストは max_payload = 1024 byte の固定 buffer に依存している。
+     * Rust 側 default が変わったら C 側も追従する必要があるため、ここで
+     * 不一致を runtime で検出する。 */
+    EXPECT(slot_size == 1032, "this smoke test expects DEFAULT_SLOT_SIZE = 1032");
 
     /* `midori_sdk.h` の signature と一致させるため `uintptr_t` を使う。
      * LP64 環境では size_t と同サイズだが、type-correctness のため厳密に。 */

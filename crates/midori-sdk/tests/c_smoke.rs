@@ -94,7 +94,11 @@ fn c_smoke_links_and_round_trips_spsc() {
         String::from_utf8_lossy(&compile.stderr)
     );
 
+    // C 側にハードコード値を残さず、Rust の `DEFAULT_SLOT_SIZE` を argv で
+    // 渡して silent drift を防ぐ（Rust 側 const が変われば C 側はそれに
+    // 追従、内部 buffer 配列の大きさだけ runtime check で守る）。
     let run = Command::new(&bin_path)
+        .arg(midori_core::shm::DEFAULT_SLOT_SIZE.to_string())
         .output()
         .expect("spawn smoke binary");
     assert!(
