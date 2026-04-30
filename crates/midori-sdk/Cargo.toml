@@ -26,9 +26,6 @@ signal-hook = "0.4"
 [build-dependencies]
 cbindgen = { version = "0.29", default-features = false }
 
-[dev-dependencies]
-cc = "1"
-
 # midori-sdk は SPSC リングバッファ実装で UnsafeCell を扱うため、
 # workspace の `unsafe_code = "forbid"` をクレート単位で `deny` に緩める。
 # unsafe を使う箇所には個別に `#[allow(unsafe_code)]` を付け、SAFETY コメントで根拠を示す。

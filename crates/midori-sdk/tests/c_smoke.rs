@@ -16,7 +16,7 @@ fn c_smoke_links_and_round_trips_spsc() {
         return;
     }
 
-    let Some(cc) = detect_c_compiler() else {
+    let Some((cc, cc_args)) = detect_c_compiler() else {
         eprintln!(
             "[c-smoke] SKIP: C コンパイラが見つかりませんでした（CC env / cc / gcc / clang のいずれも未検出）"
         );
@@ -54,7 +54,10 @@ fn c_smoke_links_and_round_trips_spsc() {
         staticlib_path.display()
     );
 
-    let out_dir = std::env::temp_dir().join("midori-sdk-c-smoke");
+    // 同ホスト上で並行実行された `cargo test` が同じ binary 出力を奪い合う
+    // のを防ぐため、process id を含めた専用ディレクトリに出力する（cargo
+    // nextest や retry job 等の並行実行で race が起きないように）。
+    let out_dir = std::env::temp_dir().join(format!("midori-sdk-c-smoke-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).expect("create out dir");
     let bin_path = out_dir.join(if cfg!(target_os = "windows") {
         "spsc_round_trip.exe"
@@ -67,6 +70,9 @@ fn c_smoke_links_and_round_trips_spsc() {
     // いるため `-framework Security` 相当が要らないケースも多い。最小構成
     // で gcc/clang に任せ、未解決シンボルが出たら都度追加する方針で書く。
     let mut cmd = Command::new(&cc);
+    // `CC=cc -O2` のように env 値が args 込みのケースを尊重するため、
+    // detect_c_compiler が分離した残り token を先頭に積む。
+    cmd.args(&cc_args);
     cmd.arg("-O2")
         .arg("-Wall")
         .arg(format!("-I{}", header_dir.display()))
@@ -108,15 +114,20 @@ fn c_smoke_links_and_round_trips_spsc() {
 
 /// `CC` env / `cc` / `gcc` / `clang` の順で C コンパイラを探す。見つから
 /// なければ `None`（caller が skip する）。
-fn detect_c_compiler() -> Option<PathBuf> {
+///
+/// `CC=cc -O2` のように引数込みで設定されている環境を尊重するため、
+/// 戻り値は `(プログラム path, それ以降の args)` のペア。args は caller が
+/// 自前のフラグより先に積むことで Honor される。
+fn detect_c_compiler() -> Option<(PathBuf, Vec<String>)> {
     if let Ok(cc) = std::env::var("CC") {
-        if !cc.trim().is_empty() {
-            return Some(PathBuf::from(cc));
+        let mut tokens = cc.split_whitespace().map(str::to_owned);
+        if let Some(prog) = tokens.next() {
+            return Some((PathBuf::from(prog), tokens.collect()));
         }
     }
     for candidate in ["cc", "gcc", "clang"] {
         if which_in_path(candidate).is_some() {
-            return Some(PathBuf::from(candidate));
+            return Some((PathBuf::from(candidate), Vec::new()));
         }
     }
     None

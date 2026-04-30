@@ -31,16 +31,18 @@ int main(void) {
      * 数値を直接書く。値は midori-core::shm::DEFAULT_SLOT_SIZE と一致）。 */
     const uint32_t slot_size = 1032;
 
-    size_t storage_size = midori_sdk_spsc_storage_size(slot_size);
+    /* `midori_sdk.h` の signature と一致させるため `uintptr_t` を使う。
+     * LP64 環境では size_t と同サイズだが、type-correctness のため厳密に。 */
+    uintptr_t storage_size = midori_sdk_spsc_storage_size(slot_size);
     EXPECT(storage_size > 0, "storage_size > 0");
 
-    size_t storage_align = midori_sdk_spsc_storage_alignment();
+    uintptr_t storage_align = midori_sdk_spsc_storage_alignment();
     EXPECT(storage_align >= 8, "storage_align >= 8");
     EXPECT((storage_align & (storage_align - 1)) == 0, "alignment is power of two");
 
     /* aligned_alloc は size が alignment の倍数であることを要求する。 */
-    size_t alloc_size = (storage_size + storage_align - 1) & ~(storage_align - 1);
-    void *storage = aligned_alloc(storage_align, alloc_size);
+    uintptr_t alloc_size = (storage_size + storage_align - 1) & ~(storage_align - 1);
+    void *storage = aligned_alloc((size_t)storage_align, (size_t)alloc_size);
     EXPECT(storage != NULL, "aligned_alloc succeeded");
 
     int32_t init_rc = midori_sdk_spsc_init(storage, slot_size);
@@ -48,7 +50,7 @@ int main(void) {
 
     /* 空状態では pop が 0 を返す。 */
     uint8_t out_buf[1024];
-    size_t out_len = 0;
+    uintptr_t out_len = 0;
     int32_t empty_rc = midori_sdk_spsc_pop(storage, out_buf, sizeof(out_buf), &out_len);
     EXPECT(empty_rc == 0, "empty pop returns 0");
 
@@ -88,6 +90,23 @@ int main(void) {
     memset(too_large, 0, sizeof(too_large));
     int32_t over_rc = midori_sdk_spsc_push(storage, too_large, sizeof(too_large));
     EXPECT(over_rc == -2, "oversize push returns -2");
+
+    /* caller buffer が payload より小さいケースは -3 を返し、`*out_len` には
+     * 本来必要だった byte 数が書かれる。SPSC 規律上 slot は消費されるため、
+     * 直後の pop は empty (0) を返す。 */
+    const uint8_t small_payload[64] = {0};
+    int32_t push_small_rc =
+        midori_sdk_spsc_push(storage, small_payload, sizeof(small_payload));
+    EXPECT(push_small_rc == 1, "push 64-byte payload returned 1");
+    uint8_t tiny_buf[32];
+    uintptr_t tiny_len = 0;
+    int32_t cap_rc =
+        midori_sdk_spsc_pop(storage, tiny_buf, sizeof(tiny_buf), &tiny_len);
+    EXPECT(cap_rc == -3, "capacity-insufficient pop returns -3");
+    EXPECT(tiny_len == sizeof(small_payload), "out_len reports required bytes");
+    int32_t empty_rc3 =
+        midori_sdk_spsc_pop(storage, out_buf, sizeof(out_buf), &out_len);
+    EXPECT(empty_rc3 == 0, "slot was consumed even though pop returned -3");
 
     free(storage);
     fprintf(stdout, "[c-smoke] OK\n");
