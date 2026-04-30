@@ -48,6 +48,13 @@ fn c_smoke_links_and_round_trips_spsc() {
     );
 
     let staticlib_path = locate_midori_sdk_staticlib();
+    // `cargo test` は test binary に必要な rlib しか build しないため、
+    // C 側からリンクする staticlib（`crate-type = ["staticlib"]` の出力物）が
+    // target dir に無い状態で test が走るケースがある（CI のクリーンビルド
+    // 等）。ここで明示的に `cargo build -p midori-sdk --lib` を spawn して
+    // staticlib を生成しておく。cargo は同じ target dir でもプロセス間で
+    // ロックを取るため、test runner と並行実行しても安全。
+    ensure_midori_sdk_staticlib(&staticlib_path);
     assert!(
         staticlib_path.is_file(),
         "midori-sdk staticlib missing: {}",
@@ -156,6 +163,29 @@ fn which_in_path(cmd: &str) -> Option<PathBuf> {
     } else {
         Some(PathBuf::from(first))
     }
+}
+
+/// `staticlib_path` が存在しなければ `cargo build -p midori-sdk --lib` を
+/// 起動して生成する。test profile (debug / release) を `cfg!(debug_assertions)`
+/// から推定し、`--release` 必要時は付加する。
+fn ensure_midori_sdk_staticlib(staticlib_path: &Path) {
+    if staticlib_path.is_file() {
+        return;
+    }
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let mut cmd = Command::new(&cargo);
+    cmd.args(["build", "-p", "midori-sdk", "--lib"]);
+    if !cfg!(debug_assertions) {
+        cmd.arg("--release");
+    }
+    let out = cmd.output().expect("spawn cargo build");
+    assert!(
+        out.status.success(),
+        "cargo build -p midori-sdk failed (status={:?})\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 /// `<target>/<profile>/libmidori_sdk.a`（Linux / macOS）を解決する。
