@@ -188,7 +188,8 @@ fn ensure_midori_sdk_staticlib(staticlib_path: &Path) {
     );
 }
 
-/// `<target>/<profile>/libmidori_sdk.a`（Linux / macOS）を解決する。
+/// `<target>/<profile>/libmidori_sdk.a`（Linux / macOS / Windows GNU）または
+/// `<target>/<profile>/midori_sdk.lib`（Windows MSVC）を解決する。
 /// 本テストは integration test で実行ファイル自身が
 /// `<target>/<profile>/deps/c_smoke-XXX` に置かれることを利用し、その 2 階層
 /// 上を target profile dir として扱う。`CARGO_TARGET_DIR` が設定されている
@@ -200,7 +201,10 @@ fn locate_midori_sdk_staticlib() -> PathBuf {
         .parent()
         .and_then(Path::parent)
         .expect("test exe has grandparent");
-    profile_dir.join(if cfg!(target_os = "windows") {
+    // Windows MSVC のみ `.lib` 形式。Windows GNU (x86_64-pc-windows-gnu) も
+    // `lib*.a` 形式で出力されるため `target_os` 単独ではなく target_env と
+    // の組み合わせで判定する。
+    profile_dir.join(if cfg!(all(target_os = "windows", target_env = "msvc")) {
         "midori_sdk.lib"
     } else {
         "libmidori_sdk.a"
