@@ -63,16 +63,19 @@ name = "option-ext"
 allow = ["MPL-2.0"]
 
 [[licenses.exceptions]]
-# Public-domain dedication used by the `memchr` crate. Functionally
-# permissive but kept as a per-crate exception so it does not implicitly
-# allow Unlicense-only code to enter the workspace elsewhere.
+# memchr's SPDX expression is `Unlicense OR MIT`, so today it satisfies
+# the global allow via MIT and the Unlicense branch goes unused. The
+# exception is kept as a safety net: if MIT is ever narrowed out of the
+# global allow, this entry keeps memchr compliant without admitting
+# Unlicense-only code from any other crate.
 name = "memchr"
 allow = ["Unlicense"]
 
 [[licenses.exceptions]]
-# Boost Software License is permissive and OSI-approved. Scoped to
-# `ryu` so unrelated BSL-1.0 deps would still require a deliberate
-# review before being admitted.
+# ryu's SPDX expression is `Apache-2.0 OR BSL-1.0`, so today it
+# satisfies the global allow via Apache-2.0. The BSL-1.0 entry is kept
+# as a safety net for if Apache-2.0 is narrowed later, without admitting
+# BSL-1.0 from any other crate.
 name = "ryu"
 allow = ["BSL-1.0"]
 
