@@ -1,9 +1,9 @@
 ---
-name: run-local-code-review-before-push
+name: run-local-code-review-before-marking-ready
 description: Use this skill when a feature branch is ready to be reviewed against `main` — typically after `gh pr create --draft` has produced a draft PR, but before marking it ready. Runs `/code-review:code-review` and `/coderabbit:review` locally so issues are caught before GitHub-side reviewers fire. Triggers on "ローカルレビュー", "事前レビュー", "pre-merge review", "before marking ready", and any moment Claude is about to call `gh pr ready` without having run local reviews.
 ---
 
-# run-local-code-review-before-push
+# run-local-code-review-before-marking-ready
 
 Before transitioning a draft PR to ready, run **both** local reviewers — they cover different ground and the union of findings is what should be addressed.
 

@@ -23,6 +23,8 @@ Every change that lands must remain judgeable by at least one party still in the
 
 Priority and granularity decisions must be defensible — explainable from principles, not "feels right". When delegating these to soloscrum's PO step, present the rationale alongside the conclusion so the user can challenge or accept on substance.
 
+Quality gate setup (linter / formatter / test infrastructure) precedes the implementation work that depends on it — order priorities so gates land before the features they protect.
+
 ## Decision authority
 
 The final gate into `main` belongs to the user. CI green and review verdicts are *evidence*, not *authority* (skill: `defer-pr-merge-to-user`).
