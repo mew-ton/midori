@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only is sufficient for every job in this workflow: cargo / cargo-deny
+# / pnpm-biome all consume the checked-out tree without writing to PRs,
+# Releases, or Pages. Pinning to a minimal scope follows the GitHub
+# Actions hardening guidance flagged by CodeQL `actions/missing-workflow-permissions`.
+permissions:
+  contents: read
+
 jobs:
   rust:
     name: Rust (${{ matrix.os }})
@@ -33,18 +40,19 @@ jobs:
       - name: check (cross-platform)
         run: cargo check --workspace
 
-  rust-advisories:
-    name: Rust advisories
+  rust-deny:
+    name: Rust cargo-deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      # Advisory scan reads only Cargo.lock and the RustSec database, so
-      # one Linux invocation covers every target platform of the workspace.
-      # `command: check advisories` keeps the gate scoped to RUSTSEC entries
-      # while leaving licenses / bans / sources for a separate effort.
+      # cargo-deny reads only Cargo.lock plus its configuration, so one
+      # Linux invocation covers every target platform of the workspace.
+      # The default `check` subcommand exercises advisories, licenses,
+      # bans, and sources together; the policy for each section lives
+      # in `deny.toml`.
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          command: check advisories
+          command: check
 
   js:
     name: JS
