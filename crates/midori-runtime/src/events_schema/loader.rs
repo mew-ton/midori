@@ -26,7 +26,7 @@ pub enum LoadError {
     /// YAML parse / deserialization failure.
     Parse {
         path: PathBuf,
-        source: serde_yml::Error,
+        source: serde_yaml_ng::Error,
     },
 }
 
@@ -79,10 +79,11 @@ pub fn load_from_path(path: &Path) -> Result<LoadOutcome, LoadError> {
             });
         }
     };
-    let schema: EventsSchema = serde_yml::from_str(&yaml).map_err(|source| LoadError::Parse {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let schema: EventsSchema =
+        serde_yaml_ng::from_str(&yaml).map_err(|source| LoadError::Parse {
+            path: path.to_path_buf(),
+            source,
+        })?;
     Ok(LoadOutcome::Loaded(schema))
 }
 

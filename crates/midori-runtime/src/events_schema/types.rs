@@ -62,21 +62,21 @@ pub struct FieldSpec {
     #[serde(default)]
     pub optional: bool,
     #[serde(default)]
-    pub default: Option<serde_yml::Value>,
+    pub default: Option<serde_yaml_ng::Value>,
 }
 
 /// `range: [min, max]` bound. Stored as raw YAML values; validation checks
 /// numeric compatibility with the declared field type.
 #[derive(Debug, Deserialize, PartialEq, Clone)]
-#[serde(try_from = "Vec<serde_yml::Value>")]
+#[serde(try_from = "Vec<serde_yaml_ng::Value>")]
 pub struct RangeBound {
-    pub min: serde_yml::Value,
-    pub max: serde_yml::Value,
+    pub min: serde_yaml_ng::Value,
+    pub max: serde_yaml_ng::Value,
 }
 
-impl TryFrom<Vec<serde_yml::Value>> for RangeBound {
+impl TryFrom<Vec<serde_yaml_ng::Value>> for RangeBound {
     type Error = String;
-    fn try_from(v: Vec<serde_yml::Value>) -> Result<Self, Self::Error> {
+    fn try_from(v: Vec<serde_yaml_ng::Value>) -> Result<Self, Self::Error> {
         let mut iter = v.into_iter();
         let min = iter
             .next()
@@ -286,17 +286,19 @@ where
     )
 }
 
-/// `serde_yml::Value` の数値を `f64` に変換する。
+/// `serde_yaml_ng::Value` の数値を `f64` に変換する。
 ///
-/// `as_f64()` 単独では実装によって整数リテラル（`range: [0, 127]` 等）が
-/// `None` を返す可能性があるため、`as_i64()` / `as_u64()` への fallback を
-/// 順に試す。`Value::Number` 以外は `None`。validator（schema 起動時検査）と
+/// 現行の `serde_yaml_ng::Number::as_f64()` は整数リテラル（`range: [0, 127]`
+/// 等）に対しても `Some` を返すため通常は `as_f64()` 一発で足りるが、将来の
+/// パーサ差し替えで整数リテラルに対して `None` を返す実装に当たっても安全に
+/// 倒れるよう、`as_i64()` / `as_u64()` への fallback を defense-in-depth で
+/// 残してある。`Value::Number` 以外は `None`。validator（schema 起動時検査）と
 /// `events_pipeline::runtime_check`（イベントごとの runtime 検査）の両方が
 /// 範囲比較で使うため、ここに共通定義を置く。
 #[allow(clippy::cast_precision_loss)]
-pub(crate) fn yaml_to_f64(v: &serde_yml::Value) -> Option<f64> {
+pub(crate) fn yaml_to_f64(v: &serde_yaml_ng::Value) -> Option<f64> {
     match v {
-        serde_yml::Value::Number(n) => n
+        serde_yaml_ng::Value::Number(n) => n
             .as_f64()
             .or_else(|| n.as_i64().map(|i| i as f64))
             .or_else(|| n.as_u64().map(|u| u as f64)),

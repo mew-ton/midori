@@ -59,7 +59,7 @@ pub struct ProfileConnection {
     pub driver: String,
     /// driver 固有の追加フィールド（`device_name` / `host` / `port` 等）。
     #[serde(flatten)]
-    pub extra: BTreeMap<String, serde_yml::Value>,
+    pub extra: BTreeMap<String, serde_yaml_ng::Value>,
 }
 
 /// profile YAML のロード失敗。
@@ -73,7 +73,7 @@ pub enum ProfileLoadError {
     /// YAML パース / deserialize 失敗。
     Parse {
         path: PathBuf,
-        source: serde_yml::Error,
+        source: serde_yaml_ng::Error,
     },
     /// パースは通ったが意味論的に invalid（inputs / outputs が空など）。
     Invalid { path: PathBuf, message: String },
@@ -121,7 +121,7 @@ pub fn load_from_path(path: &Path) -> Result<ProfileYaml, ProfileLoadError> {
         source,
     })?;
     let profile: ProfileYaml =
-        serde_yml::from_str(&yaml).map_err(|source| ProfileLoadError::Parse {
+        serde_yaml_ng::from_str(&yaml).map_err(|source| ProfileLoadError::Parse {
             path: path.to_path_buf(),
             source,
         })?;
@@ -369,11 +369,11 @@ outputs:
         let osc = &profile.outputs[0].connection;
         assert_eq!(
             osc.extra.get("host"),
-            Some(&serde_yml::Value::String("127.0.0.1".into()))
+            Some(&serde_yaml_ng::Value::String("127.0.0.1".into()))
         );
         assert_eq!(
             osc.extra.get("port"),
-            Some(&serde_yml::Value::Number(9000.into()))
+            Some(&serde_yaml_ng::Value::Number(9000.into()))
         );
     }
 
@@ -390,9 +390,9 @@ outputs:
         // の path を作るため、`..` / path separator が入った driver 名は
         // plugins ディレクトリを脱出させ得る。`validate_driver_name` が
         // `ProfileLoadError::Invalid` として弾くことを担保する。
-        // （null byte / 制御文字は serde-yml 側で `Parse` 段階で拒否される
+        // （null byte / 制御文字は YAML パーサ側で `Parse` 段階で拒否される
         // ため本テストの対象外。validate_driver_name の defensive check は
-        // serde-yml が将来仕様変更しても破綻しないための二段防御として
+        // YAML パーサが将来仕様変更しても破綻しないための二段防御として
         // 残してある。）
         for bad in ["../etc/passwd", "midi/../../foo", "a/b", "a\\b", "..", "."] {
             let yaml = format!(
@@ -416,7 +416,7 @@ outputs:
     #[test]
     fn it_should_reject_driver_name_with_windows_reserved_characters() {
         // Windows のファイル名で許容されない文字を含む driver 名を一律 reject。
-        // `"` は YAML 文字列終端と衝突するため serde-yml 側で `Parse` エラーに
+        // `"` は YAML 文字列終端と衝突するため YAML パーサ側で `Parse` エラーに
         // なるが、いずれにしても driver 名としては受理されないため両 variant
         // を許容する。
         for bad in [

@@ -210,10 +210,10 @@ fn validate_range(
 fn validate_default(
     path: &str,
     spec: &FieldSpec,
-    default: &serde_yml::Value,
+    default: &serde_yaml_ng::Value,
     errors: &mut Vec<ValidationError>,
 ) {
-    use serde_yml::Value;
+    use serde_yaml_ng::Value;
     let push = |msg: String, errors: &mut Vec<ValidationError>| {
         errors.push(ValidationError {
             path: path.to_owned(),

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use super::*;
 
 fn parse(yaml: &str) -> EventsSchema {
-    serde_yml::from_str(yaml).expect("parse should succeed")
+    serde_yaml_ng::from_str(yaml).expect("parse should succeed")
 }
 
 #[test]
@@ -68,7 +68,7 @@ events:
     fields:
       x: { type: uint8 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(result.is_err(), "unknown tier should fail to deserialize");
 }
 
@@ -82,7 +82,7 @@ events:
     fields:
       x: { type: uint8 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "non-string tier should fail to deserialize"
@@ -98,7 +98,7 @@ events:
     fields:
       x: { type: weirdType }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(result.is_err(), "unknown type vocabulary should fail");
 }
 
@@ -244,7 +244,7 @@ events:
     fields:
       y: { type: uint8 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "duplicate event name should fail to deserialize"
@@ -260,7 +260,7 @@ events:
     fields:
       vals: { type: array<enum>, max_length: 4 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "array<enum> should fail (non-scalar inner type)"
@@ -276,7 +276,7 @@ events:
     fields:
       vals: { type: array<array<uint8>>, max_length: 4 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "nested array type should fail (non-scalar inner type)"
@@ -329,7 +329,7 @@ events:
       x: { type: uint8 }
 unknownTopLevel: oops
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "unknown top-level field should be rejected"
@@ -346,7 +346,7 @@ events:
       x: { type: uint8 }
     unknownProp: 1
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(result.is_err(), "unknown event field should be rejected");
 }
 
@@ -360,7 +360,7 @@ events:
       a: { type: uint8 }
       a: { type: uint8 }
 ";
-    let result: Result<EventsSchema, _> = serde_yml::from_str(yaml);
+    let result: Result<EventsSchema, _> = serde_yaml_ng::from_str(yaml);
     assert!(
         result.is_err(),
         "duplicate field in event should fail to deserialize"
