@@ -27,7 +27,7 @@ driver の event は性質ごとに要求が異なる:
 
 ## tier 宣言の所在
 
-driver の `events.yaml` で **event 型ごとに `tier`** を宣言する（`design/16-driver-events-schema.md` の schema 拡張で `tier: inline | streamed` を追加予定）。default は `inline`。
+driver の `events.yaml` で **event 型ごとに `tier`** を宣言する（schema 文法は `design/16-driver-events-schema.md`「tier」節で `tier: inline | streamed` として定義）。default は `inline`。
 
 ```yaml
 events:
@@ -112,6 +112,6 @@ settle するまで、driver 作者は `tier: streamed` event を宣言しても
 ## 参考リンク
 
 - `design/15-sdk-bindings-api.md` — SDK バインディング API（C / Node / Python）と driver プロセスモデル
-- `design/16-driver-events-schema.md` — events.yaml schema（`tier` 宣言の文法は本書と連動して別 Issue で追加予定）
+- `design/16-driver-events-schema.md` — events.yaml schema（`tier` 宣言の文法は本書と連動した「tier」節で定義）
 - `design/10-driver-plugin.md` — Driver プラグイン仕様（プロセス分離原則）
 - `crates/midori-core/src/shm.rs` — `RingSlot` / `ShmHeader` 実装
