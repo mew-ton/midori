@@ -33,6 +33,19 @@ jobs:
       - name: check (cross-platform)
         run: cargo check --workspace
 
+  rust-advisories:
+    name: Rust advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Advisory scan reads only Cargo.lock and the RustSec database, so
+      # one Linux invocation covers every target platform of the workspace.
+      # `command: check advisories` keeps the gate scoped to RUSTSEC entries
+      # while leaving licenses / bans / sources for a separate effort.
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+
   js:
     name: JS
     runs-on: ubuntu-latest
