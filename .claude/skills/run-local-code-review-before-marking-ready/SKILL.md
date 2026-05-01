@@ -35,9 +35,19 @@ Running both before `gh pr ready` keeps the GitHub-side CodeRabbit auto-review c
 5. Re-run reviewers if substantial fixes were applied.
 6. Mark PR ready (`gh pr ready <N>`).
 
+## Autonomy
+
+- Both reviewers green (or all findings addressed) is the unambiguous trigger for `gh pr ready` — proceed without pre-confirmation. The action is reversible (`gh pr ready --undo`).
+- Pre-confirm only when one of these is true:
+  - A reviewer raised a judgment-required item that needs the user to adjudicate (scope, design tradeoff, "is this even the right approach")
+  - Addressing the findings expanded the PR beyond its originating Issue's scope
+  - Local sanity checks (formatter / lint / tests / project-specific gates) failed and direction is needed on whether to fix in this PR or defer
+- Otherwise: fix → push → `gh pr ready` → Linear → In Review → summarize. No pre-confirmation prompt.
+
 ## Anti-patterns
 
 - ❌ Skip either reviewer "to save time" — they cover different ground.
 - ❌ Mark PR ready while actionable findings are unaddressed.
 - ❌ Wait for GitHub-side CodeRabbit to surface findings on a ready PR (defeats the purpose of the draft window).
-- ✅ Both reviewers complete with 0 actionable findings (or all addressed) → `gh pr ready`.
+- ❌ Pause for user go-ahead before `gh pr ready` when reviewers are green and the fix stayed in scope.
+- ✅ Both reviewers complete with 0 actionable findings (or all addressed) → `gh pr ready` autonomously.
