@@ -21,10 +21,11 @@ all-features = true
 # during the run.
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# Hard-fail on yanked crates as well as the default-denied vulnerability,
-# unmaintained, unsound, and notice categories. Keeping these at the
-# default "deny" level is the whole point of the scan — downgrading any
-# of them silently re-opens the gap this configuration was added to close.
+# `vulnerability` / `unmaintained` / `unsound` / `notice` already default to
+# `deny` in cargo-deny; `yanked` defaults to `warn`, so it is upgraded here
+# to match the error-level behavior of the others. Keeping every category at
+# `deny` is the whole point of the scan — downgrading any of them silently
+# re-opens the gap this configuration was added to close.
 yanked = "deny"
 # Format: ["RUSTSEC-YYYY-NNNN"] with a comment per entry recording why
 # the advisory is acknowledged and (where reasonable) when to revisit.
