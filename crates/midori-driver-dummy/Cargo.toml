@@ -50,8 +50,8 @@ serde_json = "1"
 
 # Sync signal handler used by the SIGTERM fixtures. signal-hook is already
 # in the workspace lock via `midori-sdk` so no new transitive surface is
-# introduced. Only the Unix targets actually install the handler — Windows
-# parent-side signal handling is out of scope for the parent issue.
+# introduced. Windows lacks POSIX signals so the dependency is unix-only;
+# Windows fixtures fall back to stdin-EOF for shutdown.
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.4"
 

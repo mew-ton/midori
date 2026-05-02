@@ -136,7 +136,7 @@ impl Default for SpawnOptions {
 /// background threads that:
 /// - own the child process and `wait()` for it on a dedicated thread
 ///   (the "watcher"), flipping a shared liveness flag when the child exits;
-/// - drain the post-handshake stdout stream and forward each non-JSON line
+/// - drain the post-handshake stdout stream and forward each line
 ///   into the bridge logger (the "log forwarder").
 ///
 /// Dropping the handle closes stdin, sends SIGTERM, polls the liveness
@@ -252,16 +252,18 @@ impl Drop for DriverHandle {
 
         terminate_with_grace(&self.alive, self.child_pid, self.shutdown_grace);
 
-        // Join background threads so their drop runs synchronously rather
-        // than detaching. The watcher's `child.wait()` is what actually
-        // reaps the kernel-level corpse, so joining it is what guarantees
-        // the child is gone before this `Drop` returns. Any join error is
-        // swallowed — the threads only ever panic on logger writer errors
-        // which the logger itself already swallows.
-        if let Some(handle) = self.log_forwarder.take() {
+        // Join the watcher first: its `child.wait()` is what reaps the kernel
+        // corpse, so once the watcher returns the child stdout pipe is
+        // guaranteed to have closed. The log-forwarder, which blocks on
+        // `read_line` against that pipe, can then unblock immediately on EOF
+        // — joining it second avoids an arbitrary wait while the child is
+        // still in the kernel's signal-delivery window. Join errors are
+        // swallowed because the inner threads only panic on logger writer
+        // errors, which the logger already absorbs.
+        if let Some(handle) = self.watcher.take() {
             let _ = handle.join();
         }
-        if let Some(handle) = self.watcher.take() {
+        if let Some(handle) = self.log_forwarder.take() {
             let _ = handle.join();
         }
     }
@@ -273,10 +275,10 @@ pub enum SpawnError {
     /// `Command::spawn` itself failed (binary missing, permission denied, …).
     Spawn(std::io::Error),
     /// The driver process started but did not emit `hello` within the
-    /// supplied timeout. Carries the actual budget that elapsed so the
-    /// `Display` impl can report the value the caller passed in (which
-    /// differs from [`HANDSHAKE_TIMEOUT`] in tests). The child is killed
-    /// before this is returned.
+    /// supplied timeout. Carries the configured budget so the `Display` impl
+    /// can echo the value the caller passed in (tests use a much shorter
+    /// timeout than [`HANDSHAKE_TIMEOUT`]). The child is killed before this
+    /// is returned.
     HandshakeTimeout(Duration),
     /// The driver closed stdout (and/or exited) without ever emitting
     /// `hello`. This is the EOF-before-handshake path.
@@ -671,11 +673,11 @@ fn send_sigterm(pid: u32) {
 
 #[cfg(not(unix))]
 fn send_sigterm(_pid: u32) {
-    // Windows lifecycle handling is out of scope for the parent issue.
-    // `send_sigkill` below also no-ops, so a Windows build of this code
-    // path effectively relies on the child exiting via stdin EOF. Wiring
-    // `TerminateProcess` is deferred until a later issue actually targets
-    // Windows.
+    // Windows lacks POSIX signals; the equivalent shutdown path requires
+    // `TerminateProcess`, which has different semantics (no graceful window).
+    // Until the lifecycle module is taught to switch between models, this
+    // build target relies on the child exiting via stdin EOF, and
+    // `send_sigkill` below is also a no-op.
 }
 
 /// Send `SIGKILL` to `pid`. Best-effort — ESRCH is ignored.

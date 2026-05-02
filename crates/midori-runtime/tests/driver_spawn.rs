@@ -215,12 +215,14 @@ fn lifecycle_options() -> SpawnOptions {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn it_should_complete_full_lifecycle_against_sigterm_graceful_dummy() {
     // spawn → connect → disconnect → configure → drop. The
     // SIGTERM-graceful fixture flips its shutdown flag on SIGTERM so Drop's
     // grace period is enough to observe a clean exit before the SIGKILL
-    // escalation triggers.
+    // escalation triggers. Windows lacks SIGTERM and the bridge's
+    // signal-send path is a no-op there, so this test is unix-only.
     let bin = fixture_bin_path("midori-driver-dummy-sigterm-graceful").to_path_buf();
     let mut handle =
         spawn_driver_with_options("dummy", bin, &serde_json::json!({}), &lifecycle_options())
@@ -274,13 +276,16 @@ fn it_should_record_abnormal_exit_when_driver_exits_with_non_zero_status() {
     drop(handle);
 }
 
+#[cfg(unix)]
 #[test]
 fn it_should_escalate_to_sigkill_when_sigterm_is_ignored() {
     // The fixture installs a SIGTERM handler that does nothing, and ignores
     // stdin EOF. The bridge's Drop must escalate to SIGKILL after the grace
     // period elapses. Wall-clock budget: at most `grace + a generous slack`
     // — we measure the elapsed time across `drop(handle)` and assert it
-    // stays below ~1 second on a 300ms grace.
+    // stays below ~1 second on a 300ms grace. Windows lacks both SIGTERM
+    // and SIGKILL semantics, and the fixture's Windows fallback loops
+    // forever instead of installing handlers — so this is unix-only.
     let bin = fixture_bin_path("midori-driver-dummy-sigterm-ignore").to_path_buf();
     let handle = spawn_driver_with_options(
         "dummy-ignore",

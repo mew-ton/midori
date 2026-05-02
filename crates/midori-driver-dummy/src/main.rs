@@ -7,9 +7,9 @@
 //! fixture mode via the build-time `CARGO_BIN_NAME`:
 //!
 //! Handshake fixtures:
-//! - `midori-driver-dummy`: emit a valid `hello`, accept any control
-//!   messages on stdin (each is acknowledged on stderr as a no-op), and
-//!   exit on stdin EOF.
+//! - `midori-driver-dummy`: emit a valid `hello`, silently discard any
+//!   control messages on stdin, and exit on stdin EOF. The body of the
+//!   stdin loop is a deliberate no-op slot for future handler dispatch.
 //! - `midori-driver-dummy-no-hello`: never emit `hello`. Exercises the
 //!   Bridge's handshake-timeout path.
 //! - `midori-driver-dummy-bad-version`: emit a `hello` whose `sdk_version`
@@ -198,9 +198,9 @@ fn run_sigterm_graceful() -> ExitCode {
     }
     #[cfg(not(unix))]
     {
-        // Windows: just drain stdin. The bridge's SIGKILL fallback (via
-        // `Child::kill()` → `TerminateProcess`) is the test's expectation
-        // there; the parent issue treats Windows lifecycle as out of scope.
+        // Windows lacks SIGTERM; the bridge falls back to closing stdin and
+        // letting the kernel reap the child. Drain stdin until EOF so the
+        // fixture exits when the parent decides to shut it down.
         drain_stdin_until_eof()
     }
 }
