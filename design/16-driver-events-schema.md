@@ -325,7 +325,7 @@ events:
     fields:
       payload:
         type: bytes
-        max_length: 1024  # SysEx payload の最大長（1 KiB）。実 ring の payload 収容量は実装の slot 設計による（design/17-driver-comm/01-inline-ring.md の DEFAULT_SLOT_SIZE / HARD_SLOT_SIZE 参照）
+        max_length: 1024  # MIDI SysEx 1 KiB 上限。inline tier の DEFAULT_SLOT_SIZE (1032 byte) - ヘッダ 8 byte = 1024 byte に収まる（典型 driver は handshake で slot_size 要求が不要）。slot_size 規約・HARD_SLOT_SIZE 上限は design/17-driver-comm/01-inline-ring.md 参照
     binding_filter: [type]
 ```
 

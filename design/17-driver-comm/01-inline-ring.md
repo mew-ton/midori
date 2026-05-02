@@ -37,7 +37,7 @@
 スコープ外（**Out of Scope**）:
 
 - streamed tier の実装（[00-overview.md](./00-overview.md) で予約のみ）
-- events.yaml schema への `tier` フィールド追加（別 Issue で `design/16-driver-events-schema.md` を改訂）
+- events.yaml schema 文法そのもの（`tier` フィールドの定義は `design/16-driver-events-schema.md`「tier」節）
 - driver lifetime 中の `slot_size` 変更（driver 再起動でしか変えられない）
 - 同一プロセス内 multi-driver（`design/15-sdk-bindings-api.md` の方針通り別プロセス化）
 - 圧縮（msgpack バイト列をそのまま運ぶ）
