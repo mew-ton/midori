@@ -101,8 +101,11 @@ pub enum SpawnError {
     /// `Command::spawn` itself failed (binary missing, permission denied, …).
     Spawn(std::io::Error),
     /// The driver process started but did not emit `hello` within the
-    /// configured timeout. The child is killed before this is returned.
-    HandshakeTimeout,
+    /// supplied timeout. Carries the actual budget that elapsed so the
+    /// `Display` impl can report the value the caller passed in (which
+    /// differs from [`HANDSHAKE_TIMEOUT`] in tests). The child is killed
+    /// before this is returned.
+    HandshakeTimeout(Duration),
     /// The driver closed stdout (and/or exited) without ever emitting
     /// `hello`. This is the EOF-before-handshake path.
     HandshakeMissing,
@@ -125,10 +128,10 @@ impl std::fmt::Display for SpawnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Spawn(err) => write!(f, "driver プロセスの spawn に失敗しました: {err}"),
-            Self::HandshakeTimeout => write!(
+            Self::HandshakeTimeout(elapsed) => write!(
                 f,
-                "driver が {} 秒以内に hello を送信しませんでした",
-                HANDSHAKE_TIMEOUT.as_secs()
+                "driver が {:.3} 秒以内に hello を送信しませんでした",
+                elapsed.as_secs_f64()
             ),
             Self::HandshakeMissing => {
                 f.write_str("driver が hello を送信せずに stdout を閉じました")
@@ -159,7 +162,9 @@ impl std::error::Error for SpawnError {
         match self {
             Self::Spawn(err) | Self::HelloAckWrite(err) => Some(err),
             Self::HandshakeMalformed(err) => Some(err),
-            Self::HandshakeTimeout | Self::HandshakeMissing | Self::IncompatibleSdk { .. } => None,
+            Self::HandshakeTimeout(_) | Self::HandshakeMissing | Self::IncompatibleSdk { .. } => {
+                None
+            }
         }
     }
 }
@@ -249,7 +254,7 @@ pub fn spawn_driver_with_timeout(
         Err(mpsc::RecvTimeoutError::Timeout) => {
             kill_and_reap(&mut child);
             let _ = reader_handle.join();
-            return Err(SpawnError::HandshakeTimeout);
+            return Err(SpawnError::HandshakeTimeout(handshake_timeout));
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
             kill_and_reap(&mut child);

@@ -122,10 +122,15 @@ fn it_should_complete_handshake_against_dummy_driver() {
 fn it_should_return_handshake_timeout_when_driver_does_not_emit_hello() {
     let case = CASE_TIMEOUT;
     let err = spawn(&case).expect_err("--no-hello must surface as a timeout");
-    assert!(
-        matches!(err, SpawnError::HandshakeTimeout),
-        "expected HandshakeTimeout, got {err:?}"
-    );
+    match err {
+        SpawnError::HandshakeTimeout(elapsed) => {
+            assert_eq!(
+                elapsed, case.timeout,
+                "HandshakeTimeout must echo the caller-supplied timeout, got {elapsed:?}"
+            );
+        }
+        other => panic!("expected HandshakeTimeout, got {other:?}"),
+    }
 }
 
 #[cfg(unix)]
