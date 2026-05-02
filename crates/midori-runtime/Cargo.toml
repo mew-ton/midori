@@ -23,6 +23,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 
+# Safe Unix syscall wrappers. Used by `driver_proc` to send SIGTERM to a
+# child process without an `unsafe { libc::kill }` block — the workspace
+# forbids `unsafe_code` (see `Cargo.toml` workspace lints).
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", default-features = false, features = ["signal"] }
+
 [dev-dependencies]
 tempfile = "3"
 

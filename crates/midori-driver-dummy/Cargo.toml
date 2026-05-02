@@ -25,8 +25,35 @@ path = "src/main.rs"
 name = "midori-driver-dummy-bad-version"
 path = "src/main.rs"
 
+# Lifecycle / log-forwarding fixtures. Each variant is a separate binary
+# so the integration test resolves an exact pre-built path — same rationale
+# as the handshake fixtures above.
+
+[[bin]]
+name = "midori-driver-dummy-noisy-stdout"
+path = "src/main.rs"
+
+[[bin]]
+name = "midori-driver-dummy-sigterm-graceful"
+path = "src/main.rs"
+
+[[bin]]
+name = "midori-driver-dummy-sigterm-ignore"
+path = "src/main.rs"
+
+[[bin]]
+name = "midori-driver-dummy-exit-error"
+path = "src/main.rs"
+
 [dependencies]
 serde_json = "1"
+
+# Sync signal handler used by the SIGTERM fixtures. signal-hook is already
+# in the workspace lock via `midori-sdk` so no new transitive surface is
+# introduced. Only the Unix targets actually install the handler — Windows
+# parent-side signal handling is out of scope for the parent issue.
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.4"
 
 [lints]
 workspace = true
