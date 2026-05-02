@@ -28,13 +28,38 @@ fn fixture_bin_path(bin_name: &'static str) -> &'static std::path::Path {
             .parent()
             .and_then(|p| p.parent())
             .expect("integration test exe must live under target/<profile>/deps/");
+        // The directory name immediately above `deps/` is the cargo profile
+        // the test was compiled under: `target/<profile>/deps/<test-bin>`.
+        // We pass it back to `cargo build` so the fixture lands in the same
+        // profile dir the resolver is searching in. `--profile dev` is the
+        // canonical spelling for the directory that cargo names `debug`.
+        let profile_name = profile_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("profile directory name must be UTF-8");
         let candidate = profile_dir.join(bin_filename(bin_name));
         if !candidate.exists() {
+            let cargo_profile = if profile_name == "debug" {
+                "dev"
+            } else {
+                profile_name
+            };
             let status = std::process::Command::new(env!("CARGO"))
-                .args(["build", "-p", "midori-driver-dummy", "--bin", bin_name])
+                .args([
+                    "build",
+                    "-p",
+                    "midori-driver-dummy",
+                    "--bin",
+                    bin_name,
+                    "--profile",
+                    cargo_profile,
+                ])
                 .status()
                 .expect("invoke cargo build for fixture");
-            assert!(status.success(), "cargo build of {bin_name} failed");
+            assert!(
+                status.success(),
+                "cargo build of {bin_name} (profile {cargo_profile}) failed"
+            );
         }
         assert!(
             candidate.exists(),
