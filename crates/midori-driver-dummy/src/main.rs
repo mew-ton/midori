@@ -27,8 +27,11 @@
 //!   SIGTERM handler that ignores the signal entirely. Forces the bridge's
 //!   SIGKILL escalation path. Also ignores stdin EOF so the only way out
 //!   is the SIGKILL the bridge sends after its grace period.
-//! - `midori-driver-dummy-exit-error`: emit `hello`, then exit with status
-//!   1 immediately. Exercises the bridge's abnormal-exit logging.
+//! - `midori-driver-dummy-exit-error`: emit `hello`, read one line from
+//!   stdin to synchronize on the bridge's `hello_ack` write (so the
+//!   subsequent exit does not race the ack and surface as `BrokenPipe`),
+//!   then exit with status 1. Exercises the bridge's abnormal-exit
+//!   logging.
 //!
 //! Selecting fixture mode by binary name (rather than by CLI flag) lets the
 //! integration test hand `spawn_driver` an exact, pre-built binary path —
@@ -195,10 +198,18 @@ fn run_sigterm_graceful() -> ExitCode {
     }
     #[cfg(unix)]
     {
+        // Drain stdin in the background so the bridge's pre-shutdown
+        // control writes (connect / configure / disconnect) cannot fill
+        // the OS pipe buffer and stall the parent on its way to `Drop`.
+        // The drain thread is detached: when the main thread returns
+        // `ExitCode::SUCCESS`, process exit tears it down regardless of
+        // its current state.
+        std::thread::spawn(|| {
+            let _ = drain_stdin_until_eof();
+        });
         // Poll the flag in a tight-but-bounded loop. The bridge's `Drop`
         // sends SIGTERM, this fixture flips the flag, the next iteration
-        // exits cleanly. Stdin is intentionally not consumed — the test
-        // checks the SIGTERM path, not the stdin-EOF path.
+        // exits cleanly.
         while !shutdown.load(Ordering::SeqCst) {
             std::thread::sleep(SIGTERM_POLL_INTERVAL);
         }
