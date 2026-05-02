@@ -1,7 +1,6 @@
 mod error;
 mod events_pipeline;
 mod events_schema;
-mod logging;
 mod plugin_resolver;
 mod profile;
 mod ring_handshake;
@@ -13,9 +12,10 @@ use clap::{Parser, Subcommand};
 
 use crate::error::CliError;
 use crate::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
-use crate::logging::{LogFormat, LogLevel};
 use crate::plugin_resolver::{resolve_drivers, ResolvedDrivers};
 use crate::profile::{collect_driver_names, load_from_path as load_profile};
+use midori_runtime::logging;
+use midori_runtime::logging::{LogFormat, LogLevel};
 
 #[derive(Parser, Debug)]
 #[command(
