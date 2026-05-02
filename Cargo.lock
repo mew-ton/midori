@@ -312,6 +312,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "midori-driver-dummy"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "midori-driver-midi"
 version = "0.1.0"
 dependencies = [
