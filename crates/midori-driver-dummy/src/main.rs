@@ -21,8 +21,9 @@
 //!   non-JSON line to stdout, then idle until stdin EOF / SIGTERM.
 //!   Exercises the bridge's "non-JSON stdout → log forwarder" path.
 //! - `midori-driver-dummy-sigterm-graceful`: emit `hello`, install a
-//!   SIGTERM handler that sets a shutdown flag, and poll the flag in the
-//!   stdin loop so SIGTERM produces a clean exit.
+//!   SIGTERM handler that sets a shutdown flag, then poll the flag on
+//!   the main thread while a background thread drains stdin so the
+//!   bridge's pre-shutdown control writes never stall the parent.
 //! - `midori-driver-dummy-sigterm-ignore`: emit `hello`, install a
 //!   SIGTERM handler that ignores the signal entirely. Forces the bridge's
 //!   SIGKILL escalation path. Also ignores stdin EOF so the only way out
