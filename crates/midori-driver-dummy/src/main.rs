@@ -5,9 +5,9 @@
 //! Its only job is to be deterministic enough that the Bridge's `spawn_driver`
 //! flow can be exercised in three regimes:
 //!
-//! - default: emit a valid `hello` and then enter the stdin `BufRead`
-//!   scaffold loop (the loop body is intentionally a no-op; subtask (b)
-//!   will plug in handlers for `connect` / `disconnect` / `configure`).
+//! - default: emit a valid `hello` and then drain stdin until EOF. The drain
+//!   loop is intentionally a no-op so future message handlers can slot in
+//!   without restructuring the binary.
 //! - `--no-hello`: never emit `hello`. Used to exercise the Bridge's
 //!   handshake timeout path.
 //! - `--bad-version`: emit `hello` with an SDK major that the Bridge
@@ -26,9 +26,9 @@ use std::process::ExitCode;
 const FLAG_NO_HELLO: &str = "--no-hello";
 
 /// CLI flag that emits a `hello` whose `sdk_version` reports a major that the
-/// Bridge will treat as incompatible. The exact value lives next to the
-/// Bridge's compatibility check so the two stay coupled by intent: see
-/// `BAD_SDK_VERSION` in `crates/midori-runtime/src/driver_proc.rs`.
+/// Bridge will treat as incompatible. The major must fall outside the
+/// Bridge's accepted-major set (defined as `ACCEPTED_SDK_MAJORS` in the
+/// runtime crate's `driver_proc` module) for the `IncompatibleSdk` test to fire.
 const FLAG_BAD_VERSION: &str = "--bad-version";
 
 /// SDK version reported by the default fixture path. Held as a constant so
@@ -80,17 +80,15 @@ fn exec_start(flags: &[String]) -> ExitCode {
         }
     }
 
-    // Stdin BufRead scaffold loop. Subtask (b) will replace the no-op body
-    // with `match` arms for `hello_ack` / `connect` / `disconnect` /
-    // `configure`. Today the loop just drains stdin until EOF, which is the
-    // signal the parent uses to terminate the child gracefully.
+    // Drain stdin until EOF. The loop body is a deliberate no-op: the parent
+    // closes stdin when it wants the child gone, and the BufRead structure
+    // is the slot a future change can fill with a message dispatcher
+    // without reshaping the binary.
     let stdin = std::io::stdin();
     let reader = BufReader::new(stdin.lock());
     for line in reader.lines() {
         match line {
-            Ok(_line) => {
-                // Subtask (b) hook point: dispatch on parsed message type.
-            }
+            Ok(_line) => {}
             Err(err) => {
                 eprintln!("midori-driver-dummy: stdin read error: {err}");
                 return ExitCode::FAILURE;

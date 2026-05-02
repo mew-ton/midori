@@ -25,10 +25,10 @@
 //!
 //! # Scope
 //!
-//! Only handshake completion is implemented here. Lifecycle management
+//! This module handles spawn + handshake only. Lifecycle management
 //! (graceful shutdown, log forwarding from the post-handshake stdout stream,
-//! SIGTERM / SIGKILL escalation) is the responsibility of the next subtask
-//! and intentionally absent from this module.
+//! SIGTERM / SIGKILL escalation) lives elsewhere and is intentionally not
+//! part of this module's surface.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -72,22 +72,18 @@ struct HelloAckMessage<'a> {
 /// Outcome of a `spawn_driver` call.
 ///
 /// On the success path the handle owns the child process plus its stdin
-/// writer; the post-handshake stdout reader thread is intentionally not
-/// exposed yet (subtask (b) will wire log forwarding through it). Dropping
-/// the handle closes stdin, which the dummy fixture treats as the signal to
-/// exit its `BufRead` loop.
+/// writer. Dropping the handle closes stdin, which the dummy fixture treats
+/// as the signal to exit its `BufRead` loop.
 #[derive(Debug)]
 pub struct DriverHandle {
     /// Driver name as supplied to [`spawn_driver`]. Carried for diagnostics.
     pub name: String,
     /// Resolved binary path, useful for log lines and crash reports.
     pub path: PathBuf,
-    /// Profile blob forwarded to the driver. Held for later use by subtask
-    /// (b) when `connect` / `configure` flows are wired in.
-    pub profile: serde_json::Value,
     /// SDK version the driver advertised in its `hello`.
     pub sdk_version: String,
     child: Child,
+    #[allow(dead_code)]
     stdin: ChildStdin,
 }
 
@@ -96,12 +92,6 @@ impl DriverHandle {
     #[must_use]
     pub fn child(&self) -> &Child {
         &self.child
-    }
-
-    /// Mutable borrow of the child stdin pipe so subtask (b) can write
-    /// follow-up control commands without taking the pipe.
-    pub fn stdin_mut(&mut self) -> &mut ChildStdin {
-        &mut self.stdin
     }
 }
 
@@ -126,6 +116,8 @@ pub enum SpawnError {
         reason: String,
     },
     /// Writing the `hello_ack` line to the driver's stdin failed.
+    /// Realistic only if the child crashed between emitting `hello` and the
+    /// Bridge's ack write — a real cross-process boundary that can fail.
     HelloAckWrite(std::io::Error),
 }
 
@@ -177,14 +169,15 @@ impl std::error::Error for SpawnError {
 ///
 /// `name` is the driver identifier (used for diagnostics and later for
 /// dispatching events); `profile` is the configuration blob the runtime
-/// will hand to the driver after the handshake (subtask (b) uses it).
+/// will eventually forward to the driver — handshake itself does not consume
+/// it, so the parameter is held only at the API boundary.
 ///
 /// On the failure path the child process is reaped before this function
 /// returns — callers do not need to clean up zombies on `Err(_)`.
 pub fn spawn_driver(
     name: impl Into<String>,
     path: impl Into<PathBuf>,
-    profile: serde_json::Value,
+    profile: &serde_json::Value,
 ) -> Result<DriverHandle, SpawnError> {
     spawn_driver_with_timeout(name, path, profile, HANDSHAKE_TIMEOUT)
 }
@@ -195,9 +188,10 @@ pub fn spawn_driver(
 pub fn spawn_driver_with_timeout(
     name: impl Into<String>,
     path: impl Into<PathBuf>,
-    profile: serde_json::Value,
+    profile: &serde_json::Value,
     handshake_timeout: Duration,
 ) -> Result<DriverHandle, SpawnError> {
+    let _ = profile;
     let name = name.into();
     let path = path.into();
 
@@ -237,10 +231,9 @@ pub fn spawn_driver_with_timeout(
                 let _ = tx.send(Err(err));
             }
         }
-        // Hand the BufReader back via thread join so subtask (b) can resume
-        // reading subsequent stdout lines (log forwarding) once the
-        // join-API for that path is designed. For now the reader is
-        // dropped, which closes the read half cleanly.
+        // Drop the reader once the first line is captured: closing the read
+        // half of the pipe is the cleanest signal to a future log-forwarding
+        // path that the handshake stage is done.
         drop(reader);
     });
 
@@ -296,11 +289,10 @@ pub fn spawn_driver_with_timeout(
     }
 
     if let Compatibility::Incompatible { reason } = compat {
-        // Give the driver a brief window to observe the negative ack and
-        // exit cleanly. If it doesn't, escalate to kill so the parent does
-        // not block. Subtask (b) replaces this with the SIGTERM/SIGKILL
-        // ladder agreed for the lifecycle module.
-        wait_for_exit_or_kill(&mut child, Duration::from_millis(200));
+        // The negative ack has been written; closing the child immediately
+        // keeps the bridge non-blocking. Graceful exit on the driver side
+        // is a lifecycle concern handled outside this module.
+        kill_and_reap(&mut child);
         return Err(SpawnError::IncompatibleSdk {
             driver_version: hello.sdk_version,
             reason,
@@ -310,7 +302,6 @@ pub fn spawn_driver_with_timeout(
     Ok(DriverHandle {
         name,
         path,
-        profile,
         sdk_version: hello.sdk_version,
         child,
         stdin,
@@ -388,29 +379,6 @@ fn write_hello_ack(stdin: &mut ChildStdin, ack: &HelloAckMessage<'_>) -> std::io
 fn kill_and_reap(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
-}
-
-/// Poll for the child to exit; if it still hasn't after `grace`, kill it.
-/// Used on the `IncompatibleSdk` path so the driver gets a chance to log
-/// the negative ack and exit on its own before the Bridge force-closes it.
-fn wait_for_exit_or_kill(child: &mut Child, grace: Duration) {
-    let deadline = std::time::Instant::now() + grace;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return,
-            Ok(None) => {
-                if std::time::Instant::now() >= deadline {
-                    kill_and_reap(child);
-                    return;
-                }
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(_) => {
-                kill_and_reap(child);
-                return;
-            }
-        }
-    }
 }
 
 /// Synthesize a `serde_json::Error` for the "valid JSON but wrong tag" case

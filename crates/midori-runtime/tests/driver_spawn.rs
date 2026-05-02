@@ -17,12 +17,11 @@ use midori_runtime::driver_proc::{spawn_driver_with_timeout, SpawnError, HANDSHA
 ///
 /// Cargo's `CARGO_BIN_EXE_<name>` env var is only set for binaries in the
 /// same package as the test, so this resolver walks the workspace `target/`
-/// tree the test's own `current_exe()` lives under and locates the
-/// sibling `midori-driver-dummy` artifact. Cargo always builds a workspace
-/// binary in the same profile dir as the integration test that depends on
-/// it transitively (the test crate's `[lib]` re-exports trigger a rebuild),
-/// but to be safe the resolver also issues an explicit `cargo build` for
-/// the binary when it isn't already present.
+/// tree the test's own `current_exe()` lives under and locates the sibling
+/// `midori-driver-dummy` artifact. The dummy crate is not a build-time
+/// dependency of this test crate, so the resolver issues an explicit
+/// `cargo build` when the artifact is missing rather than relying on
+/// cargo's incidental ordering.
 fn dummy_bin_path() -> &'static std::path::Path {
     static CELL: OnceLock<PathBuf> = OnceLock::new();
     CELL.get_or_init(|| {
@@ -112,13 +111,13 @@ fn it_should_complete_handshake_against_dummy_driver() {
         "driver must report a non-empty SDK version on the success path"
     );
     // Dropping the handle drops `ChildStdin` first, which closes the write
-    // half of the pipe. The dummy's BufRead loop terminates on the
-    // resulting EOF. The `Child` is not waited on here — that's subtask
-    // (b)'s lifecycle responsibility — but the dummy exiting promptly on
-    // stdin EOF is what makes (b) able to wait without hanging.
+    // half of the pipe. The dummy's BufRead loop terminates on the resulting
+    // EOF. The `Child` itself is not awaited here; lifecycle handling lives
+    // outside this module.
     drop(handle);
 }
 
+#[cfg(unix)]
 #[test]
 fn it_should_return_handshake_timeout_when_driver_does_not_emit_hello() {
     let case = CASE_TIMEOUT;
@@ -129,6 +128,7 @@ fn it_should_return_handshake_timeout_when_driver_does_not_emit_hello() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn it_should_return_incompatible_sdk_when_driver_advertises_unknown_version() {
     let case = CASE_INCOMPAT;
@@ -158,17 +158,16 @@ fn it_should_return_incompatible_sdk_when_driver_advertises_unknown_version() {
 /// embedded as a wrapper script.
 ///
 /// Since `Command::new(path)` only takes one arg list and `spawn_driver`
-/// already injects `start`, we materialise the wrapper as a small shell
-/// script per call when extra flags are needed. On platforms without
-/// `/bin/sh` this would need adjustment; the runtime is currently tested
-/// on Linux only via CI.
+/// already injects `start`, the helper materialises a small shell script
+/// per call when extra flags are needed. The shell-script path is unix-only;
+/// fixture-flag-using cases are gated with `#[cfg(unix)]` accordingly.
 fn spawn(case: &SpawnCase) -> Result<midori_runtime::driver_proc::DriverHandle, SpawnError> {
     let bin_path = if case.fixture_args.is_empty() {
         dummy_bin_path().to_path_buf()
     } else {
         wrap_with_flags(case.name, case.fixture_args)
     };
-    spawn_driver_with_timeout(case.name, bin_path, serde_json::json!({}), case.timeout)
+    spawn_driver_with_timeout(case.name, bin_path, &serde_json::json!({}), case.timeout)
 }
 
 /// Materialise a tiny shell wrapper that invokes the dummy binary with the
