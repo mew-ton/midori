@@ -5,6 +5,7 @@ members = [
     "crates/midori-runtime",
     "crates/midori-driver-midi",
     "crates/midori-driver-osc",
+    "crates/midori-driver-dummy",
 ]
 resolver = "2"
 

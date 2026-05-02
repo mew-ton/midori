@@ -1,0 +1,18 @@
+[package]
+name = "midori-driver-dummy"
+version = "0.1.0"
+edition = "2021"
+description = "Test fixture driver binary for the Midori signal bridge spawn / handshake suite"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mew-ton/midori"
+publish = false
+
+[[bin]]
+name = "midori-driver-dummy"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true
