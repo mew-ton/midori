@@ -176,17 +176,25 @@ fn run_noisy_stdout() -> ExitCode {
 }
 
 fn run_sigterm_graceful() -> ExitCode {
+    // Install the handler BEFORE emitting hello: the bridge cannot send
+    // SIGTERM until it has read hello, so registering first guarantees the
+    // signal arrives at an installed handler regardless of how slow the
+    // CI runner is between handshake completion and the test's `drop`.
+    #[cfg(unix)]
+    let shutdown = {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        if let Err(err) = install_sigterm_flag(&shutdown) {
+            eprintln!("midori-driver-dummy: failed to install SIGTERM handler: {err}");
+            return ExitCode::FAILURE;
+        }
+        shutdown
+    };
     if let Err(err) = emit_hello_line(DEFAULT_SDK_VERSION) {
         eprintln!("midori-driver-dummy: failed to write hello: {err}");
         return ExitCode::FAILURE;
     }
     #[cfg(unix)]
     {
-        let shutdown = Arc::new(AtomicBool::new(false));
-        if let Err(err) = install_sigterm_flag(&shutdown) {
-            eprintln!("midori-driver-dummy: failed to install SIGTERM handler: {err}");
-            return ExitCode::FAILURE;
-        }
         // Poll the flag in a tight-but-bounded loop. The bridge's `Drop`
         // sends SIGTERM, this fixture flips the flag, the next iteration
         // exits cleanly. Stdin is intentionally not consumed — the test
@@ -206,16 +214,23 @@ fn run_sigterm_graceful() -> ExitCode {
 }
 
 fn run_sigterm_ignore() -> ExitCode {
-    if let Err(err) = emit_hello_line(DEFAULT_SDK_VERSION) {
-        eprintln!("midori-driver-dummy: failed to write hello: {err}");
-        return ExitCode::FAILURE;
-    }
+    // Same install-before-hello ordering as `run_sigterm_graceful`: the
+    // race between hello emission and handler registration would otherwise
+    // let SIGTERM hit a still-default-action process and end the test
+    // before the SIGKILL escalation path runs.
     #[cfg(unix)]
     {
         if let Err(err) = install_sigterm_ignore() {
             eprintln!("midori-driver-dummy: failed to ignore SIGTERM: {err}");
             return ExitCode::FAILURE;
         }
+    }
+    if let Err(err) = emit_hello_line(DEFAULT_SDK_VERSION) {
+        eprintln!("midori-driver-dummy: failed to write hello: {err}");
+        return ExitCode::FAILURE;
+    }
+    #[cfg(unix)]
+    {
         // Sleep forever. Stdin EOF is also ignored — the bridge must use
         // SIGKILL to terminate. SIGKILL bypasses signal handlers and Rust's
         // process exits with the default signal-termination status.
