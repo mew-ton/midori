@@ -14,7 +14,10 @@
 //!   string used for forwarded lines.
 //! - [`ring_ingest`]: glue that pumps the ring consumer into
 //!   [`events_pipeline::process_inline_payload`] on a dedicated thread.
-//!   Linux-only because it owns a [`midori_ipc_shm::RingConsumer`].
+//!   Linux / macOS only because it owns a [`midori_ipc_shm::RingConsumer`]
+//!   built from the `OwnedFd` / `SCM_RIGHTS` backend of `midori-ipc-shm`.
+//!   Windows は同 crate の `OwnedHandle` / Named Pipe backend に対応する
+//!   ingest glue が未整備のため、本 cfg からは外している。
 //!
 //! Inline-tier IPC primitives themselves (`RingConsumer`, `send_fd` /
 //! `recv_fd`, ring handshake validation) live in the `midori-ipc-shm`
@@ -22,20 +25,20 @@
 //! `mmap` and `SCM_RIGHTS` reception stay confined to that crate, and this
 //! crate can keep `unsafe_code = "forbid"` via `lints.workspace = true`.
 //!
-//! 現状 inline-tier IPC の **公開 API** は Linux 専用（`memfd_create(2)`
-//! 依存）。macOS 向け実装 (`shm_open(2)` + `shm_unlink(2)` ベース) は
-//! `midori-ipc-shm` 内部に存在しビルド / テストされているが、Bridge
-//! runtime 層の cfg ゲート整理が完了するまで公開 surface としての解禁は
-//! 保留している。Windows backend (`CreateFileMapping` ベース) は未実装。
-//! それまでは [`ring_ingest`] および `midori_ipc_shm` の公開 API を
-//! `cfg(target_os = "linux")` で囲って他 OS では参照しない運用。
+//! `midori-ipc-shm` 側は inline-tier の OS 別実装をすべて公開している
+//! （Linux: `memfd_create(2)` + `SCM_RIGHTS` / macOS: `shm_open(2)` +
+//! `shm_unlink(2)` + `SCM_RIGHTS` / Windows: `CreateFileMappingW` +
+//! Named Pipe + `DuplicateHandle`）。本 crate の [`ring_ingest`] は
+//! Linux / macOS の同名 type (`midori_ipc_shm::RingConsumer`) を 1 本の
+//! 配線でカバーし、Windows backend (`OwnedHandle` + Named Pipe handoff)
+//! を取り込む差分は別途必要なため、本 lib では Windows を cfg から外す。
 //!
 //! The CLI dispatch layer remains binary-private until there is a concrete
 //! need to expose it.
 
 pub mod driver_proc;
 pub mod logging;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod ring_ingest;
 
 // `events_pipeline` was previously binary-private. It is now a dependency

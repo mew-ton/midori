@@ -1,7 +1,7 @@
 # Inline Tier — Variable-Sized Ring Slot
 
 > ステータス：設計フェーズ
-> 最終更新：2026-04-28
+> 最終更新：2026-05-03
 
 本書は driver↔bridge 配送の **inline tier**（速度保証あり、shm SPSC ring 経由）の詳細仕様。tier モデル全体・他 tier との関係は [00-overview.md](./00-overview.md) を参照。
 
@@ -100,6 +100,24 @@ fn slot_ptr(base: *mut u8, header: &ShmHeader, idx: u64) -> *mut u8 {
 
 ---
 
+## OS 別実装方針
+
+inline tier の実体は「**Bridge プロセスが page-backed shared memory セグメントを 1 個確保し、そこへの参照 (handle) を driver subprocess へ受け渡す**」ことに尽きる。この抽象は OS を問わず同一だが、shm 確保の syscall と handle handoff の搬送機構は OS が直接提供するものを使う。3 OS で対応する API を以下に並列に示す:
+
+| OS | shm セグメント確保 | Bridge → driver の handle 受け渡し | handle 抽象 |
+|---|---|---|---|
+| Linux | `memfd_create(2)` で anonymous shm を作成し `ftruncate(2)` でサイズ確定 | Unix domain socket 上の `sendmsg(2)` + `SCM_RIGHTS` 制御メッセージ | `OwnedFd` |
+| macOS | `shm_open(2) (O_CREAT \| O_EXCL)` で名前付き shm を作成 → `ftruncate(2)` でサイズ確定 → `shm_unlink(2)` で名前空間からエントリ除去 (open + unlink イディオム、fd と mmap は有効なまま継続) | Unix domain socket 上の `sendmsg(2)` + `SCM_RIGHTS` 制御メッセージ | `OwnedFd` |
+| Windows | `CreateFileMappingW(INVALID_HANDLE_VALUE, ...)` で page-file backed の名前なし shared memory section を作成 | Named Pipe (`\\.\pipe\midori-shm-<pid>-<random>`) を経由し、`OpenProcess(PROCESS_DUP_HANDLE)` + `DuplicateHandle(... DUPLICATE_SAME_ACCESS)` で driver アドレス空間に複製した HANDLE 値 (u64) を pipe に書き込む | `OwnedHandle` |
+
+handshake プロトコル (本書の `request_ring` / `ring_ready` / `ring_rejected` JSON Lines メッセージ) は OS を問わず共通で、**異なるのは fd / HANDLE を運ぶ control channel の機構のみ**。Bridge と driver はそれぞれの OS で対応する handle 抽象 (`OwnedFd` / `OwnedHandle`) を受け取り、同じ `MapViewOfFile` / `mmap` 相当の API で同一 shm セグメントを自プロセスのアドレス空間にマップする。
+
+mmap 後の `ShmHeader` レイアウト・ring slot レイアウト・メモリ順序は **すべての OS で完全同一**（後述「ShmHeader レイアウト」「メモリ順序」節）。OS 差異は本節で示す確保 / handoff API のみに局所化する設計とする。
+
+実装責務の所在: Bridge 側の OS 別 backend は `crates/midori-ipc-shm` crate に集約され、`memfd` / `shm_open` / `CreateFileMappingW` を呼ぶ `unsafe` ブロックはすべて同 crate の `ring_consumer` / `ring_consumer_windows` module 内に閉じ込める。上位の `midori-runtime` ring poll thread は OS を意識せず `RingConsumer::read()` を呼ぶ。
+
+---
+
 ## Handshake プロトコル
 
 ### limit 規約
@@ -148,10 +166,12 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
    - **上限チェック**: `slot_size > HARD_SLOT_SIZE` なら reject（events.yaml 見直し or `tier: streamed` 化を促す）
    - **shm 全体サイズの確定**: `shm_total = sizeof(ShmHeader) + RING_CAPACITY × slot_size`。これを **ページサイズ（4 KiB）で切り上げ** て allocate。具体式は `shm_mmap_size = (shm_total + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)`（`PAGE_SIZE = 4096`。mmap 単位がページなので shm 全体のみページ整列でよく、slot 単位の page-align は不要）
    - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
-5. **Bridge → driver** に shm fd を返す
-6. **driver は fd を mmap し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
+5. **Bridge → driver** に shm への参照 (handle) を返す。具体機構は OS 別:
+   - Linux / macOS: 事前に確立した Unix domain socket で `sendmsg(2)` + `SCM_RIGHTS` を使い `OwnedFd` を 1 個だけ送る
+   - Windows: 事前に確立した Named Pipe で `DuplicateHandle(... DUPLICATE_SAME_ACCESS)` 済みの HANDLE 値 (u64) を sentinel 1 byte と一緒に送る
+6. **driver は受け取った handle を mmap (`mmap(2)` / `MapViewOfFile`) し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
 
-control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge との fd 受け渡しプロトコル」と統合する。具体的なソケット手順は実装 Issue で詰める。
+control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge との fd 受け渡しプロトコル」と統合する (Linux / macOS は Unix domain socket、Windows は Named Pipe を使う、上述「OS 別実装方針」節参照)。`request_ring` / `ring_ready` / `ring_rejected` の JSON 本体は OS を問わず driver stdout 経由で運ぶ (詳細は実装 Issue)。
 
 ### reject 時の挙動
 
