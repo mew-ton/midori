@@ -16,7 +16,8 @@ test-helpers = []
 [dependencies]
 midori-core = { workspace = true }
 
-# Inline-tier shm ring requires `mmap`, `memfd_create`, `ftruncate`, and
+# Inline-tier shm ring requires `mmap`, OS-specific shm 確保 syscall
+# (`memfd_create` on Linux / `shm_open` on macOS), `ftruncate`, and
 # SCM_RIGHTS-bearing `sendmsg` / `recvmsg`. `mmap` (`MmapOptions::map_mut`) is
 # fundamentally `unsafe` because the kernel can mutate the mapped region
 # outside the compiler's aliasing model; SCM_RIGHTS reception is `unsafe`
@@ -26,11 +27,11 @@ midori-core = { workspace = true }
 # `forbid` — see the `[lints.rust]` block below.
 #
 # nix 0.30 note: `memfd_create` lives in `nix::sys::memfd`, which is
-# `cfg(any(linux, android))`-gated rather than feature-gated. Enabling the
-# `mman` feature is enough on Linux; on macOS / Windows the module simply
-# does not exist. Linux-only callers in `lib.rs` are wrapped in
-# `cfg(target_os = "linux")` to keep the build green on other targets
-# until the macOS / Windows IPC backends land.
+# `cfg(any(linux, android))`-gated rather than feature-gated. macOS / iOS
+# 経路では nix::sys::mman::shm_open / shm_unlink を代わりに使う（これらは
+# nix の `mman` + `fs` features で有効化される）。Windows backend は未実装。
+# Linux + macOS で共通の dispatch / cfg は `src/lib.rs` と
+# `src/ring_consumer/mod.rs` を参照。
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["mman", "fs", "socket", "uio"] }
 # Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
