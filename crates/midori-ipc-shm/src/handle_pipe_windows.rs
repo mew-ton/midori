@@ -279,14 +279,13 @@ pub fn accept_and_send(
     let peer_proc = open_peer_process(peer_pid)?;
 
     // bridge プロセス内の source_handle を peer プロセスのアドレス空間で
-    // valid な HANDLE 値に複製する。
+    // valid な HANDLE 値に複製する。`duplicated` は **peer 側 HANDLE 値**
+    // で、本関数 return までに成功通知（pipe write 成功）が peer に届かな
+    // ければ peer 側で close されない（peer プロセス全体が終了するまで
+    // 残る）。下記 wire write が失敗した場合、本関数 caller は peer
+    // subprocess を kill する責務を負う（kill により peer 側 HANDLE は
+    // 自動 release される）。
     let duplicated = duplicate_into_peer(source_handle.as_raw_handle(), peer_proc.as_raw_handle())?;
-
-    // duplication が成功したので、source_handle は close してよい
-    // （peer 側 HANDLE が有効になったため、bridge 側の参照は不要）。
-    drop(source_handle);
-    // peer process handle も役目終了。
-    drop(peer_proc);
 
     // wire format: sentinel 1 byte + HANDLE 値 8 byte。
     let mut buf = [0u8; MESSAGE_LEN];
@@ -294,7 +293,15 @@ pub fn accept_and_send(
     let handle_u64 = duplicated as u64;
     buf[1..9].copy_from_slice(&handle_u64.to_ne_bytes());
 
+    // `source_handle` / `peer_proc` の close は **write 成功後** に行う。
+    // 早期 drop すると、write 失敗時に caller が retry や代替経路に切り
+    // 替える選択肢を失う（bridge 側の section 参照と peer process
+    // handle が両方無くなった状態になる）。
     write_all_to_pipe(server_raw, &buf)?;
+
+    // 通知が peer に届いたので bridge 側の参照は不要。
+    drop(source_handle);
+    drop(peer_proc);
     Ok(())
 }
 
