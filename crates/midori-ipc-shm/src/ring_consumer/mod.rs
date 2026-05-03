@@ -232,7 +232,7 @@ mod tests {
     fn it_should_round_trip_with_custom_slot_size() {
         // 4 KiB を超える slot_size を要求できる。`validate_slot_size` の
         // alignment 要件は 4 byte 倍数なので、4_104 (= 4096 + 8) のように
-        // page boundary ではない値も受け付けられる。`shm_total_size` 全体は
+        // page boundary ではない値も受け付けられる。`shm_bytes` 全体は
         // `page_aligned_shm_size` が 4 KiB に切り上げて mmap する。
         let custom = 4_104_u32; // 4-byte aligned (page boundary は不要)
         let (mut consumer, _fd) = RingConsumer::create(custom).expect("custom slot must succeed");

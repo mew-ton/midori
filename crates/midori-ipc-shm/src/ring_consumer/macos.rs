@@ -51,10 +51,12 @@ const MAX_SHM_NAME_LEN: usize = 31;
 /// `slot_size` から `shm_bytes` 分の名前付き shm を確保し、`(mmap, fd)` を
 /// 返す。返される `OwnedFd` は driver subprocess に SCM_RIGHTS で渡す前提。
 pub(super) fn create_shm_for_ring(shm_bytes: usize) -> Result<(MmapMut, OwnedFd), CreateError> {
-    let (owned_fd, name) = open_unique_shm()?;
-
-    // ftruncate でファイルを目標サイズに拡張する。shm_open 直後の
-    // オブジェクトはサイズ 0 なので mmap する前に必ず必要。
+    // ftruncate に渡す i64 への cast を最初にやる。kernel リソース
+    // (`shm_open` で作る named shm) を取得する前に validate しておけば、
+    // 万一 cast に失敗しても名前付きエントリのリークが起こらない。
+    // 実用上 `shm_bytes` (= `page_aligned_shm_size` 出力) は数 MiB 程度
+    // なので i64::MAX (≈ 9 EiB) を超えることは事実上ありえないが、契約上
+    // 「cast 失敗時もリークさせない」を構造的に保証しておく。
     let truncate_len = i64::try_from(shm_bytes).map_err(|_| CreateError::Os {
         operation: "ftruncate (size_t→i64 cast)",
         source: std::io::Error::new(
@@ -62,6 +64,11 @@ pub(super) fn create_shm_for_ring(shm_bytes: usize) -> Result<(MmapMut, OwnedFd)
             "shm size exceeds i64::MAX",
         ),
     })?;
+
+    let (owned_fd, name) = open_unique_shm()?;
+
+    // ftruncate でファイルを目標サイズに拡張する。shm_open 直後の
+    // オブジェクトはサイズ 0 なので mmap する前に必ず必要。
     if let Err(errno) = nix::unistd::ftruncate(&owned_fd, truncate_len) {
         // ftruncate が失敗した場合、shm_unlink で名前空間からエントリを除去
         // しないと、異常パスで kernel に名前付きエントリが残ってしまう。
@@ -85,12 +92,12 @@ pub(super) fn create_shm_for_ring(shm_bytes: usize) -> Result<(MmapMut, OwnedFd)
     // 名前空間からエントリを除去する。fd / mmap は有効なまま継続使用でき、
     // SCM_RIGHTS で渡された driver 側 fd も同一 kernel オブジェクトを指す。
     // これが POSIX SHM の標準的な「open + unlink」パターン。
-    if let Err(errno) = shm_unlink(name.as_c_str()) {
-        return Err(CreateError::Os {
-            operation: "shm_unlink",
-            source: std::io::Error::from(errno),
-        });
-    }
+    //
+    // best-effort: unlink が失敗しても、すでに有効な (mmap, fd) を持って
+    // いるので caller に対して `Err` を返してリソース全体を捨てる理由は
+    // ない。失敗時の症状は kernel 名前空間にゾンビエントリが 1 個残るだけ
+    // で、cosmetic な leak。error path と同じ semantics に揃える。
+    let _ = shm_unlink(name.as_c_str());
 
     Ok((mmap, owned_fd))
 }

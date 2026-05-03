@@ -92,7 +92,7 @@ impl RingConsumerCore {
     /// shm 領域先頭の `ShmHeader` への参照を取り出す。`mmap.as_ptr()` から
     /// 直接組み立てる必要があり、`unsafe` を 1 箇所封じ込めるためのヘルパー。
     pub(super) fn header(&self) -> &ShmHeader {
-        // SAFETY: `mmap` は本構造体作成時に `shm_total_size` 以上の領域を
+        // SAFETY: `mmap` は本構造体作成時に `shm_bytes` 以上の領域を
         // 確保しており、先頭 `size_of::<ShmHeader>()` byte は `ShmHeader` の
         // memory layout として `init_header()` で書き込み済み。alignment は
         // `MmapMut` がページ境界（4 KiB）に揃え、`ShmHeader` の `align_of`
