@@ -4,19 +4,26 @@
 //! tiers:
 //!
 //! - **Inline tier**: Bridge allocates an SPSC ring in OS-backed shared
-//!   memory and hands the underlying handle (Linux: `memfd` fd; Windows:
-//!   `CreateFileMapping` HANDLE) to the driver via the platform's IPC
-//!   handoff mechanism (Linux: `SCM_RIGHTS`; Windows: Named Pipe +
-//!   `DuplicateHandle`). The driver writes encoded events into ring slots;
-//!   the Bridge pops them on a dedicated poll thread.
+//!   memory and hands the underlying fd / HANDLE to the driver. 各 OS の
+//!   実装は:
+//!   - Linux: `memfd_create(2)` で anonymous shm を確保し、`SCM_RIGHTS`
+//!     over Unix domain socket で fd を渡す
+//!   - macOS: `shm_open(2)` + `shm_unlink(2)` で名前付き shm を確保 (open
+//!     直後に unlink して名前空間を綺麗にする) し、`SCM_RIGHTS` over Unix
+//!     domain socket で fd を渡す
+//!   - Windows: `CreateFileMappingW` + `MapViewOfFile` で page-file backed
+//!     shm を確保し、Named Pipe + `DuplicateHandle` で HANDLE を渡す
+//!
+//!   driver は受け取った fd / HANDLE で同じ shm をマップし、ring slot に
+//!   encoded events を書く。Bridge は dedicated poll thread で pop する。
 //! - **Streamed tier**: planned, not yet implemented.
 //!
 //! This crate owns the safe API boundary around the inline-tier OS
 //! primitives. The `unsafe` operations involved (`mmap` / `MapViewOfFile`,
-//! `memfd_create` / `CreateFileMappingW`, SCM_RIGHTS-bearing `recvmsg` /
-//! `DuplicateHandle`-bearing pipe transport) are all confined inside this
-//! crate; 上位 crate（bridge runtime / driver SDK 等）は本 crate が
-//! 再エクスポートする safe surface のみを利用することで、各々の crate は
+//! `memfd_create` / `shm_open` / `CreateFileMappingW`, SCM_RIGHTS-bearing
+//! `recvmsg` / `DuplicateHandle`-bearing pipe transport) are all confined
+//! inside this crate; 上位 crate（bridge runtime / driver SDK 等）は本 crate
+//! が再エクスポートする safe surface のみを利用することで、各々の crate は
 //! workspace 既定の `unsafe_code = "forbid"` posture を維持できる。本 crate
 //! のみ自身の manifest で `unsafe_code = "deny"` に下げて escape hatch を
 //! 有効にしている。
@@ -25,23 +32,27 @@
 //!
 //! - [`ring_handshake`]: pure, host-platform-independent validation /
 //!   page-alignment math for the `request_ring(slot_size)` handshake.
-//! - Linux backend: [`ring_consumer`] + [`fd_socket`]. Depends on
-//!   `memfd_create(2)` (Linux/Android-gated in `nix`) and `SCM_RIGHTS` over
-//!   UNIX domain sockets.
-//! - Windows backend: [`ring_consumer_windows`] + [`handle_pipe_windows`].
-//!   Depends on `CreateFileMappingW` / `MapViewOfFile` for shared memory
-//!   and Named Pipe + `DuplicateHandle` for HANDLE handoff.
-//! - macOS backend: 未実装（macOS 上で本 crate を使うには Linux/Windows
-//!   いずれかと同等の backend が必要）。
+//! - `ring_consumer` + `fd_socket`: Linux / macOS backend。`memfd_create`
+//!   または `shm_open` ベースの shm 確保と `SCM_RIGHTS` ベースの fd handoff
+//!   を実装する。両 OS で内部 module はビルドされ、CI で単体テストが走る。
+//! - [`ring_consumer_windows`] + [`handle_pipe_windows`]: Windows backend。
+//!   `CreateFileMappingW` ベースの shm 確保と Named Pipe + `DuplicateHandle`
+//!   ベースの HANDLE handoff を実装する。
 //!
-//! Until the macOS backend arrives, callers that need to compile on macOS
-//! must wrap their use of the OS-specific backends with the matching cfg
-//! gate themselves. Linux 経路は `RingConsumer` (`ring_consumer` から
-//! 再エクスポート) / `send_fd` / `recv_fd` を `cfg(target_os = "linux")`
-//! で、Windows 経路は同名 `RingConsumer` (`ring_consumer_windows` から
-//! 再エクスポート) / `PipeName` / `create_pipe_server` / `accept_and_send`
-//! / `connect_and_recv` を `cfg(target_os = "windows")` で囲む。本 crate
-//! は platform gap を stub で埋めない。
+//! 公開 re-export は OS 別の cfg ゲートで露出する。Linux 上では
+//! `RingConsumer` / `CreateError` (`ring_consumer` から) と `send_fd` /
+//! `recv_fd` (`fd_socket` から) を、Windows 上では `RingConsumer` /
+//! `CreateError` (`ring_consumer_windows` から) と `PipeName` /
+//! `create_pipe_server` / `accept_and_send` / `connect_and_recv` /
+//! `HandlePipeError` (`handle_pipe_windows` から) を export する。
+//!
+//! macOS では内部 module のビルド / テストはされるが、Bridge runtime 層の
+//! cfg ゲート整理が完了するまで公開 API としての解禁は保留する（その整理が
+//! 完了したら Linux 経路の `pub use` の cfg を `any(linux, macos)` に広げて
+//! symbol を解禁する）。callers that need to compile across OSes must wrap
+//! their use of OS-specific symbols in the matching
+//! `#[cfg(target_os = "...")]` themselves — this crate does not paper over
+//! the platform gap with stubs.
 //!
 //! # Public surface
 //!
@@ -51,17 +62,17 @@
 //!   [`resolve_requested_slot_size`], [`page_aligned_shm_size`],
 //!   [`PAGE_SIZE`]
 //!
-//! From [`ring_consumer`] (Linux only):
+//! From `ring_consumer` (Linux only, until macOS public surface is unlocked):
 //!
 //! - [`RingConsumer`], [`CreateError`]
 //!
-//! From [`fd_socket`] (Linux only):
+//! From `fd_socket` (Linux only, until macOS public surface is unlocked):
 //!
 //! - [`send_fd`], [`recv_fd`]
 //!
 //! From [`ring_consumer_windows`] (Windows only):
 //!
-//! - `RingConsumer` (Windows 専用 type、Linux 版と同名), `CreateError`
+//! - `RingConsumer`, `CreateError`
 //!
 //! From [`handle_pipe_windows`] (Windows only):
 //!
@@ -70,10 +81,13 @@
 
 pub mod ring_handshake;
 
-#[cfg(target_os = "linux")]
-pub mod fd_socket;
-#[cfg(target_os = "linux")]
-pub mod ring_consumer;
+// 内部 module は Linux / macOS の両方でビルドする。これにより両 OS で
+// 単体テストが走り、CI macos-latest job が macOS 固有経路 (shm_open /
+// shm_unlink / 名前生成) を実機検証できる。
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod fd_socket;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod ring_consumer;
 
 #[cfg(target_os = "windows")]
 pub mod handle_pipe_windows;
@@ -85,6 +99,10 @@ pub use ring_handshake::{
     REQUEST_DEFAULT_SLOT_SIZE,
 };
 
+// 公開 re-export は当面 Linux のみ。macOS でも内部 module はビルド /
+// テストされているが、Bridge runtime 層の cfg ゲート整理が完了するまで
+// 外部公開は保留する（その整理が完了したら下記 cfg を `any(linux, macos)`
+// に広げて symbol を解禁する）。
 #[cfg(target_os = "linux")]
 pub use fd_socket::{recv_fd, send_fd};
 #[cfg(target_os = "linux")]
