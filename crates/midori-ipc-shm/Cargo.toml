@@ -39,6 +39,37 @@ nix = { version = "0.30", default-features = false, features = ["mman", "fs", "s
 # interface that is otherwise pure-safe Rust.
 memmap2 = "0.9"
 
+# Windows backend.
+#
+# The Windows inline-tier IPC primitives need: named shared memory
+# (`CreateFileMappingW` / `MapViewOfFile` / `UnmapViewOfFile`), Named Pipes
+# (`CreateNamedPipeW` / `ConnectNamedPipe` / `WriteFile` / `ReadFile`),
+# process handle acquisition (`OpenProcess` / `GetCurrentProcess`), and
+# cross-process handle duplication (`DuplicateHandle`). Plus `CloseHandle`
+# for resource cleanup.
+#
+# `windows-sys` is preferred over `windows`:
+# - It is a thin `extern "system"` binding (no built-in safe wrappers), so
+#   every call is explicitly `unsafe`. The crate-local `unsafe_code = "deny"`
+#   posture (see `[lints.rust]` block below) requires SAFETY comments next
+#   to each `unsafe { ... }` block, which lines up cleanly with one syscall
+#   per block.
+# - Smaller binary footprint than `windows` for the few APIs we actually
+#   call.
+# - The `windows` crate's `Owned*` types do not change the underlying call
+#   semantics; for handle duplication across processes we ultimately deal
+#   in raw `HANDLE` values either way.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
 [dev-dependencies]
 # Cross-platform safe wrapper for `pipe(2)`. Used by the SCM_RIGHTS
 # round-trip test to construct a pair of file descriptors whose semantics
