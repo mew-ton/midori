@@ -28,7 +28,6 @@ use midori_sdk::{ControlCommand, DeviceEntry, Driver, DriverError};
 
 /// Skeleton driver state. Holds no resources today; future OSC work will
 /// add a UDP socket handle, a worker thread, and an SPSC `Producer` here.
-#[derive(Default)]
 struct OscDriver;
 
 impl Driver for OscDriver {
