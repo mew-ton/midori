@@ -10,6 +10,22 @@ The aim of every change — design doc, implementation, refactor, task design �
 - When implementing, perform refactors needed for consistency *now*, not later. Deferred inconsistencies compound into cognitive load.
 - Comments and docs must stand alone (skills: `write-self-contained-comments`, `doc-context-free`). External references (PR / Issue numbers, conversation history) belong only in transient markers like TODO/FIXME.
 
+## Trivial-scope cleanup
+
+Pre-existing 1-line / mechanical bugs surfaced during PR review are not fixed in-place — they go through `/refine` as follow-up Issues. To absorb these without inflating individual PRs, we use a label-based parallel pickup.
+
+**Trivial-scope criteria** (all must hold):
+
+- SP ≤ 1
+- Decision-free: single correct answer (typo, broken cross-reference, dead comment, doc claim that contradicts adjacent code)
+- No behavior change in non-test code, or a one-line behavior fix that is mechanically obvious
+- No new error variant, dep, function, or module added
+- Edits one source file, plus modest corresponding test changes (a few lines or one new test). Large test rewrites disqualify.
+
+**Marking**: Issues meeting these criteria get the `trivial-scope` label during `/refine`. The label does not affect priority — priority stays computed on substance.
+
+**Parallel pickup at `/develop`**: when `/develop` starts on a primary Issue, up to two `trivial-scope`-labeled Issues from backlog are dispatched to parallel git worktrees as independent draft PRs (cap N=2 to keep user review handoff manageable). The user can opt-out per `/develop` invocation if review bandwidth is constrained.
+
 ## Judgeability
 
 Every change that lands must remain judgeable by at least one party still in the loop — the user, or an automated review mechanism (`/code-review:code-review`, CodeRabbit, `soloscrum-review`). The failure mode is *code that exists but no one can evaluate*.

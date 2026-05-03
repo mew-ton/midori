@@ -51,3 +51,12 @@ Running both before `gh pr ready` keeps the GitHub-side CodeRabbit auto-review c
 - ❌ Wait for GitHub-side CodeRabbit to surface findings on a ready PR (defeats the purpose of the draft window).
 - ❌ Pause for user go-ahead before `gh pr ready` when reviewers are green and the fix stayed in scope.
 - ✅ Both reviewers complete with 0 actionable findings (or all addressed) → `gh pr ready` autonomously.
+
+## Pre-existing bugs surfaced during review
+
+Local reviewers (especially CodeRabbit) sometimes flag real bugs on lines that the current PR did not modify. These are out of the current PR's scope.
+
+- File the finding via `/refine` as a follow-up Issue.
+- If the bug meets the trivial-scope criteria defined in CLAUDE.md, apply the `trivial-scope` label so the fix is picked up automatically at the next `/develop` (via parallel worktree).
+- Do NOT fix inline. Inline-fixing pre-existing bugs in scope-narrow PRs fragments review and erodes the audit trail.
+- Reply to the reviewer comment confirming the deferral and linking the new Issue.
