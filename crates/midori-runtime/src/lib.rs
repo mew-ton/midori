@@ -22,10 +22,11 @@
 //! `mmap` and `SCM_RIGHTS` reception stay confined to that crate, and this
 //! crate can keep `unsafe_code = "forbid"` via `lints.workspace = true`.
 //!
-//! macOS / Windows 対応の inline-tier IPC は別 Issue で実装する（macOS は
-//! `shm_open(2)` ベース、Windows は `CreateFileMapping` ベースの予定）。
-//! それまでは [`ring_ingest`] および `midori_ipc_shm` の Linux 専用 API
-//! を `cfg(target_os = "linux")` で囲って他 OS では参照しない運用。
+//! 現状 inline-tier IPC は Linux 専用（`memfd_create(2)` 依存、macOS は
+//! `shm_open(2)` ベース、Windows は `CreateFileMapping` ベースで実装される
+//! 予定だが未実装）。それまでは [`ring_ingest`] および `midori_ipc_shm` の
+//! Linux 専用 API を `cfg(target_os = "linux")` で囲って他 OS では参照しない
+//! 運用。
 //!
 //! The CLI dispatch layer remains binary-private until there is a concrete
 //! need to expose it.

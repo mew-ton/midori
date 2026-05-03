@@ -22,8 +22,8 @@
 //!   page-alignment math for the `request_ring(slot_size)` handshake.
 //! - [`ring_consumer`] and [`fd_socket`]: Linux-only OS-backed primitives.
 //!   They depend on `memfd_create(2)` (Linux/Android-gated in `nix`) and
-//!   `SCM_RIGHTS` over UNIX domain sockets. macOS / Windows backends will
-//!   land in a follow-up issue.
+//!   `SCM_RIGHTS` over UNIX domain sockets. macOS (`shm_open` ベース) /
+//!   Windows (`CreateFileMapping` ベース) の backend は未実装。
 //!
 //! Until the macOS / Windows backends arrive, callers that need to compile
 //! on those targets must wrap their use of [`RingConsumer`], [`send_fd`],
