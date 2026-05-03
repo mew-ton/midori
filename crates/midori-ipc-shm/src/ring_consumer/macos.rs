@@ -136,30 +136,41 @@ fn open_unique_shm() -> Result<(OwnedFd, CString), CreateError> {
     })
 }
 
-/// `/midori-<pid>-<nanos8>-<counter4>` 形式のユニーク名を組み立てる。
+/// `/midori-<pid_hex8>-<nanos_hex8>-<counter_hex4>` 形式のユニーク名を
+/// 固定幅で組み立てる。
 ///
-/// - `pid`: 異なるプロセス間の衝突回避
-/// - `nanos8`: `SystemTime::now()` の nanos 下位 8 桁。プロセス内 / 異プロセス
-///   両方で時間方向の衝突確率を下げる
-/// - `counter4`: 同一プロセス内のモノトニックカウンタ下位 4 桁。同一 nanos
-///   で連続生成された場合の決定的な区別をつける
+/// - `pid_hex8`: `u32` PID を 8 桁の 16 進数で固定幅化（u32 全域を網羅）。
+///   異なるプロセス間の衝突を完全に避ける（同 OS 上で同時に走る同 PID は
+///   定義上ありえない）。
+/// - `nanos_hex8`: `SystemTime::now()` の subsec nanos (≤ 10^9 ≈ 2^30) を
+///   8 桁の 16 進数で固定幅化。プロセス内 / 異プロセスの時間方向で衝突確率
+///   を下げる。
+/// - `counter_hex4`: 同一プロセス内モノトニックカウンタを 16 進 4 桁
+///   (`% 0x1_0000`) で固定幅化。同一 nanos で連続生成された場合の決定的
+///   な区別をつける。
 ///
-/// 全長は最大 30 byte 程度（macOS の `PSHMNAMLEN = 31` 上限内）に収める。
+/// 全長: `/midori-`(8) + 8 + `-`(1) + 8 + `-`(1) + 4 = 30 byte。これは
+/// macOS の `PSHMNAMLEN = 31` 上限内に **入力 PID / nanos / counter の値
+/// に依らず常に** 収まる（10 進 format と異なり可変長になることがない）。
 fn build_shm_name(pid: u32) -> String {
     let counter = SHM_NAME_COUNTER.fetch_add(1, Ordering::Relaxed);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    // 各成分を decimal で詰める。16 進だと 1 桁あたりの情報量は多いが
-    // PSHMNAMLEN を超えないことを目視で確認しやすい decimal を選ぶ。
-    // pid: 最大 7 桁 (Linux 既定 4194304 < 10^7、macOS は 99999) を見込む。
-    // nanos: 9 桁を 8 桁に丸める（衝突回避の目的では十分）。
-    // counter: 4 桁の wrap で十分（同一 nanos 内で 10000 個生成は非現実）。
+    // 16 進固定幅: pid は u32 全域 8 桁、nanos も 8 桁 (subsec nanos は
+    // 最大 999_999_999 < 0x4000_0000 で 8 桁内に収まる)、counter は 4 桁
+    // (16 bit) で wrap させる。これで PSHMNAMLEN 超過の可能性を構造的に
+    // 排除できる。
     let name = format!(
-        "/midori-{pid}-{:08}-{:04}",
-        nanos % 100_000_000,
-        counter % 10_000,
+        "/midori-{pid:08x}-{:08x}-{:04x}",
+        nanos & 0xFFFF_FFFF,
+        counter & 0xFFFF,
+    );
+    debug_assert!(
+        name.len() == 30,
+        "shm name should be exactly 30 bytes (fixed-width hex): {name} ({} bytes)",
+        name.len()
     );
     debug_assert!(
         name.len() <= MAX_SHM_NAME_LEN,
@@ -175,17 +186,32 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn it_should_keep_shm_name_within_pshmnamlen() {
-        // 最大 PID (32-bit) と最大 counter / nanos でも PSHMNAMLEN を超えない
-        // ことを確認する。実環境の PID は通常もっと小さいが、上限耐性を
-        // テストしておく。
+    fn it_should_keep_shm_name_within_pshmnamlen_for_max_pid() {
+        // 最大 PID (u32::MAX) でも PSHMNAMLEN を超えないことを確認する。
+        // 16 進固定幅化によって pid 値に依らず常に 30 byte になる契約を
+        // ここで守らせる（構造的保証の回帰テスト）。
         let name = build_shm_name(u32::MAX);
+        assert_eq!(
+            name.len(),
+            30,
+            "name must be exactly 30 bytes regardless of pid: {name} ({} bytes)",
+            name.len()
+        );
         assert!(
             name.len() <= MAX_SHM_NAME_LEN,
             "name too long: {name} ({} bytes)",
             name.len()
         );
         assert!(name.starts_with("/midori-"), "unexpected prefix: {name}");
+    }
+
+    #[test]
+    fn it_should_keep_shm_name_within_pshmnamlen_for_zero_pid() {
+        // 最小 PID (0) でも長さが変動しない (= 固定幅) ことを確認する。
+        // decimal だと "0" は 1 桁、u32::MAX は 10 桁になり 9 byte 差が出るが、
+        // 16 進固定幅では同一長になる。
+        let name = build_shm_name(0);
+        assert_eq!(name.len(), 30, "fixed-width: {name} ({} bytes)", name.len());
     }
 
     #[test]
