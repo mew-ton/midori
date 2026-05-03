@@ -12,8 +12,9 @@
 //! - `IngestHandle::shutdown()` で thread を join し、`RingConsumer` を
 //!   drop して mmap を unmap する
 //!
-//! 設計参照: `design/17-driver-comm/01-inline-ring.md`「メモリ順序」、
-//! 本 Issue 受領 brief「ring 空時の spin/sleep 戦略を min/max で定数化」。
+//! 設計参照: `design/17-driver-comm/01-inline-ring.md`「メモリ順序」。
+//! ring 空時の spin / sleep 間隔は本ファイル内の `RING_POLL_SPIN_INTERVAL`
+//! と `RING_POLL_SLEEP_INTERVAL_MAX` の二定数で min / max を制御する。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -24,14 +25,17 @@ use crate::events_pipeline::{process_inline_payload, EventSink};
 use crate::events_schema::EventsSchema;
 use crate::ring_consumer::RingConsumer;
 
-/// ring が空のときに最初に試行する busy-wait 間隔。MIDI のリアルタイム
-/// 要件（1〜3 ms）を満たすため、初動を 100 µs に置く。100 µs は CPU を
-/// ほぼ食わずに pop が連続発火するケースで latency を最小化する妥協点。
+/// ring が空のときに試行する初期 poll 間隔。100 µs は active stream
+/// 中（直前の poll で event を取れていて `backoff_step` が 0 にリセット
+/// されている状態）に MIDI の sub-1 ms latency を保つための初動値。
+/// 連続して event が流れている限りこの間隔が維持される。
 pub const RING_POLL_SPIN_INTERVAL: Duration = Duration::from_micros(100);
 
-/// 連続して空読みを繰り返したあと、`RING_POLL_SPIN_INTERVAL` を
-/// この値まで指数的にエスカレートする。10 ms はアイドル driver の
-/// CPU 占有を抑える上限。
+/// 連続して空読みが続いたときに `RING_POLL_SPIN_INTERVAL` を倍化させる
+/// 上限。アイドル driver の CPU 占有を抑えるための cap で、ここには
+/// MIDI realtime 要件は適用しない。アイドル後に最初に到着した event は
+/// 最大 10 ms 遅延し得るが、その時点で `backoff_step` は 0 にリセット
+/// され、以降は再び `RING_POLL_SPIN_INTERVAL` に戻る。
 pub const RING_POLL_SLEEP_INTERVAL_MAX: Duration = Duration::from_millis(10);
 
 /// `RING_POLL_SPIN_INTERVAL` から `RING_POLL_SLEEP_INTERVAL_MAX` へ
@@ -107,7 +111,7 @@ impl IngestHandle {
     ///
     /// 必ず呼び出すこと。呼び忘れると thread leak。
     pub fn shutdown(mut self) {
-        self.shutdown_flag.store(true, Ordering::SeqCst);
+        self.shutdown_flag.store(true, Ordering::Release);
         if let Some(join) = self.join.take() {
             // join 失敗（thread が panic した）は logger に流すだけで
             // 上位伝播はしない。bridge shutdown を止めない方針。
@@ -127,7 +131,7 @@ impl Drop for IngestHandle {
         // shutdown() を呼び忘れた場合の保険。stop signal だけ送り、join
         // できないので thread leak になり得る。warn を 1 行出す。
         if self.join.is_some() {
-            self.shutdown_flag.store(true, Ordering::SeqCst);
+            self.shutdown_flag.store(true, Ordering::Release);
             crate::logging::warn(
                 "bridge",
                 None,
@@ -187,7 +191,7 @@ fn ingest_loop(
     stats: &IngestStats,
 ) {
     let mut backoff_step: u32 = 0;
-    while !stop.load(Ordering::Relaxed) {
+    while !stop.load(Ordering::Acquire) {
         if let Some(payload) = consumer.read() {
             process_inline_payload(driver_name, schema, &payload, sink);
             stats.record_dispatched();

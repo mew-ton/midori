@@ -63,7 +63,8 @@ pub fn send_fd(stream: &UnixStream, fd: BorrowedFd<'_>) -> io::Result<()> {
 ///
 /// - `recvmsg(2)` が失敗（peer が socket を閉じた、等）
 /// - 受信メッセージに `SCM_RIGHTS` 制御メッセージが無い
-/// - `SCM_RIGHTS` に fd が 0 個 or 2 個以上含まれていた
+/// - 単一 `SCM_RIGHTS` 内に fd が 0 個 or 2 個以上含まれていた
+/// - `SCM_RIGHTS` 制御メッセージが 2 件以上届いた（本 helper のコントラクト違反）
 pub fn recv_fd(stream: &UnixStream) -> io::Result<OwnedFd> {
     use std::io::IoSliceMut;
 
@@ -99,6 +100,23 @@ pub fn recv_fd(stream: &UnixStream) -> io::Result<OwnedFd> {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "fd_socket: expected exactly 1 fd in SCM_RIGHTS",
+                ));
+            }
+            // 2 件目以降の `SCM_RIGHTS` cmsg を受け取った場合、最初に格納
+            // した fd を上書きすると silent close になる。本 helper の
+            // コントラクトは「単一 cmsg」なので、追加 fd を即 close した上で
+            // error 返却する。
+            if received.is_some() {
+                #[allow(unsafe_code)]
+                for raw in fds {
+                    // SAFETY: `recvmsg` が `fds` に格納した値はちょうど今
+                    // 受信したばかりの所有 fd。重複所有は無く、`OwnedFd`
+                    // で包んで即 drop すれば close される。
+                    let _ = unsafe { OwnedFd::from_raw_fd(raw) };
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "fd_socket: multiple SCM_RIGHTS control messages received",
                 ));
             }
             // SAFETY: 同上。`recvmsg` から受け取った所有 fd を OwnedFd に
