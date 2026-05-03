@@ -14,9 +14,12 @@
 //! caller が独自の handshake バイト（例: ack 種別）を載せたい場合の拡張は
 //! 別 API で行う。
 //!
-//! 設計参照: `design/15-sdk-bindings-api.md` Phase 1 / L1-2「Bridge との
-//! fd 受け渡しプロトコル」、`design/17-driver-comm/01-inline-ring.md`
-//! 「Handshake プロトコル」step 5。
+//! プロトコル仕様:
+//!
+//! - 1 メッセージにつき `SCM_RIGHTS` cmsg は 1 個まで
+//! - その cmsg 内に格納する fd はちょうど 1 個
+//! - 上記いずれの違反も [`recv_fd`] が `io::ErrorKind::InvalidData` で
+//!   reject する（受信側で fd を leak させない）
 
 use std::io;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};

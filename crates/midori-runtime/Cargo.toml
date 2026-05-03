@@ -23,13 +23,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 
-# Safe Unix syscall wrappers. `driver_proc` uses `signal` for SIGTERM, the
-# inline ring consumer uses `mman` (mmap/munmap) and `memfd` (memfd_create)
-# to allocate per-driver shared memory, and the fd-passing helper uses
-# `socket` for SCM_RIGHTS sendmsg/recvmsg. The mmap calls themselves are
-# `unsafe` by definition (the kernel can map memory the compiler cannot
-# reason about); see the per-crate `unsafe_code = "deny"` lint override
-# below for the policy rationale.
+# Safe Unix syscall wrappers. `driver_proc` は SIGTERM のために `signal`
+# を、Linux 限定の inline ring consumer は `mman` (mmap/munmap) と
+# `nix::sys::memfd::memfd_create` を、fd-passing helper は SCM_RIGHTS の
+# sendmsg/recvmsg のために `socket` を使う。mmap 呼び出し自体は
+# `unsafe` (kernel が compiler の aliasing model 外でメモリを書換可能)
+# のため、後段の `unsafe_code = "deny"` lint override 参照。
+#
+# 注意: nix 0.30 では `memfd_create` は `mman` でも独自 feature でもなく、
+# `nix::sys::memfd` module 自体が `cfg(any(linux, android))` でゲート
+# されている（feature には現れない）。`mman` feature を有効にするだけで
+# Linux ビルド時に自動で利用可能になり、他 OS では module が存在しない。
+# 本 crate では module 利用側 (lib.rs) を `cfg(target_os = "linux")` で
+# 囲って macOS / Windows での参照を断つ運用にしている。
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["signal", "mman", "fs", "socket", "uio"] }
 # Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
