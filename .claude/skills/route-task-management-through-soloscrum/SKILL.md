@@ -47,3 +47,19 @@ If the intent is ambiguous (e.g. "整理して" — could be `/refine` or `/brea
 ## Edge case: Linear-side mechanical updates
 
 After the user merges a PR, transitioning the corresponding Linear Issue to Done is a **mechanical follow-through** of the soloscrum `/review` flow, not an ad hoc decision. This kind of post-merge sync is allowed without re-invoking a soloscrum command. The same applies to GitHub Issue auto-close via `Closes #N`.
+
+## Trivial-scope label during /refine
+
+`/refine` includes assessing whether the Issue meets CLAUDE.md's trivial-scope criteria. If it does, apply the `trivial-scope` label after creating the Issue (Linear MCP `mcp__linear-server__save_issue` with the label, or `gh issue edit --add-label trivial-scope`).
+
+Priority is computed on substance regardless of the label — the label is a separate signal used for parallel cleanup pickup, not a priority bump.
+
+## Parallel cleanup at /develop
+
+When invoking `/develop` for a primary Issue, scan the backlog for `trivial-scope`-labeled Issues. Dispatch up to two of them to parallel git worktrees as independent draft PRs alongside the primary task. Each follows the standard `/develop` flow (branch → implement → push → draft → local review → ready).
+
+Skip the parallel pickup if:
+
+- The user explicitly asks to focus on the primary Issue alone
+- A trivial-scope candidate conflicts with the primary work's file changes
+- Backlog has zero `trivial-scope` candidates

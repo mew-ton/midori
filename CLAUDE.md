@@ -7,8 +7,24 @@ This file defines how Claude collaborates on this repository. Skills handle per-
 The aim of every change — design doc, implementation, refactor, task design — is to leave the system more internally consistent than it was found. Inconsistency is the primary debt being paid down.
 
 - When editing design docs, exhaustively verify the change introduces no contradictions with other parts of the design (skill: `find-contradiction`). Surface every contradiction; never paper over.
-- When implementing, perform refactors needed for consistency *now*, not later. Deferred inconsistencies compound into cognitive load.
+- When implementing, perform refactors needed for consistency *within the scope you are touching* now, not later. Deferred inconsistencies inside that scope compound into cognitive load. (Pre-existing bugs on lines or files outside the current scope are governed by `## Trivial-scope cleanup` below, not by this rule.)
 - Comments and docs must stand alone (skills: `write-self-contained-comments`, `doc-context-free`). External references (PR / Issue numbers, conversation history) belong only in transient markers like TODO/FIXME.
+
+## Trivial-scope cleanup
+
+Pre-existing mechanical bugs surfaced during PR review are not fixed in-place — they go through `/refine` as follow-up Issues. To absorb these without inflating individual PRs, we use a label-based parallel pickup.
+
+**Trivial-scope criteria** (all must hold):
+
+- SP ≤ 1
+- Decision-free: single correct answer (typo, broken cross-reference, dead comment, doc claim that contradicts adjacent code)
+- No behavior change in non-test code (even one-line fixes are excluded — choosing the correct new behavior requires judgment)
+- No new error variant, dep, function, or module added
+- Edits one source file, plus modest corresponding test changes (a few lines or one new test). Large test rewrites disqualify.
+
+**Marking**: Issues meeting these criteria get the `trivial-scope` label during `/refine`. The label does not affect priority — priority stays computed on substance.
+
+**Parallel pickup at `/develop`**: when `/develop` starts on a primary Issue, up to two `trivial-scope`-labeled Issues from backlog are dispatched to parallel git worktrees as independent draft PRs (cap N=2 to keep user review handoff manageable). The user can opt-out per `/develop` invocation if review bandwidth is constrained.
 
 ## Judgeability
 
