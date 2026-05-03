@@ -278,8 +278,8 @@ impl RingConsumer {
     /// テスト専用: producer 側のように 1 件 push する。in-process
     /// での単体テスト用ヘルパー。
     ///
-    /// 本 crate のテスト (`cfg(test)`) と、`feature = "test-helpers"` を有効化
-    /// した依存元（例: `midori-runtime` の dev-dependencies）からのみ可視。
+    /// 本 crate のテスト (`cfg(test)`) と、`feature = "test-helpers"` を
+    /// dev-dependencies で有効化した上位 crate のテストからのみ可視。
     /// プロダクション経路では使わない。
     #[cfg(any(test, feature = "test-helpers"))]
     pub fn test_push(&mut self, payload: &[u8]) -> bool {

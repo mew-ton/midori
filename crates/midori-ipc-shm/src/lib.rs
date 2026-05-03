@@ -1,7 +1,7 @@
 //! Inline-tier IPC primitives for the Midori bridge.
 //!
 //! The Midori bridge consumes events from each driver subprocess via two
-//! tiers (see `design/17-driver-comm/`):
+//! tiers:
 //!
 //! - **Inline tier**: Bridge allocates an SPSC ring in `memfd`-backed
 //!   shared memory and hands the fd to the driver via `SCM_RIGHTS`. The
@@ -12,9 +12,10 @@
 //! This crate owns the safe API boundary around the inline-tier OS
 //! primitives. The `unsafe` operations involved (`mmap`, `memfd_create`,
 //! and SCM_RIGHTS-bearing `recvmsg`) are all confined inside this crate;
-//! `midori-runtime` consumes only the safe surface re-exported below and
-//! therefore retains the workspace-wide `unsafe_code = "forbid"` posture.
-//! This crate downgrades the lint to `deny` (see `Cargo.toml`).
+//! 上位 crate（bridge runtime / driver SDK 等）は本 crate が再エクスポート
+//! する safe surface のみを利用することで、各々の crate は workspace 既定の
+//! `unsafe_code = "forbid"` posture を維持できる。本 crate のみ自身の
+//! manifest で `unsafe_code = "deny"` に下げて escape hatch を有効にしている。
 //!
 //! # Modules and platform gating
 //!
