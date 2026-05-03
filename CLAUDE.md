@@ -7,7 +7,7 @@ This file defines how Claude collaborates on this repository. Skills handle per-
 The aim of every change — design doc, implementation, refactor, task design — is to leave the system more internally consistent than it was found. Inconsistency is the primary debt being paid down.
 
 - When editing design docs, exhaustively verify the change introduces no contradictions with other parts of the design (skill: `find-contradiction`). Surface every contradiction; never paper over.
-- When implementing, perform refactors needed for consistency *now*, not later. Deferred inconsistencies compound into cognitive load.
+- When implementing, perform refactors needed for consistency *within the scope you are touching* now, not later. Deferred inconsistencies inside that scope compound into cognitive load. (Pre-existing bugs on lines or files outside the current scope are governed by `## Trivial-scope cleanup` below, not by this rule.)
 - Comments and docs must stand alone (skills: `write-self-contained-comments`, `doc-context-free`). External references (PR / Issue numbers, conversation history) belong only in transient markers like TODO/FIXME.
 
 ## Trivial-scope cleanup
