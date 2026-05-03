@@ -12,7 +12,7 @@ The aim of every change — design doc, implementation, refactor, task design �
 
 ## Trivial-scope cleanup
 
-Pre-existing 1-line / mechanical bugs surfaced during PR review are not fixed in-place — they go through `/refine` as follow-up Issues. To absorb these without inflating individual PRs, we use a label-based parallel pickup.
+Pre-existing mechanical bugs surfaced during PR review are not fixed in-place — they go through `/refine` as follow-up Issues. To absorb these without inflating individual PRs, we use a label-based parallel pickup.
 
 **Trivial-scope criteria** (all must hold):
 
