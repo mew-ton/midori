@@ -1,11 +1,8 @@
-//! macOS 向け shm 確保経路。`shm_open(2)` + `ftruncate(2)` + `mmap(2)`
-//! + `shm_unlink(2)`。
+//! macOS backend: POSIX shared memory (`shm_open(2)` + `ftruncate(2)`
+//! + `mmap(2)` + `shm_unlink(2)`) を組み合わせて anonymous shm を確保し、
+//! Bridge ↔ driver subprocess 間で fd 経由で受け渡す。
 //!
-//! macOS には Linux の `memfd_create(2)` 相当が無いため、POSIX 共有メモリ
-//! オブジェクト (`shm_open`) を使う。`shm_open` は名前付きで kernel 内に
-//! 共有メモリオブジェクトを登録し、ファイル記述子を返す。
-//!
-//! プロトコル:
+//! 確保プロトコル:
 //!
 //! 1. `/midori-<pid>-<nanos>-<counter>` 形式のユニークな名前を生成
 //! 2. `O_CREAT | O_EXCL | O_RDWR` で `shm_open` し新規作成
@@ -19,9 +16,9 @@
 //! 渡された後に Bridge / driver の双方が fd を close すれば、kernel が
 //! オブジェクトを回収する。
 //!
-//! Linux 経路 (`super::linux`) との API 境界は `create_shm_for_ring` の
-//! シグネチャで揃えている: `(MmapMut, OwnedFd)` を返し、上位 dispatch
-//! (`super::mod`) で `RingConsumerCore` に包む。
+//! 同 crate の他 OS backend と `create_shm_for_ring` のシグネチャを揃えて
+//! いる: `(MmapMut, OwnedFd)` を返し、上位 dispatch (`super::mod`) で
+//! `RingConsumerCore` に包む。
 
 use std::ffi::CString;
 use std::os::fd::OwnedFd;
