@@ -114,28 +114,84 @@ impl Compatibility {
 
 /// Decide whether the Bridge accepts `version` as a peer SDK.
 ///
-/// The accepted set is `MAJOR.MINOR.PATCH` triples whose `MAJOR` is listed
-/// in [`ACCEPTED_SDK_MAJORS`]. Anything that fails to parse — empty string,
-/// non-numeric segments, fewer than three segments — is rejected with a
-/// reason describing the failure mode so the driver-side log makes the
-/// mismatch obvious.
+/// The accepted set is `MAJOR.MINOR.PATCH` triples of bare base-10 `u32`
+/// integers whose `MAJOR` is listed in [`ACCEPTED_SDK_MAJORS`]. Each segment
+/// is parsed with [`u32::from_str`], which rejects empty strings, leading
+/// `-` (no negative `u32`) and surrounding whitespace; we additionally
+/// reject a leading `+` sign so the protocol stays a strict subset of
+/// `SemVer`'s MAJOR.MINOR.PATCH grammar (`SemVer` numeric identifiers are
+/// unsigned and do not carry a sign character).
+///
+/// Pre-release / build metadata (`1.0.0-rc.1`, `1.0.0+build.7`) are out of
+/// scope: such inputs fail the per-segment numeric parse and are reported
+/// the same way as any other malformed segment.
+///
+/// The `Incompatible` reason names which segment failed and how, so the
+/// driver-side log makes the mismatch obvious without the reader having to
+/// reproduce the parse locally.
 pub(super) fn is_sdk_compatible(version: &str) -> Compatibility {
+    if version.is_empty() {
+        return Compatibility::Incompatible {
+            reason: format!("sdk_version `{version}` is empty"),
+        };
+    }
     let mut parts = version.split('.');
     let Some(major_str) = parts.next() else {
+        // `str::split` always yields at least one element, so this is
+        // unreachable in practice; keep the arm to make the iterator
+        // contract explicit at the call site.
         return Compatibility::Incompatible {
             reason: format!("sdk_version `{version}` is empty"),
         };
     };
-    let Ok(major) = major_str.parse::<u32>() else {
-        return Compatibility::Incompatible {
-            reason: format!("sdk_version `{version}` has non-numeric major component"),
-        };
-    };
-    // Require the remaining `MINOR.PATCH` segments to exist, even if we don't
-    // gate on their values — the protocol contract is "MAJOR.MINOR.PATCH".
-    if parts.next().is_none() || parts.next().is_none() {
+    let Some(minor_str) = parts.next() else {
         return Compatibility::Incompatible {
             reason: format!("sdk_version `{version}` is not in MAJOR.MINOR.PATCH form"),
+        };
+    };
+    let Some(patch_str) = parts.next() else {
+        return Compatibility::Incompatible {
+            reason: format!("sdk_version `{version}` is not in MAJOR.MINOR.PATCH form"),
+        };
+    };
+    if parts.next().is_some() {
+        return Compatibility::Incompatible {
+            reason: format!(
+                "sdk_version `{version}` carries a trailing segment past MAJOR.MINOR.PATCH"
+            ),
+        };
+    }
+    // Each segment is parsed with `u32::from_str` (which rejects empty
+    // strings, surrounding whitespace, and a leading `-`); the explicit
+    // `starts_with('+')` guard then strips the only sign character that
+    // `from_str` would otherwise accept, keeping the accepted shape at
+    // exactly "one or more ASCII digits" per `SemVer` numeric identifiers.
+    if major_str.starts_with('+') {
+        return Compatibility::Incompatible {
+            reason: format!(
+                "sdk_version `{version}` has non-numeric major component `{major_str}`"
+            ),
+        };
+    }
+    let Ok(major) = major_str.parse::<u32>() else {
+        return Compatibility::Incompatible {
+            reason: format!(
+                "sdk_version `{version}` has non-numeric major component `{major_str}`"
+            ),
+        };
+    };
+    if minor_str.starts_with('+') || minor_str.parse::<u32>().is_err() {
+        return Compatibility::Incompatible {
+            reason: format!(
+                "sdk_version `{version}` has non-numeric minor component `{minor_str}`"
+            ),
+        };
+    }
+    if patch_str.starts_with('+') || patch_str.parse::<u32>().is_err() {
+        return Compatibility::Incompatible {
+            reason: format!(
+                "sdk_version `{version}` has non-numeric patch component `{patch_str}`"
+            ),
         };
     }
     if !ACCEPTED_SDK_MAJORS.contains(&major) {
@@ -166,4 +222,93 @@ pub(super) fn json_type_error(message: &str) -> serde_json::Error {
     // through `serde::de::Error` via a deserializer that produces our text.
     use serde::de::Error as _;
     serde_json::Error::custom(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_sdk_compatible, Compatibility};
+
+    /// Table-driven coverage of the MAJOR.MINOR.PATCH parser. The expected
+    /// shape is paired with a fragment of the rejection reason so the test
+    /// fails loudly if a future edit changes which segment a malformed
+    /// input is blamed on (for example, accidentally reporting a 4-segment
+    /// version as "non-numeric patch" instead of "trailing segment").
+    enum Expected {
+        Compatible,
+        /// The rejection reason must contain this substring. The fragments
+        /// are chosen to be specific to one rejection branch so a swap
+        /// between branches is detectable.
+        IncompatibleContains(&'static str),
+    }
+
+    #[test]
+    fn it_should_validate_sdk_version_segments() {
+        let cases: &[(&str, Expected)] = &[
+            // Accepted: both currently-allowed majors.
+            ("1.0.0", Expected::Compatible),
+            ("0.1.0", Expected::Compatible),
+            // Rejected: major outside the accepted set, but well-formed.
+            (
+                "99.0.0",
+                Expected::IncompatibleContains("advertises major 99"),
+            ),
+            // Rejected: non-numeric minor and patch.
+            (
+                "1.foo.bar",
+                Expected::IncompatibleContains("non-numeric minor"),
+            ),
+            // Rejected: empty minor segment between two dots.
+            ("1..3", Expected::IncompatibleContains("non-numeric minor")),
+            // Rejected: trailing segment past MAJOR.MINOR.PATCH.
+            (
+                "1.2.3.4",
+                Expected::IncompatibleContains("trailing segment"),
+            ),
+            // Rejected: empty input.
+            ("", Expected::IncompatibleContains("is empty")),
+            // Rejected: leading whitespace — `u32::from_str` does not trim.
+            (
+                " 1.0.0",
+                Expected::IncompatibleContains("non-numeric major"),
+            ),
+            // Rejected: leading minus sign — `u32` is unsigned.
+            (
+                "-1.0.0",
+                Expected::IncompatibleContains("non-numeric major"),
+            ),
+            // Rejected: leading plus sign — explicitly stripped before parse
+            // so the accepted shape stays "ASCII digits only".
+            (
+                "+1.0.0",
+                Expected::IncompatibleContains("non-numeric major"),
+            ),
+            // Rejected: too few segments (regression guard for the existing
+            // "must have at least three" path).
+            ("1.0", Expected::IncompatibleContains("MAJOR.MINOR.PATCH")),
+        ];
+
+        for (input, expected) in cases {
+            let result = is_sdk_compatible(input);
+            match (expected, &result) {
+                (Expected::Compatible, Compatibility::Compatible) => {}
+                (
+                    Expected::IncompatibleContains(needle),
+                    Compatibility::Incompatible { reason },
+                ) => {
+                    assert!(
+                        reason.contains(needle),
+                        "input {input:?}: expected reason to contain {needle:?}, got {reason:?}"
+                    );
+                }
+                (Expected::Compatible, Compatibility::Incompatible { reason }) => {
+                    panic!("input {input:?}: expected Compatible, got Incompatible({reason:?})");
+                }
+                (Expected::IncompatibleContains(needle), Compatibility::Compatible) => {
+                    panic!(
+                        "input {input:?}: expected Incompatible containing {needle:?}, got Compatible"
+                    );
+                }
+            }
+        }
+    }
 }
