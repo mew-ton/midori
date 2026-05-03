@@ -239,8 +239,11 @@ pub fn create_pipe_server(pipe_name: &PipeName) -> Result<OwnedHandle, HandlePip
 /// - `peer_pid`: HANDLE を渡す相手プロセスの PID（driver subprocess の
 ///   `Child::id()` から取得）
 /// - `source_handle`: bridge プロセス内で valid な転送元 HANDLE（典型は
-///   shm section）。所有権は本関数に移譲され、関数内の duplication 完了後に
-///   `CloseHandle` される（duplication 元側はもう不要）。
+///   shm section）。**借用** で受け取り、所有権は caller に残る。これに
+///   より、wire write 失敗時に caller が同じ section HANDLE を別経路で
+///   再 handoff する選択肢を保てる。複製 (`DuplicateHandle`) は kernel
+///   レベルで独立した HANDLE entry を作るので、本関数 return 後も bridge
+///   側 source_handle は引き続き有効に使える。
 ///
 /// # Errors
 ///
@@ -251,7 +254,7 @@ pub fn create_pipe_server(pipe_name: &PipeName) -> Result<OwnedHandle, HandlePip
 pub fn accept_and_send(
     pipe_server: &OwnedHandle,
     peer_pid: u32,
-    source_handle: OwnedHandle,
+    source_handle: &OwnedHandle,
 ) -> Result<(), HandlePipeError> {
     let server_raw = pipe_server.as_raw_handle() as HANDLE;
 
@@ -294,14 +297,12 @@ pub fn accept_and_send(
     let handle_u64 = duplicated as u64;
     buf[1..9].copy_from_slice(&handle_u64.to_ne_bytes());
 
-    // `source_handle` / `peer_proc` の close は **write 成功後** に行う。
-    // 早期 drop すると、write 失敗時に caller が retry や代替経路に切り
-    // 替える選択肢を失う（bridge 側の section 参照と peer process
-    // handle が両方無くなった状態になる）。
+    // `source_handle` は caller 所有なので関数内で drop しない。
+    // `peer_proc` の close は write 成功後に行う（早期 drop すると、
+    // write 失敗時に caller が peer 状態を再評価する選択肢を失う）。
     write_all_to_pipe(server_raw, &buf)?;
 
-    // 通知が peer に届いたので bridge 側の参照は不要。
-    drop(source_handle);
+    // 通知が peer に届いたので peer process handle は不要。
     drop(peer_proc);
     Ok(())
 }
@@ -366,12 +367,26 @@ pub fn connect_and_recv(pipe_name: &PipeName) -> Result<OwnedHandle, HandlePipeE
     let handle_u64 = u64::from_ne_bytes([
         buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
     ]);
+
+    // pipe 経由で受け取った 8 byte をそのまま `OwnedHandle` 化すると、
+    // 不正な peer が送ってきた `NULL` (0x0) や `INVALID_HANDLE_VALUE`
+    // (0xFFFFFFFFFFFFFFFF) も Drop 時に `CloseHandle` 対象になり、
+    // `OwnedHandle::from_raw_handle` の safety contract を破る恐れがある。
+    // bridge と driver は信頼関係にあるが、契約として最低限の sentinel
+    // 値を弾いておくことで future の peer compromise / pipe 取り違えに
+    // 対する safe-side garantía を残す。
+    if handle_u64 == 0 || handle_u64 == INVALID_HANDLE_VALUE as u64 {
+        return Err(HandlePipeError::Protocol(format!(
+            "received invalid HANDLE value: 0x{handle_u64:016x}"
+        )));
+    }
     let handle_raw = handle_u64 as RawHandle;
 
-    // SAFETY: `handle_raw` は bridge 側で `DuplicateHandle` した結果、
-    // この driver プロセスのアドレス空間で valid な HANDLE 値。
-    // bridge 側は `DuplicateHandle` 後に source 側の同 HANDLE を close
-    // 済みなので、driver 側でこの HANDLE の唯一の所有者になる。
+    // SAFETY: `handle_raw` は上記 sentinel チェックを通過し、bridge 側で
+    // `DuplicateHandle` した結果としてこの driver プロセスのアドレス空間
+    // で valid な HANDLE 値であることを期待する。bridge 側 (`accept_and_send`)
+    // は wire write 成功時のみここに到達するため、driver 側がこの HANDLE
+    // を受け取った時点では bridge 側 `DuplicateHandle` が成功している。
     // `OwnedHandle` で包んで Drop 時に `CloseHandle` で適切に release。
     #[allow(unsafe_code)]
     let received = unsafe { OwnedHandle::from_raw_handle(handle_raw) };
@@ -603,7 +618,7 @@ mod tests {
         let owned_real = unsafe { OwnedHandle::from_raw_handle(real as RawHandle) };
 
         // bridge: 自プロセスを peer 扱いで送信
-        let send_result = accept_and_send(&server, process::id(), owned_real);
+        let send_result = accept_and_send(&server, process::id(), &owned_real);
         assert!(send_result.is_ok(), "accept_and_send: {send_result:?}");
 
         // driver スレッドの結果を回収

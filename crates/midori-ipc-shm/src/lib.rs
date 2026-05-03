@@ -35,11 +35,13 @@
 //!   いずれかと同等の backend が必要）。
 //!
 //! Until the macOS backend arrives, callers that need to compile on macOS
-//! must wrap their use of [`RingConsumer`] / `send_fd` / `recv_fd` /
-//! `RingConsumerWindows` / `PipeName` 等の各 backend の型を
-//! `#[cfg(target_os = "linux")]` / `#[cfg(target_os = "windows")]` で
-//! 自前ガードする — this crate does not paper over the platform gap with
-//! stubs.
+//! must wrap their use of the OS-specific backends with the matching cfg
+//! gate themselves. Linux 経路は `RingConsumer` (`ring_consumer` から
+//! 再エクスポート) / `send_fd` / `recv_fd` を `cfg(target_os = "linux")`
+//! で、Windows 経路は同名 `RingConsumer` (`ring_consumer_windows` から
+//! 再エクスポート) / `PipeName` / `create_pipe_server` / `accept_and_send`
+//! / `connect_and_recv` を `cfg(target_os = "windows")` で囲む。本 crate
+//! は platform gap を stub で埋めない。
 //!
 //! # Public surface
 //!
