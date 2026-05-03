@@ -163,10 +163,13 @@ pub(super) fn is_sdk_compatible(version: &str) -> Compatibility {
     }
     // Each segment is parsed with `u32::from_str` (which rejects empty
     // strings, surrounding whitespace, and a leading `-`); the explicit
-    // `starts_with('+')` guard then strips the only sign character that
-    // `from_str` would otherwise accept, keeping the accepted shape at
-    // exactly "one or more ASCII digits" per `SemVer` numeric identifiers.
-    if major_str.starts_with('+') {
+    // `starts_with('+')` guard strips the only sign character that
+    // `from_str` would otherwise accept, and the `len > 1 && starts '0'`
+    // guard rejects multi-digit numbers padded with `0` (e.g. `01`).
+    // Together the three checks pin the accepted shape to `SemVer`'s
+    // numeric identifier grammar — "0 OR a non-zero digit followed by
+    // digits".
+    if major_str.starts_with('+') || (major_str.len() > 1 && major_str.starts_with('0')) {
         return Compatibility::Incompatible {
             reason: format!(
                 "sdk_version `{version}` has non-numeric major component `{major_str}`"
@@ -180,14 +183,20 @@ pub(super) fn is_sdk_compatible(version: &str) -> Compatibility {
             ),
         };
     };
-    if minor_str.starts_with('+') || minor_str.parse::<u32>().is_err() {
+    if minor_str.starts_with('+')
+        || (minor_str.len() > 1 && minor_str.starts_with('0'))
+        || minor_str.parse::<u32>().is_err()
+    {
         return Compatibility::Incompatible {
             reason: format!(
                 "sdk_version `{version}` has non-numeric minor component `{minor_str}`"
             ),
         };
     }
-    if patch_str.starts_with('+') || patch_str.parse::<u32>().is_err() {
+    if patch_str.starts_with('+')
+        || (patch_str.len() > 1 && patch_str.starts_with('0'))
+        || patch_str.parse::<u32>().is_err()
+    {
         return Compatibility::Incompatible {
             reason: format!(
                 "sdk_version `{version}` has non-numeric patch component `{patch_str}`"
@@ -285,6 +294,20 @@ mod tests {
             // Rejected: too few segments (regression guard for the existing
             // "must have at least three" path).
             ("1.0", Expected::IncompatibleContains("MAJOR.MINOR.PATCH")),
+            // Rejected: `SemVer` numeric identifiers forbid leading zeros on
+            // multi-digit numbers (`01` is not the same identifier as `1`).
+            (
+                "01.0.0",
+                Expected::IncompatibleContains("non-numeric major"),
+            ),
+            (
+                "1.02.0",
+                Expected::IncompatibleContains("non-numeric minor"),
+            ),
+            (
+                "1.0.03",
+                Expected::IncompatibleContains("non-numeric patch"),
+            ),
         ];
 
         for (input, expected) in cases {
