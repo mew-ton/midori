@@ -67,7 +67,9 @@ pub enum CreateError {
     Handshake(HandshakeError),
     /// shm 確保 / `ftruncate` / `mmap` のいずれかが失敗した。
     /// `operation` は失敗した syscall 名 (`"memfd_create"` / `"shm_open"` /
-    /// `"ftruncate"` / `"mmap"` / `"shm_unlink"` 等)、`source` は OS error。
+    /// `"ftruncate"` / `"mmap"` 等)、`source` は OS error。
+    /// （`shm_unlink` は best-effort で呼び、失敗しても本 variant に
+    /// 載せず無視する。）
     Os {
         operation: &'static str,
         source: std::io::Error,

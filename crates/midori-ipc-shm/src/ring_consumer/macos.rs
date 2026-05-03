@@ -44,8 +44,10 @@ static SHM_NAME_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// macOS の POSIX SHM オブジェクト名上限 (`PSHMNAMLEN`) は 31 byte。先頭の
 /// `/` を含み、`O_CREAT | O_EXCL` で `EEXIST` 以外の error を出さない名前
-/// 形式に揃える必要がある。`midori-` prefix + 10 進 PID + nanos 下位 8 桁
-/// + 4 桁 counter で最大 30 byte 程度に収める。
+/// 形式に揃える必要がある。`build_shm_name` は `/midori-` (8 byte) + 16 進
+/// 固定幅 PID 8 桁 + `-` + 16 進固定幅 nanos 8 桁 + `-` + 16 進固定幅
+/// counter 4 桁 = 30 byte の固定長で生成し、入力値に依らず常に上限内に
+/// 収める（詳細は `build_shm_name` の doc 参照）。
 const MAX_SHM_NAME_LEN: usize = 31;
 
 /// `slot_size` から `shm_bytes` 分の名前付き shm を確保し、`(mmap, fd)` を
