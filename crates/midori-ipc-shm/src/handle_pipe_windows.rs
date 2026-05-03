@@ -1,8 +1,15 @@
-//! Windows 版「shm section HANDLE を別プロセスへ受け渡しする」ヘルパー。
+//! Windows backend: Bridge プロセスが確保した shm section HANDLE を、
+//! Named Pipe + `DuplicateHandle` の組み合わせで driver subprocess に
+//! 受け渡すヘルパー。
 //!
-//! Linux 版の [`crate::fd_socket`] (`SCM_RIGHTS` over Unix domain socket) と
-//! 同じ役割を Windows で担う。Windows の HANDLE は kernel が自動複製しない
-//! ため、明示的に:
+//! Windows の HANDLE は kernel object 表のインデックスでありプロセス毎に
+//! 独立しているため、Bridge プロセス内の HANDLE 値をそのまま driver
+//! プロセスに渡しても通用しない。`DuplicateHandle` で driver プロセス側
+//! の HANDLE 表に「同じ kernel object を指す entry」を生成してから、
+//! その新しい HANDLE 値を Named Pipe で送る、という二段構えで handoff
+//! する。
+//!
+//! プロトコル:
 //!
 //! 1. Bridge が driver subprocess の **PID** を取得（spawn 時に `Child::id()`
 //!    から）
@@ -16,16 +23,15 @@
 //! 5. driver は受け取った u64 をそのまま `HANDLE` として `MapViewOfFile` 等
 //!    で利用
 //!
-//! という手順を踏む。Named Pipe 名は `\\.\pipe\midori-shm-<bridge_pid>-<random>`
+//! Named Pipe 名は `\\.\pipe\midori-shm-<bridge_pid>-<random>`
 //! 形式（[`PipeName::generate`]）で global namespace 衝突を避ける。
 //!
 //! # プロトコル仕様（wire format）
 //!
 //! pipe over に流すバイト列はちょうど **9 byte**:
 //!
-//! - 先頭 1 byte: sentinel `0x01`（Linux 版 `fd_socket` と同じ理由 — 0 byte
-//!   メッセージは pipe API でセマンティクスが揺れるため、最低 1 byte の
-//!   payload を載せる）
+//! - 先頭 1 byte: sentinel `0x01`（0 byte メッセージは pipe API で
+//!   セマンティクスが揺れるため、最低 1 byte の payload を必須とする）
 //! - 続く 8 byte: HANDLE 値を host endian の u64 として encode（Windows の
 //!   HANDLE は 64-bit OS で 64-bit pointer-sized）
 //!

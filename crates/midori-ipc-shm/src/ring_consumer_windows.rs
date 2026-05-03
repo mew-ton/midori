@@ -1,26 +1,25 @@
-//! Windows 版 SPSC リング consumer 実装。
+//! Windows backend: SPSC リング consumer 実装。
 //!
-//! Linux 版 (`ring_consumer.rs`) が `memfd_create(2)` + `mmap(2)` を使うのに
-//! 対し、Windows では:
+//! Bridge プロセスが page-file backed の anonymous shared memory section
+//! を作って ring slot を保持し、driver subprocess には HANDLE を介して
+//! section を受け渡す。確保プロトコル:
 //!
 //! 1. `CreateFileMappingW(INVALID_HANDLE_VALUE, ...)` で **page-file backed の
-//!    名前なし shared memory section** を作る（fd / inode に相当する HANDLE
-//!    を取得）
+//!    名前なし shared memory section** を作る（HANDLE を取得）
 //! 2. `MapViewOfFile` で Bridge プロセスの仮想アドレス空間にマップ
 //! 3. `ShmHeader` の `slot_size` / `version` / 両 index を初期化
 //! 4. driver subprocess に渡すための [`OwnedHandle`] と本構造体
 //!    [`RingConsumer`] を返す
 //!
-//! 名前なし section にしているのは、Windows でも別プロセスから section を
-//! 見つける手段として **HANDLE 受け渡し** を採るため（global namespace の
-//! `Global\` 名前空間 section だと衝突 / 権限の問題があり、また driver
-//! subprocess 起動順とのレースを避けたい）。HANDLE は
-//! [`crate::handle_pipe_windows`] が Named Pipe 経由で `DuplicateHandle` 値として
-//! 送信する。
+//! 名前なし section にしているのは、別プロセスから section を見つける
+//! 手段として **HANDLE 受け渡し** を採るため（global `Global\` 名前空間
+//! section だと衝突 / 権限の問題があり、また driver subprocess 起動順と
+//! のレースを避けたい）。HANDLE は [`crate::handle_pipe_windows`] が
+//! Named Pipe 経由で `DuplicateHandle` 値として送信する。
 //!
-//! consumer 側 API は [`RingConsumer::read`] のみで、Linux 版と同じセマン
-//! ティクス（1 slot 分の payload を pop して `Vec<u8>` に複製、空なら
-//! `None`）。`Drop` で `UnmapViewOfFile` + `CloseHandle` を発行する。
+//! consumer 側 API は [`RingConsumer::read`]（1 slot 分の payload を pop
+//! して `Vec<u8>` に複製、空なら `None`）。`Drop` で `UnmapViewOfFile`
+//! + `CloseHandle` を発行する。
 //!
 //! # Safety
 //!
@@ -49,8 +48,9 @@ use crate::ring_handshake::{page_aligned_shm_size, resolve_requested_slot_size, 
 
 /// [`RingConsumer::create`] が失敗する原因。
 ///
-/// Linux 版の `CreateError` と同じ shape に揃えてあり、Os variant のみ
-/// 内側の operation 名が Win32 API 名（`CreateFileMappingW` 等）になる。
+/// 同 crate 内の他 OS backend と同じ shape (Handshake / Os の 2 variant)
+/// に揃えてあり、Os variant の operation 名が Win32 API 名
+/// （`CreateFileMappingW` 等）になる。
 #[derive(Debug)]
 pub enum CreateError {
     /// driver から受け取った `slot_size` が ABI 制約を満たさない。
@@ -107,9 +107,9 @@ impl MappedView {
         // 経由でしか呼べないため、戻り slice の lifetime 中は他者が同じ
         // 領域を読み書きできない（Bridge プロセス内では）。driver プロセスは
         // 別仮想アドレス空間で同じ shm section を mmap しており、kernel が
-        // 物理 frame を共有させているが、それは memmap2 / Linux 版と同じ
-        // 「concurrent producer / consumer を Acquire/Release で同期」モデル
-        // に従うため、Rust の aliasing 規律違反にはしない。
+        // 物理 frame を共有させているが、これは「concurrent producer /
+        // consumer を Acquire/Release で同期」モデルに従う共通契約なので、
+        // Rust の aliasing 規律違反にはしない。
         #[allow(unsafe_code)]
         unsafe {
             std::slice::from_raw_parts_mut(self.base.cast::<u8>(), self.len)
