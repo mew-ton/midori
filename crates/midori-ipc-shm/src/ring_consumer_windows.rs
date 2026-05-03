@@ -15,7 +15,7 @@
 //! 見つける手段として **HANDLE 受け渡し** を採るため（global namespace の
 //! `Global\` 名前空間 section だと衝突 / 権限の問題があり、また driver
 //! subprocess 起動順とのレースを避けたい）。HANDLE は
-//! [`crate::handle_pipe`] が Named Pipe 経由で `DuplicateHandle` 値として
+//! [`crate::handle_pipe_windows`] が Named Pipe 経由で `DuplicateHandle` 値として
 //! 送信する。
 //!
 //! consumer 側 API は [`RingConsumer::read`] のみで、Linux 版と同じセマン
@@ -173,7 +173,7 @@ impl RingConsumer {
     ///
     /// `requested_slot_size = 0` (sentinel) の場合は `DEFAULT_SLOT_SIZE` を
     /// 採用する。返される [`OwnedHandle`] は **page-file backed の名前なし
-    /// section HANDLE**。Bridge は本 HANDLE を [`crate::handle_pipe`] 経由で
+    /// section HANDLE**。Bridge は本 HANDLE を [`crate::handle_pipe_windows`] 経由で
     /// driver subprocess に `DuplicateHandle` で複製して渡す前提。
     ///
     /// # Errors
