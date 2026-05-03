@@ -338,7 +338,9 @@ impl RingConsumer {
         bytes[off + 4..off + 8].copy_from_slice(&payload_len_bytes);
         bytes[off + header_bytes..off + header_bytes + payload.len()].copy_from_slice(payload);
 
-        // write_index を Release 相当で更新（ne バイト書き）。
+        // write_index を更新する。test-only 経路（in-process round-trip 検証）
+        // で他スレッド observer が居ないため、Release を使った atomic store
+        // ではなく plain byte write で十分。
         let new_index = write_index.wrapping_add(1);
         bytes[0..8].copy_from_slice(&new_index.to_ne_bytes());
         true
@@ -522,7 +524,9 @@ mod tests {
     #[test]
     fn it_should_round_trip_with_custom_slot_size() {
         // 4 KiB を超える slot_size を要求できる。
-        let custom = 4_104_u32; // page-aligned 例
+        // resolve_requested_slot_size が要求するのは 4 byte 倍数性のみで、
+        // 4_104 はその条件を満たす（ページ整列とは別）。
+        let custom = 4_104_u32;
         let (mut consumer, _handle) =
             RingConsumer::create(custom).expect("custom slot must succeed");
         assert_eq!(consumer.slot_size(), custom);
