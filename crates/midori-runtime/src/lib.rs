@@ -12,37 +12,32 @@
 //!   stdout-forwarding path can hand non-JSON driver lines to the same
 //!   logger the CLI uses, and so integration tests can observe the layer
 //!   string used for forwarded lines.
-//! - [`ring_consumer`]: per-driver shm allocator + SPSC consumer used by
-//!   the inline-tier ingest path. Linux-only — depends on `memfd_create(2)`.
-//! - [`fd_socket`]: SCM_RIGHTS-based fd handoff helper used to deliver the
-//!   shm fd from Bridge to driver. Linux-only as part of the inline-tier
-//!   chain that includes [`ring_consumer`].
 //! - [`ring_ingest`]: glue that pumps the ring consumer into
 //!   [`events_pipeline::process_inline_payload`] on a dedicated thread.
-//!   Linux-only as part of the same chain.
+//!   Linux-only because it owns a [`midori_ipc_shm::RingConsumer`].
+//!
+//! Inline-tier IPC primitives themselves (`RingConsumer`, `send_fd` /
+//! `recv_fd`, ring handshake validation) live in the `midori-ipc-shm`
+//! crate. They were extracted so that the `unsafe` blocks required by
+//! `mmap` and `SCM_RIGHTS` reception stay confined to that crate, and this
+//! crate can keep `unsafe_code = "forbid"` via `lints.workspace = true`.
 //!
 //! macOS / Windows 対応の inline-tier IPC は別 Issue で実装する（macOS は
 //! `shm_open(2)` ベース、Windows は `CreateFileMapping` ベースの予定）。
-//! 現状はその 3 つの module ごと `cfg(target_os = "linux")` で囲って
-//! 他 OS では存在しない扱いにしている。
+//! それまでは [`ring_ingest`] および `midori_ipc_shm` の Linux 専用 API
+//! を `cfg(target_os = "linux")` で囲って他 OS では参照しない運用。
 //!
 //! The CLI dispatch layer remains binary-private until there is a concrete
 //! need to expose it.
 
 pub mod driver_proc;
-#[cfg(target_os = "linux")]
-pub mod fd_socket;
 pub mod logging;
-#[cfg(target_os = "linux")]
-pub mod ring_consumer;
 #[cfg(target_os = "linux")]
 pub mod ring_ingest;
 
-// `events_pipeline` / `ring_handshake` were previously binary-private. They
-// are now dependencies of `ring_consumer` / `ring_ingest`, which the lib
-// surface re-exports — so the modules themselves must move to lib scope too.
-// They stay `pub` because the `midori` binary lives in a separate crate and
-// reaches them via `midori_runtime::*`.
+// `events_pipeline` was previously binary-private. It is now a dependency
+// of `ring_ingest`, which the lib surface re-exports — so the module
+// itself must move to lib scope too. It stays `pub` because the `midori`
+// binary lives in a separate crate and reaches it via `midori_runtime::*`.
 pub mod events_pipeline;
 pub mod events_schema;
-pub mod ring_handshake;

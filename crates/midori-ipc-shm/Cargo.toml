@@ -1,0 +1,64 @@
+[package]
+name = "midori-ipc-shm"
+version = "0.1.0"
+edition = "2021"
+description = "Inline-tier IPC primitives (shm ring + SCM_RIGHTS fd handoff) for the Midori signal bridge"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mew-ton/midori"
+
+[features]
+# `RingConsumer::test_push` (and supporting `ShmHeaderView`) を依存元の
+# dev-dependencies から呼べるようにする feature。本 crate 自身のテストでは
+# `cfg(test)` でも自動的に同じコードが有効化される。プロダクションコードからは
+# enable しないこと（producer 側書き込み機能を露出するため）。
+test-helpers = []
+
+[dependencies]
+midori-core = { workspace = true }
+
+# Inline-tier shm ring requires `mmap`, `memfd_create`, `ftruncate`, and
+# SCM_RIGHTS-bearing `sendmsg` / `recvmsg`. `mmap` (`MmapOptions::map_mut`) is
+# fundamentally `unsafe` because the kernel can mutate the mapped region
+# outside the compiler's aliasing model; SCM_RIGHTS reception is `unsafe`
+# because received `RawFd`s have to be promoted to `OwnedFd` without the
+# borrow checker's help. These are the reasons this crate downgrades
+# `unsafe_code` to `deny` while the rest of the workspace stays on
+# `forbid` — see the `[lints.rust]` block below.
+#
+# nix 0.30 note: `memfd_create` lives in `nix::sys::memfd`, which is
+# `cfg(any(linux, android))`-gated rather than feature-gated. Enabling the
+# `mman` feature is enough on Linux; on macOS / Windows the module simply
+# does not exist. Linux-only callers in `lib.rs` are wrapped in
+# `cfg(target_os = "linux")` to keep the build green on other targets
+# until the macOS / Windows IPC backends land.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", default-features = false, features = ["mman", "fs", "socket", "uio"] }
+# Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
+# (see above); the returned `MmapMut` itself exposes a `&mut [u8]`-like
+# interface that is otherwise pure-safe Rust.
+memmap2 = "0.9"
+
+[dev-dependencies]
+# Cross-platform safe wrapper for `pipe(2)`. Used by the SCM_RIGHTS
+# round-trip test to construct a pair of file descriptors whose semantics
+# are easy to observe (write to one end, read on the other) without
+# needing an `unsafe` block in the test code itself.
+os_pipe = "1"
+
+# This crate intentionally does *not* set `lints.workspace = true`. The
+# workspace declares `unsafe_code = "forbid"`, which would prevent the
+# `unsafe` blocks required by `mmap` and SCM_RIGHTS reception from
+# compiling. cargo also rejects mixing `lints.workspace = true` with
+# per-crate lint overrides, so every workspace lint is re-declared below
+# and only `unsafe_code` is downgraded to `deny`. Keep this list in sync
+# with the root `Cargo.toml`'s `[workspace.lints]` block when it changes.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all         = { level = "warn", priority = -1 }
+pedantic    = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"

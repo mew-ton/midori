@@ -21,9 +21,10 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use midori_ipc_shm::RingConsumer;
+
 use crate::events_pipeline::{process_inline_payload, EventSink};
 use crate::events_schema::EventsSchema;
-use crate::ring_consumer::RingConsumer;
 
 /// ring が空のときに試行する初期 poll 間隔。100 µs は active stream
 /// 中（直前の poll で event を取れていて `backoff_step` が 0 にリセット
