@@ -16,10 +16,8 @@
 //! での shm fd 確保 / `mmap(2)` 呼び出し。これらは driver lifecycle 管理が
 //! 入った段階で別 module から本 module の関数を呼ぶ形で接続する。
 //!
-//! 公開 API は driver process spawn / control channel 経由で接続される予定で、
-//! 現状 main から caller が居ないため module 全体で `dead_code` を抑制する。
-//! 単体テストで挙動を担保している。
-#![allow(dead_code)]
+//! 本 module の関数は同 crate 内の `ring_consumer` から呼ばれ、また crate
+//! root から再エクスポートされて他 crate から利用可能。
 
 use std::error::Error;
 use std::fmt;

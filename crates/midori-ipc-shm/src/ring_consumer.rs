@@ -275,10 +275,14 @@ impl RingConsumer {
         let _ = self.mmap.flush();
     }
 
-    #[cfg(test)]
     /// テスト専用: producer 側のように 1 件 push する。in-process
     /// での単体テスト用ヘルパー。
-    pub(crate) fn test_push(&mut self, payload: &[u8]) -> bool {
+    ///
+    /// 本 crate のテスト (`cfg(test)`) と、`feature = "test-helpers"` を
+    /// dev-dependencies で有効化した上位 crate のテストからのみ可視。
+    /// プロダクション経路では使わない。
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn test_push(&mut self, payload: &[u8]) -> bool {
         let header_bytes_view: ShmHeaderView = ShmHeaderView::from_slice(&self.mmap);
         let write_index = header_bytes_view.write_index;
         let read_index = header_bytes_view.read_index;
@@ -309,13 +313,13 @@ impl RingConsumer {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 struct ShmHeaderView {
     write_index: u64,
     read_index: u64,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 impl ShmHeaderView {
     fn from_slice(bytes: &[u8]) -> Self {
         let mut w = [0u8; 8];

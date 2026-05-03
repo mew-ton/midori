@@ -2,6 +2,7 @@
 members = [
     "crates/midori-core",
     "crates/midori-sdk",
+    "crates/midori-ipc-shm",
     "crates/midori-runtime",
     "crates/midori-driver-midi",
     "crates/midori-driver-osc",
@@ -22,5 +23,6 @@ missing_errors_doc      = "allow"
 missing_panics_doc      = "allow"
 
 [workspace.dependencies]
-midori-core = { path = "crates/midori-core", version = "0.3.0" }
-midori-sdk  = { path = "crates/midori-sdk",  version = "0.2.0" }
+midori-core    = { path = "crates/midori-core",    version = "0.3.0" }
+midori-sdk     = { path = "crates/midori-sdk",     version = "0.2.0" }
+midori-ipc-shm = { path = "crates/midori-ipc-shm", version = "0.1.0" }

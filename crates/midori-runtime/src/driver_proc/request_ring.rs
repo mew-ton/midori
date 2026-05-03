@@ -2,11 +2,10 @@
 //!
 //! driver は handshake 中に `{"type":"request_ring","slot_size":<u32>}` を
 //! stdout に書き、Bridge は本構造体で parse する。Bridge 側は受領した
-//! `slot_size` を [`crate::ring_consumer::RingConsumer::create`] に渡す。
+//! `slot_size` を [`midori_ipc_shm::RingConsumer::create`] に渡す。
 //!
 //! `slot_size` の sentinel `0` は「default で確保してくれ」を意味する
-//! （詳細: `crates/midori-runtime/src/ring_handshake.rs` の
-//! `REQUEST_DEFAULT_SLOT_SIZE`）。
+//! （詳細: `midori_ipc_shm::REQUEST_DEFAULT_SLOT_SIZE`）。
 //!
 //! Bridge → driver の応答は 2 種類:
 //!
