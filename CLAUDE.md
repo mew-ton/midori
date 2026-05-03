@@ -18,7 +18,7 @@ Pre-existing 1-line / mechanical bugs surfaced during PR review are not fixed in
 
 - SP ≤ 1
 - Decision-free: single correct answer (typo, broken cross-reference, dead comment, doc claim that contradicts adjacent code)
-- No behavior change in non-test code, or a one-line behavior fix that is mechanically obvious
+- No behavior change in non-test code (even one-line fixes are excluded — choosing the correct new behavior requires judgment)
 - No new error variant, dep, function, or module added
 - Edits one source file, plus modest corresponding test changes (a few lines or one new test). Large test rewrites disqualify.
 
