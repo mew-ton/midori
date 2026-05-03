@@ -3,7 +3,10 @@
 //!
 //! Bridge は handshake で確保した shm fd を driver subprocess に渡す必要
 //! がある。pipe では fd を運べないため、`SCM_RIGHTS` を載せた `sendmsg(2)`
-//! / `recvmsg(2)` を使う。本 module は `nix::sys::socket` の薄いラッパーで:
+//! / `recvmsg(2)` を使う。`SCM_RIGHTS` セマンティクスは Linux と macOS で
+//! 同一なので、本 module は両 OS 共通実装として nix の `recvmsg` /
+//! `sendmsg` 経由で動かす（cmsg アラインメント差異が将来表面化したら OS
+//! 別 module へ分岐する）。本 module は `nix::sys::socket` の薄いラッパーで:
 //!
 //! - 送信側 [`send_fd`]: 1 byte の dummy payload と一緒に `OwnedFd` 1 個を
 //!   `SCM_RIGHTS` 制御メッセージとして送る
