@@ -23,14 +23,50 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 
-# Safe Unix syscall wrappers. Used by `driver_proc` to send SIGTERM to a
-# child process without an `unsafe { libc::kill }` block — the workspace
-# forbids `unsafe_code` (see `Cargo.toml` workspace lints).
+# Safe Unix syscall wrappers. `driver_proc` は SIGTERM のために `signal`
+# を、Linux 限定の inline ring consumer は `mman` (mmap/munmap) と
+# `nix::sys::memfd::memfd_create` を、fd-passing helper は SCM_RIGHTS の
+# sendmsg/recvmsg のために `socket` を使う。mmap 呼び出し自体は
+# `unsafe` (kernel が compiler の aliasing model 外でメモリを書換可能)
+# のため、後段の `unsafe_code = "deny"` lint override 参照。
+#
+# 注意: nix 0.30 では `memfd_create` は `mman` でも独自 feature でもなく、
+# `nix::sys::memfd` module 自体が `cfg(any(linux, android))` でゲート
+# されている（feature には現れない）。`mman` feature を有効にするだけで
+# Linux ビルド時に自動で利用可能になり、他 OS では module が存在しない。
+# 本 crate では module 利用側 (lib.rs) を `cfg(target_os = "linux")` で
+# 囲って macOS / Windows での参照を断つ運用にしている。
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", default-features = false, features = ["signal"] }
+nix = { version = "0.30", default-features = false, features = ["signal", "mman", "fs", "socket", "uio"] }
+# Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
+# because the kernel-backed memory can be mutated outside the compiler's
+# aliasing model; the returned `MmapMut` itself exposes a `&mut [u8]`-like
+# interface that is otherwise pure-safe Rust.
+memmap2 = "0.9"
 
 [dev-dependencies]
 tempfile = "3"
+# Cross-platform safe wrapper for `pipe(2)`. Used by the SCM_RIGHTS round-trip
+# test to construct a pair of file descriptors whose semantics are easy to
+# observe (write to one end, read on the other) without needing an `unsafe`
+# block in the test code itself.
+os_pipe = "1"
 
-[lints]
-workspace = true
+# NOTE: We intentionally do **not** inherit `lints.workspace = true` here.
+# The workspace lint table sets `unsafe_code = "forbid"`, which prevents this
+# crate from opting into the `unsafe` blocks required for OS-level shm work
+# (memfd_create + mmap, SCM_RIGHTS over UNIX domain sockets) in the driver
+# ↔ bridge inline ring ingest path. cargo rejects per-crate overrides while
+# inheriting the workspace lint table, so we re-declare every workspace lint
+# explicitly here and downgrade only `unsafe_code` to `deny`. Keep this list
+# in sync with `Cargo.toml`'s `[workspace.lints]` block when it changes.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all         = { level = "warn", priority = -1 }
+pedantic    = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"

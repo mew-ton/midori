@@ -1,9 +1,6 @@
 mod error;
-mod events_pipeline;
-mod events_schema;
 mod plugin_resolver;
 mod profile;
-mod ring_handshake;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -11,9 +8,9 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 use crate::error::CliError;
-use crate::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
 use crate::plugin_resolver::{resolve_drivers, ResolvedDrivers};
 use crate::profile::{collect_driver_names, load_from_path as load_profile};
+use midori_runtime::events_pipeline::{check_driver_schema, DriverSchemaOutcome};
 use midori_runtime::logging;
 use midori_runtime::logging::{LogFormat, LogLevel};
 
@@ -369,7 +366,7 @@ mod tests {
             matches!(
                 err,
                 CliError::StartupCheck {
-                    source: crate::events_pipeline::StartupCheckError::Validate { .. }
+                    source: midori_runtime::events_pipeline::StartupCheckError::Validate { .. }
                 }
             ),
             "expected StartupCheck::Validate, got {err:?}"
@@ -435,7 +432,8 @@ mod tests {
             matches!(
                 err,
                 CliError::StartupCheck {
-                    source: crate::events_pipeline::StartupCheckError::FeatureUnavailable { .. }
+                    source:
+                        midori_runtime::events_pipeline::StartupCheckError::FeatureUnavailable { .. }
                 }
             ),
             "expected StartupCheck::FeatureUnavailable, got {err:?}"
@@ -452,7 +450,7 @@ mod tests {
             matches!(
                 err,
                 CliError::StartupCheck {
-                    source: crate::events_pipeline::StartupCheckError::Load { .. }
+                    source: midori_runtime::events_pipeline::StartupCheckError::Load { .. }
                 }
             ),
             "expected StartupCheck::Load, got {err:?}"
@@ -473,7 +471,7 @@ mod tests {
             matches!(
                 err,
                 CliError::StartupCheck {
-                    source: crate::events_pipeline::StartupCheckError::Validate { .. }
+                    source: midori_runtime::events_pipeline::StartupCheckError::Validate { .. }
                 }
             ),
             "expected StartupCheck::Validate, got {err:?}"
