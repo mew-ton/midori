@@ -23,14 +23,44 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 
-# Safe Unix syscall wrappers. Used by `driver_proc` to send SIGTERM to a
-# child process without an `unsafe { libc::kill }` block — the workspace
-# forbids `unsafe_code` (see `Cargo.toml` workspace lints).
+# Safe Unix syscall wrappers. `driver_proc` uses `signal` for SIGTERM, the
+# inline ring consumer uses `mman` (mmap/munmap) and `memfd` (memfd_create)
+# to allocate per-driver shared memory, and the fd-passing helper uses
+# `socket` for SCM_RIGHTS sendmsg/recvmsg. The mmap calls themselves are
+# `unsafe` by definition (the kernel can map memory the compiler cannot
+# reason about); see the per-crate `unsafe_code = "deny"` lint override
+# below for the policy rationale.
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", default-features = false, features = ["signal"] }
+nix = { version = "0.30", default-features = false, features = ["signal", "mman", "fs", "socket", "uio"] }
+# Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
+# because the kernel-backed memory can be mutated outside the compiler's
+# aliasing model; the returned `MmapMut` itself exposes a `&mut [u8]`-like
+# interface that is otherwise pure-safe Rust.
+memmap2 = "0.9"
 
 [dev-dependencies]
 tempfile = "3"
+# Cross-platform safe wrapper for `pipe(2)`. Used by the SCM_RIGHTS round-trip
+# test to construct a pair of file descriptors whose semantics are easy to
+# observe (write to one end, read on the other) without needing an `unsafe`
+# block in the test code itself.
+os_pipe = "1"
 
-[lints]
-workspace = true
+# NOTE: We intentionally do **not** inherit `lints.workspace = true` here.
+# The workspace lint table sets `unsafe_code = "forbid"`, which prevents this
+# crate from opting into the `unsafe` blocks required for OS-level shm work
+# (memfd_create + mmap, SCM_RIGHTS over UNIX domain sockets) in the driver
+# ↔ bridge inline ring ingest path. cargo rejects per-crate overrides while
+# inheriting the workspace lint table, so we re-declare every workspace lint
+# explicitly here and downgrade only `unsafe_code` to `deny`. Keep this list
+# in sync with `Cargo.toml`'s `[workspace.lints]` block when it changes.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all         = { level = "warn", priority = -1 }
+pedantic    = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"

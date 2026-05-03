@@ -1,4 +1,5 @@
-use crate::events_pipeline::StartupCheckError;
+use midori_runtime::events_pipeline::StartupCheckError;
+
 use crate::plugin_resolver::ResolveError;
 use crate::profile::ProfileLoadError;
 

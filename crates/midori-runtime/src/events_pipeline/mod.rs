@@ -24,23 +24,13 @@
 //! - 本ファイル: [`EventSink`] / [`LoggingSink`] / [`process_inline_payload`]
 //! - `tests`: 統合テスト
 
-// `decode` / `runtime_check` 経路は SPSC ring からの実 ingest 配線後に
-// 実 caller が付く予定。それまで本ファイル直下の SPSC 連携 stub
-// (`LoggingSink` / `process_inline_payload` / `try_process` / `ProcessError`)
-// と sub-module 群はいずれも dead_code 警告を生むので、type 単位で個別に
-// allow する。`startup` は main から駆動済みのため対象外。
-#[allow(dead_code, unused_imports)]
+// `decode` / `runtime_check` は `ring_ingest` 経由の実 caller が付いた
+// ので dead_code 抑制を外す。`startup` は main から駆動済み。
 mod decode;
-#[allow(dead_code, unused_imports)]
 mod runtime_check;
 mod startup;
 
-// `decode` / `runtime_check` の type は SPSC ingest 配線で表面に出るが
-// 本 subtask の段階では caller が居ない。再 export 自体は維持して、
-// 個別 import 警告は module 内 allow に委ねる。
-#[allow(unused_imports)]
 pub use decode::{decode_event, DecodeError, DecodedPayload, FieldValue};
-#[allow(unused_imports)]
 pub use runtime_check::{check_event, RuntimeCheckError, ValidatedEvent};
 pub use startup::{check_driver_schema, DriverSchemaOutcome, StartupCheckError};
 
@@ -55,7 +45,6 @@ pub trait EventSink {
 }
 
 /// stderr に最小情報だけ書き出す `EventSink` の素朴実装。trace 用途。
-#[allow(dead_code)]
 pub struct LoggingSink;
 
 impl EventSink for LoggingSink {
@@ -76,7 +65,6 @@ impl EventSink for LoggingSink {
 /// 値検証ができないため、wire format が偶然正しくても受理しない）。caller
 /// が `LoadOutcome::Missing` を warning として扱いつつパイプラインを継続
 /// したい場合も、本関数は payload を sink へ流さない。
-#[allow(dead_code)]
 pub fn process_inline_payload(
     driver_name: &str,
     schema: Option<&EventsSchema>,
@@ -91,7 +79,6 @@ pub fn process_inline_payload(
 
 /// `process_inline_payload` の純関数版。テストでログ捕捉に頼らず
 /// 失敗種別をパターンマッチで検査するために露出する。
-#[allow(dead_code)]
 pub(crate) fn try_process(
     driver_name: &str,
     schema: Option<&EventsSchema>,
@@ -104,7 +91,6 @@ pub(crate) fn try_process(
 }
 
 /// パイプラインの 3 段が出すエラーを集約した単一型（テスト・観測用）。
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum ProcessError {
     Decode(DecodeError),

@@ -67,8 +67,13 @@ use std::time::Duration;
 mod handshake;
 mod lifecycle;
 mod log_forward;
+mod request_ring;
 
 pub use log_forward::{non_json_line_to_log_event, LogEvent};
+pub use request_ring::{
+    try_parse_request_ring, RequestRingMessage, RingReadyMessage, RingRejectedMessage,
+    REQUEST_RING_TYPE, RING_READY_TYPE, RING_REJECTED_TYPE,
+};
 
 use handshake::{
     is_sdk_compatible, json_type_error, read_hello_line, write_hello_ack, Compatibility,
