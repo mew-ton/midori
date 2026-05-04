@@ -67,12 +67,6 @@ name = "cbindgen"
 allow = ["MPL-2.0"]
 
 [[licenses.exceptions]]
-# Transitive dep of `dirs` → `dirs-sys`. MPL-2.0 obligations apply only
-# to modified upstream files, which the workspace does not do.
-name = "option-ext"
-allow = ["MPL-2.0"]
-
-[[licenses.exceptions]]
 # memchr's SPDX expression is `Unlicense OR MIT`, so today it satisfies
 # the global allow via MIT and the Unlicense branch goes unused. The
 # exception is kept as a safety net: if MIT is ever narrowed out of the

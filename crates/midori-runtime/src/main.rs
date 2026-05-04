@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use etcetera::BaseStrategy;
 
 use crate::error::CliError;
 use crate::plugin_resolver::{resolve_drivers, ResolvedDrivers};
@@ -118,23 +119,30 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
     Ok(())
 }
 
-/// CLI override が無ければ OS 標準のアプリデータディレクトリを `dirs` 経由
-/// で解決する。`design/04-runtime-cli.md` の表に従い:
+/// CLI override が無ければ OS 標準のアプリデータディレクトリを
+/// `etcetera::BaseStrategy::data_dir()` 経由で解決する。
+/// `design/04-runtime-cli.md` の表に従い:
 /// - macOS: `~/Library/Application Support/Midori`
 /// - Windows: `%APPDATA%\Midori`
 /// - Linux: `$XDG_DATA_HOME/midori`（未設定時 `~/.local/share/midori`）
+///
+/// `etcetera` の `choose_base_strategy()` は HOME ディレクトリを解決
+/// できなかったとき `Err(HomeDirError)` を返す。これは `dirs::data_dir()`
+/// が `None` を返していた条件と同等なので、いずれの失敗モードも
+/// `CliError::AppDataDirUnavailable` にマップして既存の error contract
+/// を維持する。
 fn resolve_app_data_dir(cli_override: Option<&Path>) -> Result<PathBuf, CliError> {
     if let Some(path) = cli_override {
         return Ok(path.to_path_buf());
     }
-    let base = dirs::data_dir().ok_or(CliError::AppDataDirUnavailable)?;
-    Ok(
-        base.join(if cfg!(any(target_os = "macos", target_os = "windows")) {
+    let base = etcetera::choose_base_strategy().map_err(|_| CliError::AppDataDirUnavailable)?;
+    Ok(base
+        .data_dir()
+        .join(if cfg!(any(target_os = "macos", target_os = "windows")) {
             "Midori"
         } else {
             "midori"
-        }),
-    )
+        }))
 }
 
 #[cfg(test)]
