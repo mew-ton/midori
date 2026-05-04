@@ -29,7 +29,12 @@
 //!   シグネチャを公開し、本 module の [`RingConsumer::create`] が
 //!   cfg dispatch する。
 //!
-//! Windows backend (`CreateFileMapping` ベース) は未実装（将来対応予定）。
+//! Windows backend (`CreateFileMappingW` + Named Pipe + `DuplicateHandle`
+//! ベース) は同 crate の `ring_consumer_windows` module 側で別実装として
+//! 提供される。fd と HANDLE で OS 抽象が異なる (前者は `OwnedFd` /
+//! `SCM_RIGHTS`、後者は `OwnedHandle` / Named Pipe) ため、本 module の
+//! Linux / macOS 共通 `RingConsumer` とは型シグネチャを共有せず、cfg で
+//! 排他に export する形を採る (詳細は crate root doc 参照)。
 //!
 //! # Safety
 //!

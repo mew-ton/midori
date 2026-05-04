@@ -39,20 +39,23 @@
 //!   `CreateFileMappingW` ベースの shm 確保と Named Pipe + `DuplicateHandle`
 //!   ベースの HANDLE handoff を実装する。
 //!
-//! 公開 re-export は OS 別の cfg ゲートで露出する。Linux 上では
+//! 公開 re-export は OS 別の cfg ゲートで露出する。Linux / macOS 上では
 //! `RingConsumer` / `CreateError` (`ring_consumer` から) と `send_fd` /
 //! `recv_fd` (`fd_socket` から) を、Windows 上では `RingConsumer` /
 //! `CreateError` (`ring_consumer_windows` から) と `PipeName` /
 //! `create_pipe_server` / `accept_and_send` / `connect_and_recv` /
 //! `HandlePipeError` (`handle_pipe_windows` から) を export する。
 //!
-//! macOS では内部 module のビルド / テストはされるが、Bridge runtime 層の
-//! cfg ゲート整理が完了するまで公開 API としての解禁は保留する（その整理が
-//! 完了したら Linux 経路の `pub use` の cfg を `any(linux, macos)` に広げて
-//! symbol を解禁する）。callers that need to compile across OSes must wrap
-//! their use of OS-specific symbols in the matching
-//! `#[cfg(target_os = "...")]` themselves — this crate does not paper over
-//! the platform gap with stubs.
+//! Linux と macOS は同名 type (`RingConsumer` / `CreateError` / `send_fd` /
+//! `recv_fd`) を共有するため、`pub use` 文を 1 本にまとめて
+//! `cfg(any(target_os = "linux", target_os = "macos"))` で gating する。
+//! Windows backend は型名は同じだが内部 namespace が独立しているので
+//! `pub use` 文も別建て (`cfg(target_os = "windows")`) で持つ。
+//!
+//! callers that need to compile across OSes must wrap their use of
+//! OS-specific symbols in the matching `#[cfg(target_os = "...")]`
+//! themselves — this crate does not paper over the platform gap with
+//! stubs.
 //!
 //! # Public surface
 //!
@@ -62,11 +65,11 @@
 //!   [`resolve_requested_slot_size`], [`page_aligned_shm_size`],
 //!   [`PAGE_SIZE`]
 //!
-//! From `ring_consumer` (Linux only, until macOS public surface is unlocked):
+//! From `ring_consumer` (Linux / macOS):
 //!
 //! - [`RingConsumer`], [`CreateError`]
 //!
-//! From `fd_socket` (Linux only, until macOS public surface is unlocked):
+//! From `fd_socket` (Linux / macOS):
 //!
 //! - [`send_fd`], [`recv_fd`]
 //!
@@ -99,13 +102,13 @@ pub use ring_handshake::{
     REQUEST_DEFAULT_SLOT_SIZE,
 };
 
-// 公開 re-export は当面 Linux のみ。macOS でも内部 module はビルド /
-// テストされているが、Bridge runtime 層の cfg ゲート整理が完了するまで
-// 外部公開は保留する（その整理が完了したら下記 cfg を `any(linux, macos)`
-// に広げて symbol を解禁する）。
-#[cfg(target_os = "linux")]
+// 公開 re-export は Linux と macOS で同一 (`fd_socket` / `ring_consumer`
+// は両 OS で同名 type を露出する単一実装)。Windows backend は別 module
+// (`handle_pipe_windows` / `ring_consumer_windows`) に分かれているので
+// `pub use` 文を別建てで持つ。
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use fd_socket::{recv_fd, send_fd};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use ring_consumer::{CreateError, RingConsumer};
 
 #[cfg(target_os = "windows")]
