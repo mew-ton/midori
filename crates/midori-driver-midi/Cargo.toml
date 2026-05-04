@@ -15,7 +15,7 @@ midir = "0.11.0"
 midori-sdk = { workspace = true }
 
 [dev-dependencies]
-midori-runtime = { path = "../midori-runtime" }
+midori-runtime = { workspace = true }
 serde_yaml_ng = "0.10"
 
 [lints]

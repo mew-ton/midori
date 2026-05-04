@@ -101,9 +101,10 @@ mod tests {
     }
 
     #[test]
-    fn it_should_return_device_list_without_panic() {
-        // Hardware-less environment may return an empty Vec.
-        // Goal: ensure collect_devices() does not panic.
+    fn it_should_not_panic_when_collecting_devices() {
+        // Hardware-less CI runners can return any number of ports
+        // (typically zero), so the only stable contract worth asserting
+        // here is "the call returns without panicking".
         let _devices = collect_devices();
     }
 }
