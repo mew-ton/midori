@@ -37,6 +37,13 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
 
+      # `midori-driver-midi` pulls in `midir`, which on Linux links the
+      # ALSA C library via `alsa-sys`. macOS uses CoreMIDI and Windows
+      # uses WinMM, so the headers are only required on the Linux runner.
+      - name: install ALSA headers (Linux)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        if: matrix.os == 'ubuntu-latest'
+
       - name: fmt
         run: cargo fmt --all --check
         if: matrix.os == 'ubuntu-latest'

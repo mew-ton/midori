@@ -11,7 +11,12 @@ name = "midori-driver-midi"
 path = "src/main.rs"
 
 [dependencies]
+midir = "0.11.0"
 midori-sdk = { workspace = true }
+
+[dev-dependencies]
+midori-runtime = { workspace = true }
+serde_yaml_ng = "0.10"
 
 [lints]
 workspace = true

@@ -26,3 +26,4 @@ missing_panics_doc      = "allow"
 midori-core    = { path = "crates/midori-core",    version = "0.3.0" }
 midori-sdk     = { path = "crates/midori-sdk",     version = "0.2.0" }
 midori-ipc-shm = { path = "crates/midori-ipc-shm", version = "0.1.0" }
+midori-runtime = { path = "crates/midori-runtime", version = "0.1.0" }
