@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use etcetera::BaseStrategy;
 
 use crate::error::CliError;
 use crate::plugin_resolver::{resolve_drivers, ResolvedDrivers};
@@ -118,23 +119,39 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
     Ok(())
 }
 
-/// CLI override が無ければ OS 標準のアプリデータディレクトリを `dirs` 経由
-/// で解決する。`design/04-runtime-cli.md` の表に従い:
+/// CLI override が無ければ OS 標準のアプリデータディレクトリを
+/// `etcetera::base_strategy::choose_native_strategy()` で解決し、
+/// app 名 (`Midori` / `midori`) を join して返す。
+///
+/// 解決される path:
 /// - macOS: `~/Library/Application Support/Midori`
 /// - Windows: `%APPDATA%\Midori`
 /// - Linux: `$XDG_DATA_HOME/midori`（未設定時 `~/.local/share/midori`）
+///
+/// `choose_base_strategy` ではなく `choose_native_strategy` を使う
+/// 理由: 後者は macOS で `Apple` 戦略
+/// (`~/Library/Application Support`) を、Windows で `Windows` 戦略
+/// (`%APPDATA%`) を、それ以外で `Xdg` 戦略を選ぶ。前者は CLI 慣習で
+/// macOS でも XDG (`~/.local/share`) を返すため、上記 macOS path と
+/// 乖離してしまう。
+///
+/// 失敗モード: HOME / `%APPDATA%` 等の resolution 元が unset の
+/// とき `choose_native_strategy()` は `Err(HomeDirError)` を返す。
+/// これを `CliError::AppDataDirUnavailable` にマップし、CLI 層で
+/// 「アプリデータディレクトリが解決できなかった」として扱えるようにする。
 fn resolve_app_data_dir(cli_override: Option<&Path>) -> Result<PathBuf, CliError> {
     if let Some(path) = cli_override {
         return Ok(path.to_path_buf());
     }
-    let base = dirs::data_dir().ok_or(CliError::AppDataDirUnavailable)?;
-    Ok(
-        base.join(if cfg!(any(target_os = "macos", target_os = "windows")) {
+    let base = etcetera::base_strategy::choose_native_strategy()
+        .map_err(|_| CliError::AppDataDirUnavailable)?;
+    Ok(base
+        .data_dir()
+        .join(if cfg!(any(target_os = "macos", target_os = "windows")) {
             "Midori"
         } else {
             "midori"
-        }),
-    )
+        }))
 }
 
 #[cfg(test)]

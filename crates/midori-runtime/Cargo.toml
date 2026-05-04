@@ -22,7 +22,15 @@ midori-core = { workspace = true }
 # why `lints.workspace = true` (i.e. `unsafe_code = "forbid"`) holds here.
 midori-ipc-shm = { workspace = true }
 clap = { version = "4", features = ["derive"] }
-dirs = "5"
+# Cross-platform user-directory resolution. Chosen over `dirs` to
+# avoid the MPL-2.0 `option-ext` transitive (`dirs → dirs-sys →
+# option-ext`) so the workspace's license posture stays permissive
+# ahead of the `midori-core` / `midori-sdk` crates.io publish track.
+# Use `etcetera::choose_native_strategy()` (not `choose_base_strategy`)
+# to match `dirs::data_dir()`'s platform behavior:
+# `~/Library/Application Support` on macOS, `%APPDATA%` on Windows,
+# `$XDG_DATA_HOME` (default `~/.local/share`) on Linux. MIT OR Apache-2.0.
+etcetera = "0.11"
 rmpv = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
