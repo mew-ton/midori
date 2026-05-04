@@ -17,6 +17,7 @@
 | `midori-sdk` | crates.io | ドライバー作者が直接依存するライブラリ |
 | `midori-runtime` | 公開しない | バイナリ配布（`design/12-distribution.md`）と npm shim 経由 |
 | `midori-driver-midi` / `midori-driver-osc` | 公開しない | 公式ドライバーバイナリ。`midori-runtime` に同梱 |
+| `midori-driver-dummy` | 公開しない | runtime の lifecycle / handshake 統合テスト用ハーネス。本番 runtime には含めない |
 | `midori-ipc-shm` | 公開しない | workspace 内部 crate（`unsafe` 隔離目的） |
 
 publish 対象 crate には `Cargo.toml` の `description` / `license` / `repository` / `readme` が揃っている必要がある。`midori-ipc-shm` のような workspace 内部専用 crate はこれらの整備義務を負わない。
@@ -53,12 +54,14 @@ publish 対象 crate には `Cargo.toml` の `description` / `license` / `reposi
 
 ### `Cargo.lock` と `[workspace.dependencies].version`
 
-workspace dependency entry は `path` と `version` の両方を持たせる：
+workspace dependency entry は **公開する / しないに関わらず** `path` と `version` の両方を持たせる。`cargo-deny` の wildcard ゲートは publish 対象だけを見るのではなく workspace 全体の依存グラフを評価するため、内部 crate も例外にできない:
 
 ```toml
 [workspace.dependencies]
-midori-core = { path = "crates/midori-core", version = "0.3.0" }
-midori-sdk  = { path = "crates/midori-sdk",  version = "0.2.0" }
+midori-core    = { path = "crates/midori-core",    version = "0.3.0" }
+midori-sdk     = { path = "crates/midori-sdk",     version = "0.2.0" }
+midori-ipc-shm = { path = "crates/midori-ipc-shm", version = "0.1.0" }
+midori-runtime = { path = "crates/midori-runtime", version = "0.1.0" }
 ```
 
 `version` を欠いた path-only エントリは `cargo publish` 時に wildcard 扱いとなり、`cargo-deny` の `bans.wildcards = "deny"` ゲートで失敗する。bump のたびに該当 crate の `version` も更新する。
@@ -82,7 +85,7 @@ midori-sdk  = { path = "crates/midori-sdk",  version = "0.2.0" }
 
 各 publish 対象 crate は `CHANGELOG.md` を持つ：
 
-```
+```text
 crates/midori-core/CHANGELOG.md
 crates/midori-sdk/CHANGELOG.md
 ```
@@ -134,7 +137,7 @@ GitHub Actions workflow が整うまで、または ad-hoc release では本手�
 依存順序に注意する。`midori-sdk` は `midori-core` に依存するため、`midori-core` を先に publish して crates.io 側で resolvable になってから `midori-sdk` を publish する。
 
 ```bash
-# 1. dry-run で検証（package のビルド・lint・依存解決まで通すが publish はしない）
+# 1. dry-run で midori-core の package をローカル検証（package build / lint / 依存解決を通すが publish はしない）
 cargo publish --dry-run -p midori-core
 
 # 2. dry-run が green なら本 publish
@@ -143,13 +146,15 @@ cargo publish -p midori-core
 # 3. crates.io 側で index 反映を待つ（数秒〜数十秒）
 #    反映されないうちに依存 crate を publish するとエラーになる
 
-# 4. 依存 crate の dry-run で「公開済 midori-core」が見えることを確認
+# 4. midori-sdk の package をローカルで dry-run（lint / FFI 整合チェック）
+#    workspace path 依存があるためこの dry-run は midori-core を crates.io から
+#    解決しない。crates.io 側の resolvability は手順 5 の本 publish が真に検証する
 cargo publish --dry-run -p midori-sdk
 
-# 5. midori-sdk を publish
+# 5. midori-sdk を publish（ここで初めて crates.io から midori-core を解決する）
 cargo publish -p midori-sdk
 
-# 6. tag を打って push（手順 4 の dry-run まで成功してから打つ）
+# 6. 両 publish 成功後に tag を打って push（手順 5 まで通ってから）
 git tag midori-core-v0.3.0 <publish-commit>
 git tag midori-sdk-v0.2.0 <publish-commit>
 git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
@@ -165,7 +170,7 @@ git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
 
 ## GitHub Actions release workflow
 
-`.github/workflows/release.yml` を canonical な publish 経路として維持する（実装は別 subtask）。
+`.github/workflows/release.yml` を canonical な publish 経路として維持する。本ファイルが repo 内に存在しない場合は、本セクションの規約（トリガー / Secrets / 推奨デフォルト）に従って新規追加する。
 
 ### トリガー
 
@@ -188,6 +193,8 @@ git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
 
 ## バージョニング詳細ルール（保留）
 
-semver 適用境界の細かい運用ルール（例: deprecation 期間、`#[non_exhaustive]` 適用ガイドラインの拡張、breaking 範囲のグレーゾーン判定）は本ドキュメントに含めない。`design/15-sdk-bindings-api.md` で SDK 側の構造体・enum 拡張ポリシーが既に確立されているため、運用上のオーバーラップが顕在化した時点で別ドキュメントに切り出す。
+semver 適用境界の細かい運用ルール（例: deprecation 期間、`#[non_exhaustive]` 適用ガイドラインの拡張、breaking 範囲のグレーゾーン判定）は本ドキュメントに含めない。
+
+`design/15-sdk-bindings-api.md` は **特定の拡張パターン**（`struct_size` guard を持つ `#[repr(C)]` 構造体への末尾追加、`#[non_exhaustive]` enum へのバリアント追加）を minor bump で扱える根拠として確立しているが、semver 境界線そのものの確定は同ドキュメントの「スコープに入れないもの」に明記されている。本ドキュメントの上記「major bump の判断基準」が運用上の境界の現時点での合意。運用上のオーバーラップが顕在化した時点で別ドキュメントに切り出す。
 
 現状の運用粒度: 「迷ったら major bump」「破壊変更は CHANGELOG の `### Breaking changes` で必ず予告する」だけで十分機能する。
