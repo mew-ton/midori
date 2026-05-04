@@ -155,7 +155,7 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
    - **必要 `slot_size = ((max_payload_size + 8) + 3) & !3`**（ヘッダ 8 byte 加算後、`payload_len: u32` の natural alignment 維持のため 4 byte 倍数へ切り上げ。`!3` は bitwise NOT で `0xFFFF...FFFC` を生成し下位 2 bit をマスクするイディオム。算術等価式: `((max_payload_size + 8 + 3) / 4) * 4`）
 
    この algorithm は本書を **唯一の規範** とする（[00-overview.md](./00-overview.md) は summary で参照するのみ）。
-3. **driver → Bridge** へ `request_ring(slot_size)` を送信（control channel 経由、handshake 必須メッセージ）
+3. **driver → Bridge** へ `request_ring(slot_size)` を送信（JSON Lines control channel = driver stdin/stdout 経由、handshake 必須メッセージ）
    - `slot_size <= DEFAULT_SLOT_SIZE` の場合: `slot_size = 0`（sentinel）を送信 → Bridge は DEFAULT で確保
    - 超える場合: 計算した `slot_size` を送信 → Bridge は受信値を採用（ただし上限チェックあり、step 4 参照）
 4. **Bridge 側で受領**:
@@ -171,7 +171,10 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
    - Windows: 事前に確立した Named Pipe で `DuplicateHandle(... DUPLICATE_SAME_ACCESS)` 済みの HANDLE 値 (u64 host endian) を 1 byte の sentinel (`0x01`、空メッセージを許容しない pipe API のための最小 payload) と一緒に送る (合計 9 byte)
 6. **driver は受け取った handle を mmap (`mmap(2)` / `MapViewOfFile`) し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
 
-control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2 の handshake protocol (Bridge ↔ driver の handle / fd 受け渡し) と統合する。Linux / macOS は Unix domain socket で fd を、Windows は Named Pipe で HANDLE を送る (上述「OS 別実装方針」節参照)。`request_ring` / `ring_ready` / `ring_rejected` の JSON 本体は OS を問わず driver stdout 経由で運ぶ (詳細は実装 Issue)。
+handshake は **2 系統のチャネル** で構成される。両者の役割を混同しないよう明示する:
+
+- **JSON Lines control channel (driver stdin/stdout)**: `request_ring` / `ring_ready` / `ring_rejected` の JSON メッセージ本体を OS を問わず運ぶ。wire format は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2 の handshake protocol と統合する
+- **handle handoff channel (OS 別)**: shm への参照 (fd / HANDLE) を運ぶための OS native な機構。Linux / macOS は Unix domain socket 上の `SCM_RIGHTS`、Windows は Named Pipe 上の `DuplicateHandle` 値転送（上述「OS 別実装方針」節参照）
 
 ### reject 時の挙動
 
@@ -370,8 +373,8 @@ fn validate_compat(header: &ShmHeader) -> Result<(), CompatError> {
 
 本書で **触らない** もの:
 
-- handshake の具体的なソケット / control channel 実装
-- mmap 確保コード・アンマップ手順
+- driver stdin/stdout 上の JSON Lines wire format 詳細（メッセージ encoding / framing 規約は `design/15-sdk-bindings-api.md` 参照。本書は protocol step が JSON Lines control channel に乗ることだけを規定する）
+- mmap 確保 / handle handoff の具体的なコード（call site レベルの Rust 実装は `crates/midori-ipc-shm` を参照。本書は API 抽象と OS 別 syscall 選択までを規定する）
 - L1 FFI の C ABI 詳細
 - driver lifetime 中の slot_size 変更
 - 圧縮、multi-producer
