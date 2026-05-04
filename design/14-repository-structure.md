@@ -162,7 +162,7 @@ midori-core = { path = "crates/midori-core", version = "0.3.0" }
 midori-sdk  = { path = "crates/midori-sdk",  version = "0.2.0" }
 ```
 
-各クレートの `Cargo.toml` では `workspace.dependencies` を参照することで、バージョン管理を workspace root に集約する。`path` と `version` を併記する理由および bump 時の追従ルールは `release-process.md` を参照。
+各クレートの `Cargo.toml` では `workspace.dependencies` を参照することで、バージョン管理を workspace root に集約する。`path` と `version` を併記する理由および bump 時の追従ルールは `release-process/rust-crates.md` を参照。
 
 ---
 

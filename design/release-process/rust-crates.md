@@ -1,11 +1,11 @@
-# Crate Release Process
+# Rust Crates Release Process
 
 > ステータス：運用ドキュメント
-> 最終更新：2026-05-04
+> 最終更新：2026-05-05
 
-このドキュメントは Rust crates（`midori-core`, `midori-sdk`）の crates.io への release 運用を定める。エンドユーザー向けアプリ配布（`design/12-distribution.md`）とは別物で、対象は **crate を消費する開発者**および**メンテナ自身**。
+このドキュメントは midori プロジェクトの release 運用のうち **Rust crates（`midori-core`, `midori-sdk`）の crates.io への publish** を扱う。Electron デスクトップアプリのバイナリ配布や JS パッケージの npm 公開は別トラックで、各 sibling ドキュメント（`./README.md` の一覧参照）が独立して扱う。エンドユーザー向けアプリ配布の方針は `../12-distribution.md`。
 
-リポジトリの crate 構成と公開先方針は `design/14-repository-structure.md` が前提。本ドキュメントは「どのクレートを publish するか」ではなく「**いつ・どうやって publish するか**」を扱う。
+リポジトリの crate 構成と公開先方針は `../14-repository-structure.md` が前提。本ドキュメントは「どのクレートを publish するか」ではなく「**いつ・どうやって publish するか**」を扱う。
 
 ---
 
@@ -15,7 +15,7 @@
 |---|---|---|
 | `midori-core` | crates.io | 型・プロトコル定義。`midori-sdk` が依存する |
 | `midori-sdk` | crates.io | ドライバー作者が直接依存するライブラリ |
-| `midori-runtime` | 公開しない | バイナリ配布（`design/12-distribution.md`）と npm shim 経由 |
+| `midori-runtime` | 公開しない | バイナリ配布（`../12-distribution.md`）と npm shim 経由 |
 | `midori-driver-midi` / `midori-driver-osc` | 公開しない | 公式ドライバーバイナリ。`midori-runtime` に同梱 |
 | `midori-driver-dummy` | 公開しない | runtime の lifecycle / handshake 統合テスト用ハーネス。本番 runtime には含めない |
 | `midori-ipc-shm` | 公開しない | workspace 内部 crate（`unsafe` 隔離目的） |
@@ -50,7 +50,7 @@ publish 対象 crate には `Cargo.toml` の `description` / `license` / `reposi
 
 迷う場合は major bump を選ぶ。crates.io は publish 後の version 削除をサポートしないため、互換性を弱く宣言してしまう方がリスクが大きい。
 
-例外として `design/15-sdk-bindings-api.md` で確立済みのパターン（`struct_size` guard を持つ `#[repr(C)]` 構造体への末尾追加、`#[non_exhaustive]` enum へのバリアント追加）は **minor bump で扱える**。これらは旧バイナリ / 旧 enum match を壊さないことが構造的に保証されているため。詳細な適用条件は `15-sdk-bindings-api.md` の該当節に従う。
+例外として `../15-sdk-bindings-api.md` で確立済みのパターン（`struct_size` guard を持つ `#[repr(C)]` 構造体への末尾追加、`#[non_exhaustive]` enum へのバリアント追加）は **minor bump で扱える**。これらは旧バイナリ / 旧 enum match を壊さないことが構造的に保証されているため。詳細な適用条件は同ドキュメントの該当節に従う。
 
 ### `Cargo.lock` と `[workspace.dependencies].version`
 
@@ -195,6 +195,6 @@ git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
 
 semver 適用境界の細かい運用ルール（例: deprecation 期間、`#[non_exhaustive]` 適用ガイドラインの拡張、breaking 範囲のグレーゾーン判定）は本ドキュメントに含めない。
 
-`design/15-sdk-bindings-api.md` は **特定の拡張パターン**（`struct_size` guard を持つ `#[repr(C)]` 構造体への末尾追加、`#[non_exhaustive]` enum へのバリアント追加）を minor bump で扱える根拠として確立しているが、semver 境界線そのものの確定は同ドキュメントの「スコープに入れないもの」に明記されている。本ドキュメントの上記「major bump の判断基準」が運用上の境界の現時点での合意。運用上のオーバーラップが顕在化した時点で別ドキュメントに切り出す。
+`../15-sdk-bindings-api.md` は **特定の拡張パターン**（`struct_size` guard を持つ `#[repr(C)]` 構造体への末尾追加、`#[non_exhaustive]` enum へのバリアント追加）を minor bump で扱える根拠として確立しているが、semver 境界線そのものの確定は同ドキュメントの「スコープに入れないもの」に明記されている。本ドキュメントの上記「major bump の判断基準」が運用上の境界の現時点での合意。運用上のオーバーラップが顕在化した時点で別ドキュメントに切り出す。
 
 現状の運用粒度: 「迷ったら major bump」「破壊変更は CHANGELOG の `### Breaking changes` で必ず予告する」だけで十分機能する。
