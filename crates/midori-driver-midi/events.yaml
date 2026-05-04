@@ -1,0 +1,75 @@
+schema_version: 1
+
+# TODO(MEW-75): SysEx (system exclusive) event を追加する。streamed tier
+# 実装完了が前提（inline tier の HARD_SLOT_SIZE = 64 KiB では Electone
+# bulk dump 等の可変長 / 大型 SysEx を運べないため）。
+
+# 全イベント共通の field 宣言。loader は単独で validate するだけで、
+# 各 event への自動 merge はしない（merge は将来の runtime 層で実装予定）。
+# DRY としての意図は「MIDI channel の意味論を 1 箇所で固定し、
+# 各 event の channel 宣言と乖離しないことをレビュー時に確認するため」。
+defaults:
+  channel: { type: uint8, range: [1, 16] }
+
+events:
+  noteOn:
+    tier: inline
+    fields:
+      channel:  { type: uint8, range: [1, 16] }
+      note:     { type: uint8, range: [0, 127] }
+      velocity: { type: uint8, range: [0, 127] }
+    binding_filter: [type, channel]
+    note_field: note
+
+  noteOff:
+    tier: inline
+    fields:
+      channel:  { type: uint8, range: [1, 16] }
+      note:     { type: uint8, range: [0, 127] }
+      velocity: { type: uint8, range: [0, 127], optional: true, default: 0 }
+    binding_filter: [type, channel]
+    note_field: note
+
+  polyAftertouch:
+    tier: inline
+    fields:
+      channel:  { type: uint8, range: [1, 16] }
+      note:     { type: uint8, range: [0, 127] }
+      pressure: { type: uint8, range: [0, 127] }
+    binding_filter: [type, channel]
+    note_field: note
+
+  channelAftertouch:
+    tier: inline
+    fields:
+      channel:  { type: uint8, range: [1, 16] }
+      pressure: { type: uint8, range: [0, 127] }
+    binding_filter: [type, channel]
+
+  controlChange:
+    tier: inline
+    fields:
+      channel:    { type: uint8, range: [1, 16] }
+      controller: { type: uint8, range: [0, 127] }
+      value:      { type: uint8, range: [0, 127] }
+    binding_filter: [type, channel, controller]
+
+  pitchBend:
+    tier: inline
+    fields:
+      channel: { type: uint8, range: [1, 16] }
+      value:   { type: int16, range: [-8192, 8191] }
+    binding_filter: [type, channel]
+
+  programChange:
+    tier: inline
+    fields:
+      channel: { type: uint8, range: [1, 16] }
+      program: { type: uint8, range: [0, 127] }
+    binding_filter: [type, channel]
+
+  realtime:
+    tier: inline
+    fields:
+      message: { type: enum, values: [start, stop, continue, clock] }
+    binding_filter: [type, message]
