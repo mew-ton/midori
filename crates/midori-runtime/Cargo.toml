@@ -26,9 +26,10 @@ clap = { version = "4", features = ["derive"] }
 # avoid the MPL-2.0 `option-ext` transitive (`dirs → dirs-sys →
 # option-ext`) so the workspace's license posture stays permissive
 # ahead of the `midori-core` / `midori-sdk` crates.io publish track.
-# `etcetera` covers the same XDG / platform data-dir surface
-# (`~/Library/Application Support` on macOS, `%APPDATA%` on Windows,
-# `$XDG_DATA_HOME` on Linux) under MIT OR Apache-2.0.
+# Use `etcetera::choose_native_strategy()` (not `choose_base_strategy`)
+# to match `dirs::data_dir()`'s platform behavior:
+# `~/Library/Application Support` on macOS, `%APPDATA%` on Windows,
+# `$XDG_DATA_HOME` (default `~/.local/share`) on Linux. MIT OR Apache-2.0.
 etcetera = "0.11"
 rmpv = "1"
 serde = { version = "1", features = ["derive"] }

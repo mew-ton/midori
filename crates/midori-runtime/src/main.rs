@@ -126,16 +126,23 @@ fn run(profile_path: &Path, app_data_dir_override: Option<&Path>) -> Result<(), 
 /// - Windows: `%APPDATA%\Midori`
 /// - Linux: `$XDG_DATA_HOME/midori`（未設定時 `~/.local/share/midori`）
 ///
-/// `etcetera` の `choose_base_strategy()` は HOME ディレクトリを解決
-/// できなかったとき `Err(HomeDirError)` を返す。これは `dirs::data_dir()`
-/// が `None` を返していた条件と同等なので、いずれの失敗モードも
-/// `CliError::AppDataDirUnavailable` にマップして既存の error contract
-/// を維持する。
+/// `etcetera` の `choose_native_strategy` は macOS で `Apple` 戦略
+/// (`~/Library/Application Support`) を、Windows で `Windows` 戦略
+/// (`%APPDATA%`) を、それ以外で `Xdg` 戦略を選ぶ。これは
+/// `dirs::data_dir()` の platform 振り分けと一致する。`choose_base_strategy`
+/// の方は CLI 慣習で macOS でも XDG (`~/.local/share`) を返すため、
+/// 既存のデザイン契約とずれる。
+///
+/// HOME ディレクトリを解決できないとき `choose_native_strategy()` は
+/// `Err(HomeDirError)` を返す。これは `dirs::data_dir()` が `None` を
+/// 返していた条件と同等なので、`CliError::AppDataDirUnavailable` に
+/// マップして既存の error contract を維持する。
 fn resolve_app_data_dir(cli_override: Option<&Path>) -> Result<PathBuf, CliError> {
     if let Some(path) = cli_override {
         return Ok(path.to_path_buf());
     }
-    let base = etcetera::choose_base_strategy().map_err(|_| CliError::AppDataDirUnavailable)?;
+    let base = etcetera::base_strategy::choose_native_strategy()
+        .map_err(|_| CliError::AppDataDirUnavailable)?;
     Ok(base
         .data_dir()
         .join(if cfg!(any(target_os = "macos", target_os = "windows")) {
