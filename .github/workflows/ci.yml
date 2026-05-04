@@ -1,9 +1,13 @@
 name: CI
 
+# `pull_request: types` から `ready_for_review` を含めることで、draft → ready
+# の切替時に CI が起動する。draft 状態では CI を走らせず実行時間を節約する
+# (各 job に `if: github.event.pull_request.draft != true` ガードを併設)。
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # Read-only is sufficient for every job in this workflow: cargo / cargo-deny
 # / pnpm-biome all consume the checked-out tree without writing to PRs,
@@ -12,10 +16,17 @@ on:
 permissions:
   contents: read
 
+# 各 job の `if:` ガードについて:
+# - `push: branches: [main]` イベントでは `github.event.pull_request` 自体が
+#   undefined なので `.draft` は null となり、null != true で条件成立 → job
+#   は走る (main への push は draft 概念が無いため CI 必須)
+# - `pull_request` イベントでは `.draft` が boolean で評価され、true の
+#   ときのみ skip
 jobs:
   rust:
     name: Rust (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft != true
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -43,6 +54,7 @@ jobs:
   rust-deny:
     name: Rust cargo-deny
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
     steps:
       - uses: actions/checkout@v6
       # cargo-deny reads only Cargo.lock plus its configuration, so one
@@ -57,6 +69,7 @@ jobs:
   js:
     name: JS
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
