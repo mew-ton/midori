@@ -158,11 +158,13 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-midori-core = { path = "crates/midori-core" }
-midori-sdk  = { path = "crates/midori-sdk" }
+midori-core = { path = "crates/midori-core", version = "0.3.0" }
+midori-sdk  = { path = "crates/midori-sdk",  version = "0.2.0" }
 ```
 
 各クレートの `Cargo.toml` では `workspace.dependencies` を参照することで、バージョン管理を workspace root に集約する。
+
+`path` と `version` の両方を持たせるのは crates.io publish 用の前提（path-only の wildcard 依存は `cargo publish` が拒否し、`cargo-deny` の `bans.wildcards` ゲートでも fail する）。bump 時は本 entry の `version` を必ず追従させる。詳細な release 手順は `release-process.md` を参照。
 
 ---
 
