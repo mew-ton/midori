@@ -563,7 +563,7 @@ const char* midori_sdk_last_error(void);
 
 ### 設計上の注意
 
-- **`emit_event` は SPSC ハンドルを引数に取らない。** L1 内部に Bridge と共有するハンドル（プロセス起動時に Bridge から fd で渡される）を 1 個持ち、`midori_sdk_run` の中で初期化する
+- **`emit_event` は SPSC ハンドルを引数に取らない。** L1 内部に Bridge と共有するハンドル（プロセス起動時に Bridge から OS 中立な handle として渡される。Linux / macOS は `OwnedFd`、Windows は `OwnedHandle`）を 1 個持ち、`midori_sdk_run` の中で初期化する
 - **文字列はすべて UTF-8。** event の key / 文字列 value はいずれも UTF-8 として msgpack に encode する
 - **`config_json` は L1 が文字列のまま L2/L3 に渡す。** JSON のパースは言語側で行う（Python なら `json.loads`、Node なら `JSON.parse`）。L1 が型を持たないことで、ドライバー固有の `config` スキーマ拡張が L1 ABI 変更を要求しない
 - **`list_devices` のメモリ:** ドライバーが返す `value` / `label` ポインタは **コールバック return まで有効** であればよい。L1 がコールバック内で JSON にシリアライズし stdout に書き出す
@@ -754,7 +754,7 @@ SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **
 | Issue 案 | 内容 | 想定 SP |
 |---|---|---|
 | L1-1 | `midori_sdk_run` / `midori_driver_callbacks_t` の Rust 実装と extern "C" エクスポート（`struct_size`/シグナル opt-out 含む） | 5 |
-| L1-2 | `midori_event_t` ビルダー + `midori_sdk_emit_event`（msgpack encode → SPSC push）＋ Bridge との fd 受け渡しプロトコル | 5 |
+| L1-2 | `midori_event_t` ビルダー + `midori_sdk_emit_event`（msgpack encode → SPSC push）＋ Bridge との handle 受け渡しプロトコル（Linux / macOS は `OwnedFd`、Windows は `OwnedHandle`） | 5 |
 | L1-3 | `midori_sdk_log` 実装と stdout 非 JSON 行への書き出し | 2 |
 | L1-4 | cbindgen の更新と C ヘッダ自動生成テスト拡張 | 2 |
 
