@@ -5,7 +5,7 @@
 
 このドキュメントは midori プロジェクトの release 運用のうち **Rust crates（`midori-core`, `midori-sdk`）の crates.io への publish** を扱う。Electron デスクトップアプリのバイナリ配布や JS パッケージの npm 公開は別トラックで、各 sibling ドキュメント（`./README.md` の一覧参照）が独立して扱う。エンドユーザー向けアプリ配布の方針は `../12-distribution.md`。
 
-リポジトリの crate 構成と公開先方針は `../14-repository-structure.md` が前提。本ドキュメントは「どのクレートを publish するか」ではなく「**いつ・どうやって publish するか**」を扱う。
+公開対象クレートと公開先方針の決定は `../14-repository-structure.md` が一次ソース。本ドキュメントは release 作業手順の前提として要点を再掲しつつ、「**いつ・どうやって publish するか**」の手順を定める。
 
 ---
 
@@ -46,7 +46,7 @@ publish 対象 crate には `Cargo.toml` の `description` / `license` / `reposi
 - `pub` 構造体のフィールド削除・型変更
 - `pub` 関数のシグネチャ変更（引数追加・型変更を含む）
 - `pub` re-export の削除
-- 公開 trait のメソッド追加（既存実装が壊れる）
+- 公開 trait への **デフォルト実装なし** メソッド追加（既存 implementor に新メソッドの実装を強制するため）。デフォルト実装ありの追加は後方互換 = minor
 
 迷う場合は major bump を選ぶ。crates.io は publish 後の version 削除をサポートしないため、互換性を弱く宣言してしまう方がリスクが大きい。
 
@@ -83,14 +83,14 @@ midori-runtime = { path = "crates/midori-runtime", version = "0.1.0" }
 
 ## CHANGELOG 運用
 
-各 publish 対象 crate は `CHANGELOG.md` を持つ：
+各 publish 対象 crate は `CHANGELOG.md` を持ち、以降は本ルール（[Keep a Changelog](https://keepachangelog.com/) 準拠）で版管理する。`midori-sdk` は現時点で `CHANGELOG.md` を持たないため、初回 publish の前提（後述）として作成し、その後は他の crate と同様に運用する：
 
 ```text
 crates/midori-core/CHANGELOG.md
 crates/midori-sdk/CHANGELOG.md
 ```
 
-形式は [Keep a Changelog](https://keepachangelog.com/) を緩く踏襲する：
+形式は次の通り：
 
 ```markdown
 # Changelog — <crate-name>
@@ -115,8 +115,6 @@ crates/midori-sdk/CHANGELOG.md
 ```
 
 major bump がない release では `### Breaking changes` セクションは省略する。`### Added` / `### Changed` / `### Fixed` も該当変更がない場合は省略する。
-
-`midori-sdk` は現時点で `CHANGELOG.md` を持たないが、初回 publish 時に作成する。
 
 ---
 
@@ -146,15 +144,19 @@ cargo publish -p midori-core
 # 3. crates.io 側で index 反映を待つ（数秒〜数十秒）
 #    反映されないうちに依存 crate を publish するとエラーになる
 
-# 4. midori-sdk の package をローカルで dry-run（lint / FFI 整合チェック）
-#    workspace path 依存があるためこの dry-run は midori-core を crates.io から
-#    解決しない。crates.io 側の resolvability は手順 5 の本 publish が真に検証する
+# 4. midori-sdk の dry-run。`cargo publish --dry-run` は package 化のとき
+#    `path` 依存を stripped し、`version` 要件のみを crates.io index に対して
+#    解決する（path は registry に存在しない / 公開できないため）。よって本 step
+#    は「公開済 midori-core が crates.io から resolvable か」の検証として機能する。
+#    `index 反映遅延` のために手順 3 の wait が短すぎるとここで失敗する → retry
 cargo publish --dry-run -p midori-sdk
 
-# 5. midori-sdk を publish（ここで初めて crates.io から midori-core を解決する）
+# 5. midori-sdk を publish（手順 4 と同じ resolution path で本適用）
 cargo publish -p midori-sdk
 
 # 6. 両 publish 成功後に tag を打って push（手順 5 まで通ってから）
+#    <publish-commit> は通常 HEAD（main にマージ済みの release 起点 commit）。
+#    過去の commit を release する場合は対応する commit hash を指定する
 git tag midori-core-v0.3.0 <publish-commit>
 git tag midori-sdk-v0.2.0 <publish-commit>
 git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
@@ -163,7 +165,7 @@ git push origin midori-core-v0.3.0 midori-sdk-v0.2.0
 ### 失敗時の挙動
 
 - `cargo publish` が途中で失敗した場合、既に publish 済みの crate は yank できるが完全削除はできない。version を捨てて次の patch / minor へ進めるのが基本対応
-- index 反映遅延で dry-run が失敗するケースは時間を置いて retry すれば通る
+- 手順 4 の `--dry-run` が "no matching package named `midori-core`" 等で失敗する場合は、手順 3 の index 反映待ちが不足している。時間を置いて retry すれば通る
 - 一度 publish した version の中身は変更不可。修正が必要なら次の version を切る
 
 ---
