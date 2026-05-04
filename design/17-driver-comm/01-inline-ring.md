@@ -168,10 +168,10 @@ driver 起動時、Bridge 側で shm を確保するまでの流れ:
    - `ShmHeader.slot_size` に確定値を書き込み、`ShmHeader.version = 1`（初期版）で初期化
 5. **Bridge → driver** に shm への参照 (handle) を返す。具体機構は OS 別:
    - Linux / macOS: 事前に確立した Unix domain socket で `sendmsg(2)` + `SCM_RIGHTS` を使い `OwnedFd` を 1 個だけ送る
-   - Windows: 事前に確立した Named Pipe で `DuplicateHandle(... DUPLICATE_SAME_ACCESS)` 済みの HANDLE 値 (u64) を sentinel 1 byte と一緒に送る
+   - Windows: 事前に確立した Named Pipe で `DuplicateHandle(... DUPLICATE_SAME_ACCESS)` 済みの HANDLE 値 (u64 host endian) を 1 byte の sentinel (`0x01`、空メッセージを許容しない pipe API のための最小 payload) と一緒に送る (合計 9 byte)
 6. **driver は受け取った handle を mmap (`mmap(2)` / `MapViewOfFile`) し、`ShmHeader.slot_size` を読み込んで stride 計算を確立**
 
-control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2「Bridge との fd 受け渡しプロトコル」と統合する (Linux / macOS は Unix domain socket、Windows は Named Pipe を使う、上述「OS 別実装方針」節参照)。`request_ring` / `ring_ready` / `ring_rejected` の JSON 本体は OS を問わず driver stdout 経由で運ぶ (詳細は実装 Issue)。
+control channel は `design/15-sdk-bindings-api.md` の Phase 1 / L1-2 の handshake protocol (Bridge ↔ driver の handle / fd 受け渡し) と統合する。Linux / macOS は Unix domain socket で fd を、Windows は Named Pipe で HANDLE を送る (上述「OS 別実装方針」節参照)。`request_ring` / `ring_ready` / `ring_rejected` の JSON 本体は OS を問わず driver stdout 経由で運ぶ (詳細は実装 Issue)。
 
 ### reject 時の挙動
 
