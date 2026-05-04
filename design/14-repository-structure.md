@@ -158,11 +158,13 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-midori-core = { path = "crates/midori-core" }
-midori-sdk  = { path = "crates/midori-sdk" }
+midori-core    = { path = "crates/midori-core",    version = "0.3.0" }
+midori-sdk     = { path = "crates/midori-sdk",     version = "0.2.0" }
+midori-ipc-shm = { path = "crates/midori-ipc-shm", version = "0.1.0" }
+midori-runtime = { path = "crates/midori-runtime", version = "0.1.0" }
 ```
 
-各クレートの `Cargo.toml` では `workspace.dependencies` を参照することで、バージョン管理を workspace root に集約する。
+各クレートの `Cargo.toml` では `workspace.dependencies` を参照することで、バージョン管理を workspace root に集約する。`path` と `version` を併記する理由および bump 時の追従ルールは `release-process/rust-crates.md` を参照。
 
 ---
 
