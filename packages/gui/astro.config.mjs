@@ -1,12 +1,12 @@
 import node from "@astrojs/node";
 import { defineConfig } from "astro/config";
 
-// SSR via the standalone Node adapter, matching design/03-tech-stack.md:
-// "Electron のメインプロセスでローカル Node サーバー（Astro SSR）を起動し、
-// レンダラーは http://localhost:PORT を表示する". The dev server on
-// 127.0.0.1:4321 is what `electron/main.js` loads in dev mode; the built
-// `dist/server/entry.mjs` is what the production main process will spawn
-// (wired in a follow-up Issue).
+// SSR via the standalone Node adapter. The dev server on 127.0.0.1:4321
+// is what `electron/main.js` loads in dev mode. Loopback (not 0.0.0.0)
+// keeps the renderer locally addressable without exposing the SSR server
+// to the network. The built `dist/server/entry.mjs` is the production
+// SSR bundle that the main process will spawn; that path is deferred
+// and intentionally not wired in this scaffold.
 export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),

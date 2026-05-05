@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!profiles", "!target", "!**/*.astro", "!**/dist", "!**/.astro"]
+    "includes": ["**", "!profiles", "!target", "!**/*.astro"]
   },
   "formatter": {
     "enabled": true,
