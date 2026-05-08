@@ -105,9 +105,7 @@ MIDI・OSC など各入力ドライバーはそれぞれ独立した**外部プ�
 
 ### sub-tick タイミングの保持（将来）
 
-現在の設計では sub-tick の時刻精度は保持しない。将来的に MIDI 出力の再タイミングが必要になる場合は、buffer のエントリに受信タイムスタンプを付与することで対応できる。
-
-タイムスタンプ付き buffer の設計は将来拡張ポイント（`05-future.md` 参照）。
+現在の設計では sub-tick の時刻精度は保持しない。将来的に MIDI 出力の再タイミングが必要になる場合は、buffer のエントリに受信タイムスタンプを付与することで対応できる。タイムスタンプ付き buffer の設計は将来拡張ポイント。
 
 ---
 
@@ -176,4 +174,3 @@ Clock 間隔 = 1 ÷ (2.0 × 24) = 約 20.8ms
 
 - [値型リファレンス](../../config/syntax/02-value-types.md) — `pulse` 型の定義
 - [Layer 1 — 入力ドライバー要件](../01-input-driver/requirements.md) — イベントストリームモデル
-- [`ideas/tick-vs-waveform.md`](../../ideas/tick-vs-waveform.md) — tick が音声系特徴量入力を吸収できるかという観察

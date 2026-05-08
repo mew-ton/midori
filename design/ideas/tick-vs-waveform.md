@@ -9,7 +9,7 @@ Midori tick は実時間ベースで 1ms（1000Hz）目安に動く（[`../layer
 
 つまり **driver 内で特徴抽出を完結させて frame 単位の値を吐く構成**（[`./audio-drivers.md`](./audio-drivers.md) の方針）であれば、tick 側で乗るのは ≤ 1ms に収まり、合計レイテンシは音声フレーム長で律速される。tick 側がボトルネックにならないという観察。
 
-```
+```text
 driver 側: マイク → 5–20ms 分のサンプルバッファ → FFT / ML 推論 → 特徴量 1 個（FFT bands / viseme weights / volume）
                                                                        │
                                                                        ▼ SPSC ring（< tick 1 個分）

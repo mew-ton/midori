@@ -12,8 +12,6 @@
 | [02-architecture.md](./02-architecture.md) | 5層パイプライン・アダプター の対称性・Runtime/GUI 分離・リポジトリ構成 |
 | [03-tech-stack.md](./03-tech-stack.md) | 技術スタック・Rust + Electron 構成・レイテンシ目標 |
 | [04-runtime-cli.md](./04-runtime-cli.md) | CLI オプション・ログフォーマット |
-| [05-future.md](./05-future.md) | 未解決事項・将来の拡張ポイント・参考リンク |
-| [ideas/](./ideas/) | 未確定のアイデア・観察・スケッチ（HTTP / Audio ドライバー、`char` primitive、クラウドランタイム 等） |
 | [06-error-handling.md](./06-error-handling.md) | エラー分類・クリティカル／ランタイムエラーの挙動・GUI 可視化 |
 | [07-ui-ux/](./07-ui-ux/) | 画面構成・遷移・各画面の UI 要件 |
 | [08-ai.md](./08-ai.md) | AI アシスタント機能設計 |

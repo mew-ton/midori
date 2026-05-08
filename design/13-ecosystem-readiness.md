@@ -174,8 +174,6 @@ Phase 0 の項目は **薄い紙 1 枚で構わない**。存在すること自�
 
 ## 関連ドキュメント
 
-- [`05-future.md`](./05-future.md) — 技術的な初期スコープ外要件（追加ドライバー等）
-- [`ideas/`](./ideas/) — 各将来ドライバー・primitive の中身のスケッチ
 - [`09-plugin.md`](./09-plugin.md) — プラグイン配布仕様
 - [`10-driver-plugin.md`](./10-driver-plugin.md) — ドライバー・アダプター種別定義の仕様
 - [`11-security/`](./11-security/) — セキュリティ設計
