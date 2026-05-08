@@ -53,4 +53,4 @@ The final gate into `main` belongs to the user. CI green and review verdicts are
 ## Workflow
 
 - Task lifecycle (refining, breakdown, prioritization, story points, status) is delegated to soloscrum: `/refine`, `/breakdown`, `/develop`, `/review`, `/next`, `/status`.
-- PR mechanics (draft until ready, pre-merge local review, merge handoff to user) are governed by soloscrum reference skills `soloscrum-define-pr-lifecycle` and `soloscrum-define-code-review-process`, executed through `/develop` and `/review`.
+- PR mechanics (draft until ready, pre-merge local review, merge handoff to user) are governed by soloscrum reference skills `soloscrum-define-pr-lifecycle` and `soloscrum-define-code-review-process`, executed through `/develop` (creates draft PR) and `/review` (auto-promotes to ready on Pass; merge stays user-gated).
