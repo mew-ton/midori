@@ -137,7 +137,7 @@ event               ────────────▶  pulse
 | **原子化ドライバー** (`audio-rms` / `audio-zcr` / `audio-pitch` を別々に) | 同一マイク共有が必須化し OS 依存問題（macOS hog mode / Linux ALSA 直叩き等）を踏む。軸 1（時刻結合）も担保できない |
 | **手段命名** (`audio-fft`, `audio-onnx-x`) | 実装が変わるたび名前を変えたくなる。プロファイルの `adapter:` フィールドからの参照が壊れる |
 
-audio 系での具体適用例 → [`05-future.md` の Audio 系ドライバーのイメージ](../../05-future.md#audio-系ドライバーのイメージ)
+audio 系での具体適用例 → [`ideas/audio-drivers.md`](../../ideas/audio-drivers.md)
 
 ### 物理入力の重複禁止
 

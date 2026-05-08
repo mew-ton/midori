@@ -73,7 +73,7 @@ config-load 時の解決手順:
 
 primitive を増やすほど実装層の specialized 実装が線形に増える。安易に増やさない。新しい primitive の追加は **格納戦略・I/O 経路・関連ノードを揃えてから**初めて initial scope に取り込む。
 
-将来追加候補の primitive と導入指針は [05-future.md § 将来要件](../../05-future.md) を参照。
+将来追加候補の primitive は [05-future.md § 追加 primitive](../../05-future.md#追加-primitive) を参照。具体例として `char` のスケッチが [`ideas/char-primitive.md`](../../ideas/char-primitive.md) にある。
 
 ---
 
@@ -82,4 +82,5 @@ primitive を増やすほど実装層の specialized 実装が線形に増える
 - [config/syntax/02-value-types.md](./02-value-types.md) — primitive と配列型の値型定義 (スキーマ層)
 - [layers/03-mapper/requirements.md](../../layers/03-mapper/requirements.md) — 型変換ルール
 - [config/mapper-nodes/02-array.md](../mapper-nodes/02-array.md) — 配列操作ノード
-- [05-future.md](../../05-future.md) — 将来追加候補の primitive
+- [05-future.md](../../05-future.md) — 将来追加候補の primitive 一覧
+- [ideas/char-primitive.md](../../ideas/char-primitive.md) — `char` primitive のスケッチ

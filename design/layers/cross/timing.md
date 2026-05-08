@@ -176,3 +176,4 @@ Clock 間隔 = 1 ÷ (2.0 × 24) = 約 20.8ms
 
 - [値型リファレンス](../../config/syntax/02-value-types.md) — `pulse` 型の定義
 - [Layer 1 — 入力ドライバー要件](../01-input-driver/requirements.md) — イベントストリームモデル
+- [`ideas/tick-vs-waveform.md`](../../ideas/tick-vs-waveform.md) — tick が音声系特徴量入力を吸収できるかという観察
