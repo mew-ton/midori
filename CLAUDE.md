@@ -43,7 +43,7 @@ Quality gate setup (linter / formatter / test infrastructure) precedes the imple
 
 ## Decision authority
 
-The final gate into `main` belongs to the user. CI green and review verdicts are *evidence*, not *authority* (skill: `defer-pr-merge-to-user`).
+The final gate into `main` belongs to the user. CI green and review verdicts are *evidence*, not *authority*. `gh pr merge` is always user-gated regardless of verdict (see `soloscrum-define-pr-lifecycle`).
 
 ## Tool stewardship
 
@@ -53,4 +53,4 @@ The final gate into `main` belongs to the user. CI green and review verdicts are
 ## Workflow
 
 - Task lifecycle (refining, breakdown, prioritization, story points, status) is delegated to soloscrum: `/refine`, `/breakdown`, `/develop`, `/review`, `/next`, `/status`.
-- PR mechanics (draft until ready, pre-push local review, merge handoff to user) are encoded in project-local skills under `.claude/skills/`. See those skills for operational steps.
+- PR mechanics (draft until ready, pre-merge local review, merge handoff to user) are governed by soloscrum reference skills `soloscrum-define-pr-lifecycle` and `soloscrum-define-code-review-process`, executed through `/develop` (creates draft PR) and `/review` (auto-promotes to ready on Pass; merge stays user-gated).
