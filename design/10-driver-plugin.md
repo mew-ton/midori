@@ -132,6 +132,7 @@ drivers:
 | `name` | ✅ | ドライバー識別子（`<modality>-<purpose>` 形式推奨。命名ルール → [`layers/01-input-driver/requirements.md#ネームスペース命名`](layers/01-input-driver/requirements.md#ネームスペース命名)） |
 | `modality` | ✅ | 物理 I/O のクラス。同一物理入力の重複検出に使用（例: `audio` / `midi` / `osc` / `ble` / `http`）。詳細 → [`layers/01-input-driver/requirements.md#物理入力の重複禁止`](layers/01-input-driver/requirements.md#物理入力の重複禁止) |
 | `physical_input_identity` | ❌ | `connection_fields` のうち、物理入力を一意に同定するフィールド ID の配列（例: `[device_name]`、`[host, listen_port]`）。省略時は重複検出を行わない |
+| `output_conflict` | ❌ | 同一の出力先（解決後アドレス）へ複数ブリッジが同時に書き込もうとした場合の方針。`block`（媒体が並行書き込みを許容しない＝後発プロファイルを起動不可）/ `warn`（last-write-wins 等で許容＝起動は許し警告のみ。既定）。出力バッティング検出時にアプリが参照する。詳細 → [`config/05-profile.md`](config/05-profile.md)「出力バッティング」 |
 | `release_assets` | ✅ | プラットフォーム別 GitHub Releases アセット名。`darwin-arm64` / `darwin-x64` / `linux-x64` / `win32-x64` をキーとして定義する |
 | `start_args` | ❌ | `start` 時の追加引数 |
 | `connection_fields` | ❌ | 接続設定フォームフィールドの宣言 |
