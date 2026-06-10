@@ -9,7 +9,7 @@
 | 種類 | 現状 | 目標 |
 |---|---|---|
 | `generator_ui` | L0（制約なし） | L2（contextBridge ＋ CSP ＋ sandbox で偶発・悪意ともに防止） |
-| `render_components` | L1（sandbox iframe で一定の検知は可能） | L2（sandbox 属性 ＋ CSP ＋ postMessage 検証で防止） |
+| `render_components` | L1（sandbox iframe で一定の検知は可能） | L2（sandbox 属性 ＋ CSP ＋ MessageChannel 専用ポートで防止） |
 
 L3（宣言された権限以上には動けない）はウィジェットの性質上、ファイル I/O がないため L2 で実質的に同等とみなせる。
 
@@ -106,16 +106,39 @@ Content-Security-Policy:
   style-src 'self' 'unsafe-inline';
 ```
 
-### postMessage の検証
+### MessageChannel による値配送
 
-Bridge から iframe へ値を送る側（GUI）：
+sandbox iframe（`allow-same-origin` なし）の origin は opaque であり、`window.postMessage` の `targetOrigin` に具体的な origin を指定したメッセージは配送されない（opaque origin に届くのは `targetOrigin: '*'` のみ）。origin 文字列の照合によるなりすまし防止はこの構成では成立しないため、**`MessageChannel` の専用ポートを iframe ロード完了時に 1 度だけ transfer し、以降の値の送受信はポート経由のみ** とする。
+
+GUI 側（iframe ロード完了時に 1 度だけ実行）：
 
 ```js
-iframe.contentWindow.postMessage(payload, 'plugin://plugin-name')
-// * は使わない。送信先 origin を明示する
+const channel = new MessageChannel()
+// ポートの transfer のみ window.postMessage を使う。ペイロードに秘密情報は載せない
+iframe.contentWindow.postMessage({ type: 'init' }, '*', [channel.port2])
+
+// 以降の値配送はすべてポート経由
+channel.port1.postMessage({ type: 'device-state', value: 72 })
 ```
 
-iframe 側（プラグイン実装）は受信時に origin を検証することを **SDK のサンプルコードで推奨** する。強制は難しいが、GUI 側の送信 origin を固定することで他の送信源からのなりすましを防ぐ。
+iframe 側（プラグイン実装）：
+
+```js
+let port = null
+window.addEventListener('message', (e) => {
+  if (port === null && e.source === window.parent && e.ports[0]) {
+    port = e.ports[0]
+    port.onmessage = (ev) => render(ev.data)
+  }
+})
+```
+
+なりすまし耐性はポートの非偽造性で担保する：
+
+- `MessagePort` は transfer でしか渡せず、GUI が生成したポートの対端は当該 iframe しか持たない。第三者の window はこのチャネルに割り込めない
+- iframe 側は確立メッセージの `e.source === window.parent` を検証する（**SDK のサンプルコードで必須として示す**）。これにより他プラグインの iframe など兄弟 window からの偽の確立メッセージを拒否できる
+- GUI 側はポート確立後、`window` への `message` イベントを render_components からの入力として扱わない（iframe → GUI もポート経由に限定）
+- 確立メッセージはポートの transfer 以外の情報を持たないため、`targetOrigin: '*'` でも漏洩リスクがない
 
 ### プラグイン間の分離
 

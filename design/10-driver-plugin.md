@@ -341,7 +341,7 @@ Additional Fields はカスタムコードを必要とせず、GUI が標準 HTM
 | **内蔵コンポーネント** | pure JS（DOM 直接操作） | プリミティブ型（filled-square / bar / dot）・グリッドコンテナ |
 | **プラグイン提供コンポーネント** | iframe（サンドボックス） | `render_components` で宣言したカスタム描画 |
 
-内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する。値の受け渡しは `postMessage` または `dataset` 経由とし、iframe 内部の実装はプラグイン側の自由とする。
+内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する。値の受け渡しは `MessageChannel` の専用ポート経由とし（確立手順となりすまし対策は [`11-security/02-widget.md`](11-security/02-widget.md)）、iframe 内部の実装はプラグイン側の自由とする。
 
 ### generator_ui（アダプター生成）
 
@@ -382,16 +382,16 @@ render_components:
     iframe_src: ../ui/heart-rate-display.html   # plugin.yaml からの相対パス
 ```
 
-Bridge からの `device-state` イベントは GUI が受け取り、`postMessage` で iframe に転送する。iframe 内部の実装はプラグイン側の自由とする（値の反映方法・DOM構造等）。
+Bridge からの `device-state` イベントは GUI が受け取り、iframe ロード時に確立した `MessageChannel` の専用ポートで iframe に転送する（確立手順となりすまし対策は [`11-security/02-widget.md`](11-security/02-widget.md)）。iframe 内部の実装はプラグイン側の自由とする（値の反映方法・DOM構造等）。
 
 ```js
-// GUI → iframe
-iframe.contentWindow.postMessage({ type: 'device-state', value: 72 }, '*')
+// GUI → iframe（確立済みポート経由）
+port.postMessage({ type: 'device-state', value: 72 })
 
-// iframe 内（プラグイン実装）
-window.addEventListener('message', (e) => {
+// iframe 内（プラグイン実装。port は確立時に受領済み）
+port.onmessage = (e) => {
     if (e.data.type === 'device-state') render(e.data.value)
-})
+}
 ```
 
 セキュリティ制約：
@@ -439,7 +439,7 @@ osc-vrchat の本質は「OSC の接続設定と binding の特殊化」であ�
 ────────────────────────────────────────────────────────────
 ドライバー              サブプロセス               共有メモリ（リアルタイム）
 アダプター種別定義      なし                       —
-描画コンポーネント      GUI プロセス内 sandbox iframe  postMessage
+描画コンポーネント      GUI プロセス内 sandbox iframe  MessageChannel ポート
 ```
 
 ---
