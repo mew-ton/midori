@@ -68,7 +68,10 @@ ai:
 
 `preferences.yaml` は AI エージェントから**読み取り・書き込みともに不可**とする。AI のツールから操作できず、内容を AI コンテキストにも含めない（`11-security/03-ai.md`）。編集経路は GUI の Preferences 画面のみ。
 
-この性質により、preferences は **AI に干渉されたくない設定の置き場所**として機能する。セキュリティ境界に関わる許可設定（`network.udp_allowed_hosts` 等）は、AI が編集できる workspace YAML（アダプター・変換グラフ・プロファイル）やプラグイン設定には置かず、必ず preferences に置く。
+この性質により、preferences は **AI に干渉されたくない設定の置き場所**として機能する。セキュリティ境界に関わる許可設定（`network.udp_allowed_hosts` 等）は preferences のみに置き、次の場所には置かない:
+
+- **workspace YAML**（アダプター・変換グラフ・プロファイル）— AI が編集できる領域のため
+- **プラグイン由来のファイル**（`<app-data-dir>/plugins/` 配下の `plugin.yaml` / `driver.yaml` 等）— AI は編集できないが、プラグイン作者（第三者）が制御するファイルであり、許可を置くとプラグインの自己許可になるため
 
 非干渉の対象は**値の参照・変更**である。設定項目のスキーマ（項目名・意味・編集場所が Preferences 画面であること、AI 自身は変更できないこと）は AI の静的知識として提供し、AI はユーザーへの設定手順の案内と、`navigate` ツールによる Preferences 画面への遷移までを行える（`08-ai.md`・`11-security/03-ai.md`）。
 
