@@ -183,7 +183,7 @@ events:
 | `type` | ✅ | 上記「フィールド型語彙」のいずれか |
 | `range` | ❌ | 値域。スカラー数値型のみ意味を持つ（`[min, max]`、両端 inclusive）。指定がなければ型のデフォルト値域 |
 | `values` | ❌ | `enum` 型のときのみ必須。許容する文字列のリスト |
-| `max_length` | ❌ | `bytes` / `string` / `array<T>` 型のみ意味を持つ。最大バイト長または要素数（inclusive）。指定がなければ無制限（実運用では `PAYLOAD_INLINE_MAX` 等で頭打ち） |
+| `max_length` | ❌ | `bytes` / `string` / `array<T>` 型のみ意味を持つ。最大バイト長または要素数（inclusive）。指定がなければ無制限（実運用では inline tier の slot payload 上限 = handshake で確定した `slot_size - 8`、最大 `HARD_SLOT_SIZE - 8` で頭打ち。`design/17-driver-comm/01-inline-ring.md`） |
 | `optional` | ❌ | `false`（既定）または `true`。`true` のとき Driver は省略可能 |
 | `default` | ❌ | `optional: true` 時のデフォルト値。`optional: false` のとき指定不可 |
 
@@ -523,7 +523,7 @@ events.yaml と binding YAML で OSC 引数型を別の名前空間で扱う。�
 `s`（string）/ `b`（blob）/ `t`（timetag）の OSC 型は **本書スコープ外**。これらをサポートするには:
 
 - `s`: `oscString` イベントを events.yaml に追加（`value: string`）
-- `b`: `oscBlob` イベントを追加（`value: bytes`、`max_length` を `PAYLOAD_INLINE_MAX` 以下に設定）
+- `b`: `oscBlob` イベントを追加（`value: bytes`、`max_length` を inline tier の payload 上限内に設定。超えうる場合は `tier: streamed` 化） 
 - `t`: `oscTimetag` イベントを追加（`value: int64`）
 
 これらの拡張は OSC driver 実装 Issue（後続 Phase 3 Drv-2）で必要に応じて追加する。本書の events.yaml 文法はこれらの追加を minor bump で受けられる構造になっている（「後方互換戦略」節参照）。
