@@ -144,10 +144,19 @@ window.addEventListener('message', (e) => {
 
 異なるプラグインの `render_components` は互いに異なる `plugin://` origin を持つ。`allow-same-origin` を付与しない限り、origin が違う iframe 同士は JS から互いの DOM にアクセスできない。
 
-### 未解決事項
+### `plugin://` プロトコルの配信契約
 
-| 項目 | 内容 |
-|---|---|
-| `plugin://` カスタムプロトコルの実装 | Electron の `protocol.handle` でプラグインディレクトリ内のファイルのみ配信する実装が必要 |
-| iframe からの外部ネットワーク | CSP の `connect-src 'none'` で塞ぐが、WebSocket / WebRTC は別途確認が必要 |
-| `generator_ui` の eval 経由の迂回 | `sandbox: true` ＋ CSP の `script-src 'self'` でほぼ封じられるが、Electron バージョンとの動作確認が必要 |
+`plugin://` は Electron の `protocol.handle` で実装し、次の契約に従う:
+
+- リクエストパスを正規化（canonicalize）した結果が当該プラグインのディレクトリ内であることを検証し、外を指すパス（`../` セグメント・symlink 経由を含む）は拒否する
+- 「CSP（iframe コンテンツへの適用）」節の CSP ヘッダーはこの handler で応答に付与する
+- 配信対象は静的ファイルのみ（handler はコードを実行しない）
+
+### 外部通信経路の遮断
+
+- fetch / XHR / WebSocket は CSP の `default-src 'none'`（`connect-src` を含む）で遮断される
+- WebRTC は CSP では遮断できない（`RTCPeerConnection` の ICE / STUN / TURN 通信は `connect-src` の対象外）ため、**render_components を表示するセッションでは WebRTC を無効化する**。具体的な無効化手段（Blink feature の無効化スイッチ、IP handling policy と permission 拒否の組み合わせ等）は実装 Issue で確定するが、「render_components 内から WebRTC で外部と通信できないこと」を受け入れ基準のテストとして必須とする
+
+### 実装 Issue に含める検証
+
+`generator_ui` の eval 系迂回が `sandbox: true` ＋ CSP `script-src 'self'` で封じられていることを、採用 Electron バージョンに対するテストで確認する（Electron 更新時のリグレッション検知を兼ねる）。

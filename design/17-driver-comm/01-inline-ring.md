@@ -382,11 +382,19 @@ fn validate_compat(header: &ShmHeader) -> Result<(), CompatError> {
 
 ---
 
-## 未解決事項
+## 読み出し側の防御的検証
 
-| 項目 | 内容 |
-|---|---|
-| Bridge 読み出し側の防御的検証 | driver は信頼境界の外にあるプロセスであり（`design/11-security/01-driver-sandbox.md`「信頼境界」）、shm に任意の値を書き込みうる。handshake 時の `slot_size` 検証（alignment / 上限）は規定済みだが、読み出し時の防御は未規定: slot 読み出し時の `payload_len <= slot_size - 8` 境界検証、`write_index` の異常値（巨大ジャンプ・逆行）への耐性、msgpack decode 失敗・events.yaml 照合失敗時の挙動（event 破棄 / driver 停止 / ログ） |
+driver は信頼境界の外にあるプロセスであり（`design/11-security/01-driver-sandbox.md`「信頼境界」）、shm に任意の値を書き込みうる。handshake 時の `slot_size` 検証（alignment / 上限）に加えて、Bridge は読み出しごとに次を検証する:
+
+- `payload_len <= slot_size - 8` を payload 取得前に検証する
+- `write_index` が `read_index <= write_index <= read_index + RING_CAPACITY` の範囲に収まることを検証する（逆行・`RING_CAPACITY` 超のジャンプの拒否）
+
+違反時の処遇は 2 段階に分ける:
+
+| 違反の種類 | 例 | 処遇 |
+|---|---|---|
+| プロトコル違反（正常な SDK 利用では起こり得ない） | `payload_len` の境界超過、`write_index` の逆行・範囲超過 | driver を**即時停止**する。悪意または深刻な破損とみなし、ring 内の未読イベントも破棄する。停止後は通常のクラッシュリカバリ（自動再起動ポリシー）に従う |
+| 単発の不正イベント | msgpack decode 失敗、events.yaml 照合失敗 | 該当イベントを**破棄して継続**する。driver 実装バグの可能性が高く、全停止は過剰なため。ログは rate-limit 付きで記録する |
 
 ---
 
