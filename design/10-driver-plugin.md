@@ -341,7 +341,7 @@ Additional Fields はカスタムコードを必要とせず、GUI が標準 HTM
 | **内蔵コンポーネント** | pure JS（DOM 直接操作） | プリミティブ型（filled-square / bar / dot）・グリッドコンテナ |
 | **プラグイン提供コンポーネント** | iframe（サンドボックス） | `render_components` で宣言したカスタム描画 |
 
-内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する（Web Component から iframe に変更）。値の受け渡しは `postMessage` または `dataset` 経由とし、iframe 内部の実装はプラグイン側の自由とする。
+内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する。値の受け渡しは `postMessage` または `dataset` 経由とし、iframe 内部の実装はプラグイン側の自由とする。
 
 ### generator_ui（アダプター生成）
 
@@ -411,13 +411,15 @@ window.addEventListener('message', (e) => {
 
 ---
 
-## osc-vrchat の立ち位置変更
+## osc-vrchat の位置づけ
 
-| | 変更前 | 変更後 |
-|---|---|---|
-| 分類 | 独立ドライバー | OSC を基底とする アダプター種別定義 |
-| 実装 | ドライバーとして実装 | osc ドライバー ＋ 設定マニフェスト |
-| 配布 | ブリッジ本体に同梱 | プラグイン（osc と同リポジトリでも可） |
+osc-vrchat は独立したドライバーではなく、**OSC ドライバーを基底とするアダプター種別定義**である。
+
+| 観点 | 内容 |
+|---|---|
+| 分類 | OSC を基底とするアダプター種別定義 |
+| 実装 | osc ドライバー ＋ 設定マニフェスト（独自バイナリを持たない） |
+| 配布 | プラグイン（osc と同リポジトリでも可） |
 
 osc-vrchat の本質は「OSC の接続設定と binding の特殊化」であり、I/O トランスポートとして osc と異なる実装を持つわけではない。アダプター種別定義 として再定義することで、将来の類似ケース（他 VR プラットフォーム・DAW 固有 OSC 等）も同じパターンで扱える。
 

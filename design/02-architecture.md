@@ -156,7 +156,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │   │   ├── .midori/
 │   │   │   └── plugin.yaml
 │   │   └── adapters/
-│   ├── driver-midi/       ← 公式ドライバー（アプリに同梱）
+│   ├── driver-midi/       ← 公式ドライバー（GUI が起動時に自動インストール）
 │   └── driver-osc/
 └── preferences.yaml       ← UI 設定・最近使用したファイル・AI 設定
 ```

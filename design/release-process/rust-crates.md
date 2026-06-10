@@ -16,7 +16,7 @@
 | `midori-core` | crates.io | 型・プロトコル定義。`midori-sdk` が依存する |
 | `midori-sdk` | crates.io | ドライバー作者が直接依存するライブラリ |
 | `midori-runtime` | 公開しない | バイナリ配布（`../12-distribution.md`）と npm shim 経由 |
-| `midori-driver-midi` / `midori-driver-osc` | 公開しない | 公式ドライバーバイナリ。`midori-runtime` に同梱 |
+| `midori-driver-midi` / `midori-driver-osc` | 公開しない | 公式ドライバーバイナリ。Git リポジトリ ＋ GitHub Releases でプラグインとして配布（`../10-driver-plugin.md`） |
 | `midori-driver-dummy` | 公開しない | runtime の lifecycle / handshake 統合テスト用ハーネス。本番 runtime には含めない |
 | `midori-ipc-shm` | 公開しない | workspace 内部 crate（`unsafe` 隔離目的） |
 
