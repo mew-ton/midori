@@ -33,7 +33,7 @@ midori-core = { workspace = true }
 # Linux + macOS で共通の dispatch / cfg は `src/lib.rs` と
 # `src/ring_consumer/mod.rs` を参照。
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", default-features = false, features = ["mman", "fs", "socket", "uio"] }
+nix = { version = "0.31", default-features = false, features = ["mman", "fs", "socket", "uio"] }
 # Safe(-ish) wrapper around `mmap`. The `map_mut` constructor is `unsafe`
 # (see above); the returned `MmapMut` itself exposes a `&mut [u8]`-like
 # interface that is otherwise pure-safe Rust.
