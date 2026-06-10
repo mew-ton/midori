@@ -218,5 +218,7 @@ capability 付与は「プラグインマニフェストで宣言 → Bridge が
 | BLE / USB のクロス OS capability | 3 OS で語彙が全く違うため最小公倍数の設計が難しい |
 | permission 語彙の正規化 | `device.midi` / `device.bluetooth` 等を SDK 側で OS 依存の書き方に落とす抽象層 |
 | 署名配布 | GitHub Artifact Attestations（2024 GA）を前提にできるか |
+| 実行前のバイナリ完全性再検証 | SHA-256 pin はインストール時の記録と更新時の比較のみ。spawn ごとに digest を再検証するか（インストール後のローカル改ざん検出）、検証失敗時の挙動（起動拒否 / 警告）が未定義 |
+| UDP 入力の脅威モデル | OSC など UDP listen ソケットの bind 先既定（localhost か全インターフェースか）、送信元の検証、flooding・不正パケットへの耐性。permission 語彙（`network.udp.listen`）はポート単位の宣言のみで、これらをカバーしない |
 | 再起動時のサンドボックス再適用 | Bridge 自動再起動時にプロファイルを安定的に再構築できるか |
 | SDK のインターフェース | Landlock / seccomp をドライバー実装者に書かせるか、SDK が自動適用するか |
