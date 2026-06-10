@@ -6,10 +6,12 @@
 midori [OPTIONS]
 
 OPTIONS:
-  --profile         <path>   プロファイル YAML（デフォルト: ./profiles/default.yaml）
-  --app-data-dir    <path>   app-data-dir のパス（省略時は OS 標準の場所を使用）
-  --log-level       <level>  error | warn | info | debug
-  --log-format      <fmt>    text | json
+  --profile          <path>   プロファイル YAML（デフォルト: ./profiles/default.yaml）
+  --app-data-dir     <path>   app-data-dir のパス（省略時は OS 標準の場所を使用）
+  --log-level        <level>  error | warn | info | debug
+  --log-format       <fmt>    text | json
+  --udp-allowed-host <host>   ローカル範囲外から UDP 受信を許可するホスト（複数回指定可。
+                              省略時は loopback・ローカルネットワーク帯のみ受信）
 ```
 
 ### app-data-dir
@@ -25,6 +27,12 @@ Bridge はプラグイン（ドライバー・アダプター種別定義 等）
 | Linux | `$XDG_DATA_HOME/midori`（未設定時 `~/.local/share/midori`） |
 
 Electron アプリから起動する場合は `--app-data-dir` を省略してよい（OS 標準の場所が使われる）。
+
+### udp-allowed-host
+
+UDP listen を行うドライバーが、ローカル範囲（loopback・ローカルネットワーク帯）の外からの受信を許可するホストの明示列挙（判定規則 → [`11-security/01-driver-sandbox.md`](11-security/01-driver-sandbox.md)「UDP 入力の脅威モデル」）。Bridge は値を該当ドライバーの configure に注入する。
+
+GUI 経由の起動ではプレファレンスの `network.udp_allowed_hosts`（[`config/01-preferences.md`](config/01-preferences.md)）から渡される。プロファイル・アダプター YAML では宣言できない（AI が編集できる領域に受信許可を置かないため。同セキュリティ文書参照）。
 
 ### 複数プロファイルの同時実行
 
