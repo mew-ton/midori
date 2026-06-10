@@ -70,6 +70,8 @@ ai:
 
 この性質により、preferences は **AI に干渉されたくない設定の置き場所**として機能する。セキュリティ境界に関わる許可設定（`network.udp_allowed_hosts` 等）は、AI が編集できる workspace YAML（アダプター・変換グラフ・プロファイル）やプラグイン設定には置かず、必ず preferences に置く。
 
+非干渉の対象は**値の参照・変更**である。設定項目のスキーマ（項目名・意味・編集場所が Preferences 画面であること、AI 自身は変更できないこと）は AI の静的知識として提供し、AI はユーザーへの設定手順の案内と、`navigate` ツールによる Preferences 画面への遷移までを行える（`08-ai.md`・`11-security/03-ai.md`）。
+
 ## プラグインのインストール情報
 
 インストール済みプラグインは `<app-data-dir>/plugins/<name>/` に git clone として保存される。更新用の元 URL は各ディレクトリ内の `.git/config`（`remote.origin.url`）から取得するため、別途レジストリファイルは不要。`preferences.yaml` にも記録しない。GUI 起動時に `<app-data-dir>/plugins/` ディレクトリをスキャンして一覧を構築する。
