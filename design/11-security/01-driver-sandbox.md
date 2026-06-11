@@ -79,7 +79,7 @@ Bridge はドライバーを「敵」として扱う。信頼境界をまたぐ�
 | ワーキングディレクトリの固定 | 相対パス経由のリークを防止 |
 | Linux: `PR_SET_NO_NEW_PRIVS` | `prctl` で setuid バイナリ経由の権限昇格を封じる |
 | Windows: Job Object | `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` ＋ Mitigation Policy（DEP / ASLR / ACG / CIG） |
-| SHA-256 pin | インストール時に GitHub Releases の digest を記録。次回更新時に比較 |
+| SHA-256 pin | インストール時に GitHub Releases の digest を記録し、**spawn のたびに再計算して比較**する（詳細 → 「実行前のバイナリ完全性検証」節） |
 
 ### Phase 2：permission 宣言（L1 → L2 の基盤）
 
@@ -195,6 +195,30 @@ capability 付与は「プラグインマニフェストで宣言 → Bridge が
 | `network.tcp.connect: *` | `network-outbound (remote tcp)` | Landlock TCP connect (ABI 4+) | `internetClient` |
 | `filesystem.read: @self/...` | `file-read* (subpath ...)` | Landlock `PathBeneath(RO)` | ACL エントリ |
 | `process.spawn: false` | `(deny process-fork)` | seccomp `clone/fork/execve` 拒否 | `JOB_OBJECT_LIMIT_ACTIVE_PROCESS=1` |
+
+---
+
+## 実行前のバイナリ完全性検証
+
+インストール時に記録した SHA-256 pin を **spawn のたびに再計算して比較**する（クラッシュリカバリによる自動再起動を含む）。不一致の場合は起動を拒否し、改ざんの可能性を警告して再インストールを促す。コストはバイナリ 1 個のハッシュ計算（典型数 MB・数 ms）で、spawn は低頻度のため許容範囲。
+
+---
+
+## UDP 入力の脅威モデル（OSC 等）
+
+UDP は送信元認証を持たない。UDP listen を行うドライバーは**送信元アドレスフィルタ**を既定で適用する:
+
+| 送信元 | 既定 |
+|---|---|
+| loopback（127.0.0.0/8、::1） | 許可 |
+| ローカルネットワーク（RFC 1918: 10/8・172.16/12・192.168/16、リンクローカル 169.254/16・fe80::/10、ULA fc00::/7） | 許可 |
+| それ以外（グローバルアドレス） | 拒否。プレファレンスの `network.udp_allowed_hosts`（`design/config/01-preferences.md`）に明示列挙されたホストのみ受信する。ホスト名はロード時に解決し、受信時は IP で照合する |
+
+- 許可リストは **AI 非干渉領域であるプレファレンス**にのみ置く。workspace YAML（アダプター・プロファイル）は AI エージェントが編集できる領域であり（`03-ai.md`「ファイルアクセス」）、プロンプトインジェクション経由で受信許可を無断追加される経路になるため宣言できない。プラグイン由来の `driver.yaml` も宣言できない: AI は編集できないが、プラグイン作者（第三者）が制御するファイルであり、許可を置くとプラグインの自己許可になるため。編集は GUI の Preferences 画面のみで行い、ブリッジへは起動オプション `--udp-allowed-host`（`design/04-runtime-cli.md`）として渡され、Bridge が該当ドライバーの configure に注入する
+- bind は全インターフェース可。LAN 上のコントローラー（タブレットの OSC アプリ等）をゼロ設定で受けるためで、防御は bind 先ではなく送信元フィルタで行う
+- ローカルネットワークは**半信頼**として扱う: 同一 LAN 内からのなりすまし・注入には対抗しない（UDP の送信元は偽装可能であり、強い保証が必要な環境では OS ファイアウォール等の外部統制を使う）。公衆 Wi-Fi 等この前提が成り立たない環境での利用は推奨しない旨をユーザー向けドキュメントに明記する
+- flooding: Bridge は ring の back-pressure（drop）で保護される。driver 自身の受信ループ飽和に備え、SDK ガイドでイベントレート上限の実装を推奨する
+- パース不能なパケットは破棄し、rate-limit 付きでログに記録する
 
 ---
 
