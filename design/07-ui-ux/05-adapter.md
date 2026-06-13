@@ -224,7 +224,7 @@ VRChat はアップロード済みアバターの OSC パラメーター一覧�
 | サジェストの内容 | JSON に含まれるパラメーター名・型をサジェストとして一覧表示する |
 | input 側への流用 | 同じ JSON を入力側のサジェストにも使える場合は共用する |
 
-詳細は [`config/drivers/osc-vrchat.md`](../../config/drivers/osc-vrchat.md) および [`10-driver-plugin.md`](../10-driver-plugin.md) を参照。
+詳細は [`config/drivers/osc-vrchat.md`](../config/drivers/osc-vrchat.md) および [`10-driver-plugin.md`](../10-driver-plugin.md) を参照。
 
 ---
 

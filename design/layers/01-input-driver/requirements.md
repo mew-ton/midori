@@ -215,7 +215,7 @@ Bridge は次の情報を含むエラーを返す：
 
 Bridge とドライバーの通信は2チャンネルで行う：制御（stdin/stdout, JSON Lines）とリアルタイムイベント（共有メモリ）。アダプター YAML は `driver: midi` のように ID で参照するだけでよく、ドライバー実装の詳細を知る必要はない。
 
-詳細 → [`10-driver-plugin.md`](../10-driver-plugin.md)
+詳細 → [`10-driver-plugin.md`](../../10-driver-plugin.md)
 
 ## 初回実装 / 将来拡張
 

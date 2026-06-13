@@ -5,7 +5,7 @@
 
 本書は driver↔bridge 配送の **inline tier**（速度保証あり、shm SPSC ring 経由）の詳細仕様。tier モデル全体・他 tier との関係は [00-overview.md](./00-overview.md) を参照。
 
-「driver が宣言する最大 payload サイズに合わせて、起動時 (handshake) に **RingSlot のサイズを動的に決める**」方針。各スロットは driver lifetime 内で固定サイズだが、driver プロセスごとに異なる。inline tier の event はすべて ring slot に inline で収まる。
+「driver が宣言する最大 payload サイズに合わせて、起動時 (handshake) に **ring slot のサイズを動的に決める**」方針。各スロットは driver lifetime 内で固定サイズだが、driver プロセスごとに異なる。inline tier の event はすべて ring slot に inline で収まる。
 
 実装本体（FFI 拡張・テスト）は本書のスコープ外。Driver/Bridge 双方が触る API は **スケッチ** までを示し、実装 Issue で詳細化する。
 
@@ -19,7 +19,7 @@
    - `slot_size <= DEFAULT_SLOT_SIZE` のとき: **handshake で要求しない**。Bridge は default で確保
    - 超えるとき: **handshake で `slot_size` を要求**。Bridge は `slot_size <= HARD_SLOT_SIZE` なら受理、超えていれば reject
 4. ring slot サイズは driver lifetime 内で **固定**。driver 再起動時のみ変えられる
-5. 全 inline tier payload が **ring slot に inline 格納**。可変長の動的領域（旧 side_offset / side_len 等）は持たない
+5. 全 inline tier payload が **ring slot に inline 格納**。slot 外の領域を指すオフセット参照のような可変長の動的領域は持たない
 6. back-pressure はリング満杯のみ（`emit_event` が `0` を返す）。payload size 超過は handshake 時にハードに弾かれるため、`-2` の使い道は events.yaml 違反の防衛的検出のみ
 
 ---
@@ -30,7 +30,7 @@
 
 - ハンドシェイクで `slot_size` を決めるプロトコル（`DEFAULT_SLOT_SIZE` / `HARD_SLOT_SIZE` の規約）
 - `ShmHeader` への `slot_size` 追加と stride 計算
-- `RingSlot` の固定 payload 配列前提の撤廃（payload 部が driver ごとに固定長だが driver 間で異なる）
+- ring slot のレイアウト（コンパイル時固定の payload 配列を持たず、payload 部は driver ごとに固定長だが driver 間で異なる）
 - back-pressure 戻り値仕様の簡略化
 - ABI / version の取り扱い方針
 
@@ -45,9 +45,9 @@
 
 ---
 
-## RingSlot レイアウト
+## ring slot レイアウト
 
-`RingSlot` は **コンパイル時固定の payload 配列を持たない**。代わりに **`ShmHeader.slot_size` で stride を計算した raw memory アクセス** にする。
+ring slot は **コンパイル時固定の payload 配列を持たない**。代わりに **`ShmHeader.slot_size` で stride を計算した raw memory アクセス** にする。
 
 ### スロットの内部レイアウト
 
@@ -382,9 +382,25 @@ fn validate_compat(header: &ShmHeader) -> Result<(), CompatError> {
 
 ---
 
+## 読み出し側の防御的検証
+
+driver は信頼境界の外にあるプロセスであり（`design/11-security/01-driver-sandbox.md`「信頼境界」）、shm に任意の値を書き込みうる。handshake 時の `slot_size` 検証（alignment / 上限）に加えて、Bridge は読み出しごとに次を検証する:
+
+- `payload_len <= slot_size - 8` を payload 取得前に検証する
+- `write_index` が `read_index <= write_index <= read_index + RING_CAPACITY` の範囲に収まることを検証する（逆行・`RING_CAPACITY` 超のジャンプの拒否）
+
+違反時の処遇は 2 段階に分ける:
+
+| 違反の種類 | 例 | 処遇 |
+|---|---|---|
+| プロトコル違反（正常な SDK 利用では起こり得ない） | `payload_len` の境界超過、`write_index` の逆行・範囲超過 | driver を**即時停止**する。悪意または深刻な破損とみなし、ring 内の未読イベントも破棄する。停止後は通常のクラッシュリカバリ（自動再起動ポリシー）に従う |
+| 単発の不正イベント | msgpack decode 失敗、events.yaml 照合失敗 | 該当イベントを**破棄して継続**する。driver 実装バグの可能性が高く、全停止は過剰なため。ログは rate-limit 付きで記録する |
+
+---
+
 ## 参考リンク
 
 - [00-overview.md](./00-overview.md) — driver↔bridge 配送戦略の総論（tier モデル、limit 規約）
 - `design/15-sdk-bindings-api.md` — SDK バインディング API 設計
 - `design/16-driver-events-schema.md` — events.yaml スキーマ（`bytes.max_length` の上限値定義 / `tier` 宣言）
-- `crates/midori-core/src/shm.rs` — `RingSlot` / `ShmHeader` 実装
+- `crates/midori-core/src/shm.rs` — `SlotHeader` / `ShmHeader` 実装

@@ -132,6 +132,7 @@ drivers:
 | `name` | ✅ | ドライバー識別子（`<modality>-<purpose>` 形式推奨。命名ルール → [`layers/01-input-driver/requirements.md#ネームスペース命名`](layers/01-input-driver/requirements.md#ネームスペース命名)） |
 | `modality` | ✅ | 物理 I/O のクラス。同一物理入力の重複検出に使用（例: `audio` / `midi` / `osc` / `ble` / `http`）。詳細 → [`layers/01-input-driver/requirements.md#物理入力の重複禁止`](layers/01-input-driver/requirements.md#物理入力の重複禁止) |
 | `physical_input_identity` | ❌ | `connection_fields` のうち、物理入力を一意に同定するフィールド ID の配列（例: `[device_name]`、`[host, listen_port]`）。省略時は重複検出を行わない |
+| `output_conflict` | ❌ | 同一の出力先（解決後アドレス）へ複数ブリッジが同時に書き込もうとした場合の方針。`block`（媒体が並行書き込みを許容しない＝後発プロファイルを起動不可）/ `warn`（last-write-wins 等で許容＝起動は許し警告のみ。既定）。出力バッティング検出時にアプリが参照する。詳細 → [`config/05-profile.md`](config/05-profile.md)「出力バッティング」 |
 | `release_assets` | ✅ | プラットフォーム別 GitHub Releases アセット名。`darwin-arm64` / `darwin-x64` / `linux-x64` / `win32-x64` をキーとして定義する |
 | `start_args` | ❌ | `start` 時の追加引数 |
 | `connection_fields` | ❌ | 接続設定フォームフィールドの宣言 |
@@ -340,7 +341,7 @@ Additional Fields はカスタムコードを必要とせず、GUI が標準 HTM
 | **内蔵コンポーネント** | pure JS（DOM 直接操作） | プリミティブ型（filled-square / bar / dot）・グリッドコンテナ |
 | **プラグイン提供コンポーネント** | iframe（サンドボックス） | `render_components` で宣言したカスタム描画 |
 
-内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する（Web Component から iframe に変更）。値の受け渡しは `postMessage` または `dataset` 経由とし、iframe 内部の実装はプラグイン側の自由とする。
+内蔵コンポーネントは `dataset` 書き換えで pure JS が直接更新する。プラグインの `render_components` は **iframe** 内に閉じ込めて実行する。値の受け渡しは `MessageChannel` の専用ポート経由とし（確立手順となりすまし対策は [`11-security/02-widget.md`](11-security/02-widget.md)）、iframe 内部の実装はプラグイン側の自由とする。
 
 ### generator_ui（アダプター生成）
 
@@ -381,16 +382,16 @@ render_components:
     iframe_src: ../ui/heart-rate-display.html   # plugin.yaml からの相対パス
 ```
 
-Bridge からの `device-state` イベントは GUI が受け取り、`postMessage` で iframe に転送する。iframe 内部の実装はプラグイン側の自由とする（値の反映方法・DOM構造等）。
+Bridge からの `device-state` イベントは GUI が受け取り、iframe ロード時に確立した `MessageChannel` の専用ポートで iframe に転送する（確立手順となりすまし対策は [`11-security/02-widget.md`](11-security/02-widget.md)）。iframe 内部の実装はプラグイン側の自由とする（値の反映方法・DOM構造等）。
 
 ```js
-// GUI → iframe
-iframe.contentWindow.postMessage({ type: 'device-state', value: 72 }, '*')
+// GUI → iframe（確立済みポート経由）
+port.postMessage({ type: 'device-state', value: 72 })
 
-// iframe 内（プラグイン実装）
-window.addEventListener('message', (e) => {
+// iframe 内（プラグイン実装。port は確立時に受領済み）
+port.onmessage = (e) => {
     if (e.data.type === 'device-state') render(e.data.value)
-})
+}
 ```
 
 セキュリティ制約：
@@ -410,13 +411,15 @@ window.addEventListener('message', (e) => {
 
 ---
 
-## osc-vrchat の立ち位置変更
+## osc-vrchat の位置づけ
 
-| | 変更前 | 変更後 |
-|---|---|---|
-| 分類 | 独立ドライバー | OSC を基底とする アダプター種別定義 |
-| 実装 | ドライバーとして実装 | osc ドライバー ＋ 設定マニフェスト |
-| 配布 | ブリッジ本体に同梱 | プラグイン（osc と同リポジトリでも可） |
+osc-vrchat は独立したドライバーではなく、**OSC ドライバーを基底とするアダプター種別定義**である。
+
+| 観点 | 内容 |
+|---|---|
+| 分類 | OSC を基底とするアダプター種別定義 |
+| 実装 | osc ドライバー ＋ 設定マニフェスト（独自バイナリを持たない） |
+| 配布 | プラグイン（osc と同リポジトリでも可） |
 
 osc-vrchat の本質は「OSC の接続設定と binding の特殊化」であり、I/O トランスポートとして osc と異なる実装を持つわけではない。アダプター種別定義 として再定義することで、将来の類似ケース（他 VR プラットフォーム・DAW 固有 OSC 等）も同じパターンで扱える。
 
@@ -436,7 +439,7 @@ osc-vrchat の本質は「OSC の接続設定と binding の特殊化」であ�
 ────────────────────────────────────────────────────────────
 ドライバー              サブプロセス               共有メモリ（リアルタイム）
 アダプター種別定義      なし                       —
-描画コンポーネント      GUI プロセス内 sandbox iframe  postMessage
+描画コンポーネント      GUI プロセス内 sandbox iframe  MessageChannel ポート
 ```
 
 ---

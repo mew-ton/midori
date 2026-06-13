@@ -40,7 +40,7 @@
 │     ↑ extern "C" の薄い関数群を呼ぶ                     │
 ├─────────────────────────────────────────────────────────┤
 │ L1  生 FFI（midori-sdk crate の extern "C"）            │
-│     - midori_sdk_spsc_*       （MEW-37 / 要差し替え）   │
+│     - midori_sdk_spsc_*       （実装済み）              │
 │     - midori_sdk_run          （本設計で追加）          │
 │     - midori_event_* + emit   （本設計で追加・msgpack） │
 │     - midori_sdk_log          （本設計で追加）          │
@@ -50,7 +50,7 @@
 │ L0  Rust 実装                                           │
 │     - midori_sdk::driver::run / run_protocol            │
 │     - midori_sdk::spsc::Producer/Consumer               │
-│     - midori_core::shm::RingSlot（要差し替え）          │
+│     - midori_core::shm（SlotHeader + raw payload）      │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -71,7 +71,7 @@
 |---|---|---|---|
 | stdin | Bridge → Driver | JSON Lines（hello_ack / connect / disconnect / configure） | **L1 が完全に隠蔽** |
 | stdout | Driver → Bridge | JSON Lines（hello / 制御応答）＋ デバッグログ行 | **L1 が完全に隠蔽**（ログ API を除く） |
-| 共有メモリ | Driver → Bridge | SPSC リングバッファ（msgpack encode 済み raw event。SysEx 等は side channel 経由） | **L1 公開**（`midori_sdk_emit_event` でラップ） |
+| 共有メモリ | Driver → Bridge | SPSC リングバッファ（msgpack encode 済み raw event。slot サイズは handshake で決定、`design/17-driver-comm/` 参照） | **L1 公開**（`midori_sdk_emit_event` でラップ） |
 
 **hello / hello_ack ハンドシェイクは L1 内に閉じる。** ドライバー作者（L3）はハンドシェイクを意識しない。`midori_sdk_run` の戻り（または "ready" コールバック）で「Bridge と接続完了」とみなせる。Bridge から非互換と返された場合は L1 が ABI 互換のエラーコードで return し、L2 が言語固有の例外/エラーに変換する。
 
@@ -454,7 +454,7 @@ Bridge がプロセス終了を検知して再起動 / 停止
 
 **`emit_event` の戻り値:** 1=成功、0=リング満杯（ドロップされた）、負値=不正引数 / payload size 超過。リング満杯は **エラーではなく back-pressure シグナル** として扱う。L3 はドロップ件数をログに出すだけでよい（再送ロジックは持たない方が単純）。
 
-`payload size 超過`（msgpack encode 後のバイト長が `PAYLOAD_INLINE_MAX` を超え、かつ side channel が未実装 or 拒否）は **L3 の責任**として扱う。Driver 作者は events.yaml で「インラインに収まる範囲」を意識して emit する。
+`payload size 超過`（msgpack encode 後のバイト長が slot の payload 上限 `slot_size - 8` を超える）は **L3 の責任**として扱う。events.yaml の宣言から handshake で `slot_size` が確定するため、宣言が正しければ runtime では発生しない（防衛的検出のみ。`design/17-driver-comm/01-inline-ring.md`）。
 
 ---
 
@@ -494,16 +494,16 @@ napi-rs の `ThreadsafeFunction` を使い、L1 から非メインスレッド�
 
 ## L1 FFI 拡張：暫定シグネチャ一覧
 
-MEW-37 で実装済みのものに加え、本設計を実現するために追加が必要な extern "C" 関数。
+実装済みのものに加え、本設計を実現するために追加が必要な extern "C" 関数。
 
-### 既存（MEW-37 で実装済み）
+### 既存（実装済み）
 
 ```c
-size_t midori_sdk_spsc_storage_size(void);
-size_t midori_sdk_spsc_storage_alignment(void);
-void   midori_sdk_spsc_init(void* storage);
-uint8_t midori_sdk_spsc_push(const void* storage, const RingSlot* slot);
-uint8_t midori_sdk_spsc_pop(const void* storage, RingSlot* out_slot);
+size_t  midori_sdk_spsc_storage_size(uint32_t slot_size);
+size_t  midori_sdk_spsc_storage_alignment(void);
+int32_t midori_sdk_spsc_init(void* storage, uint32_t slot_size);
+int32_t midori_sdk_spsc_push(const void* storage, const uint8_t* payload, size_t payload_len);
+int32_t midori_sdk_spsc_pop(const void* storage, uint8_t* out_payload, size_t out_payload_cap, size_t* out_payload_len);
 ```
 
 ### 追加（本設計）
@@ -571,13 +571,13 @@ const char* midori_sdk_last_error(void);
 
 ### Wire format（msgpack）
 
-L3 が渡した dict / struct / Map は **L2 で msgpack に encode** され、L1 がそのバイト列を SPSC スロットの `payload_bytes` フィールドに書き込む。L1 は msgpack の意味を知らない（不透明バイト列として扱う）。
+L3 が渡した dict / struct / Map は **L2 で msgpack に encode** され、L1 がそのバイト列を SPSC スロットの payload 領域に書き込む。L1 は msgpack の意味を知らない（不透明バイト列として扱う）。
 
 | レイヤー | 役割 |
 |---|---|
 | L3 driver code | dict / struct / Map を `emit_event` に渡す |
 | L2（言語ラッパー） | dict → msgpack バイト列に encode（Python `msgpack.packb`、Node `@msgpack/msgpack`、Rust `rmp_serde::to_vec`、C は同梱の builder ヘルパー） |
-| L1 | バイト列を SPSC スロットへ push（PAYLOAD_INLINE_MAX 超は side channel へ） |
+| L1 | バイト列を SPSC スロットへ push（payload 上限は handshake で確定した `slot_size - 8`） |
 | Bridge | スロットを pop → msgpack decode → events.yaml 照合 → binding 適用 |
 
 選定理由:
@@ -593,32 +593,11 @@ L3 側のコード（dict / struct / Map）→ msgpack のマッピングは各�
 
 将来「もっと速く」が必要になった場合は、events.yaml から layout を導出する **schema 駆動バイナリ**（offset 直書き）に差し替え可能。L3 API（`emit_event(structured)`）は wire format に依存しないため、driver 作者のコードに影響しない。
 
-### SPSC スロットレイアウトの変更
+### SPSC スロットレイアウト
 
-現 `midori-core::shm::RingSlot`（`device_id` + `specifier` + `value_tag` + `value_i64/f64`）は **post-binding 形** であり、本設計の raw event を運ぶには不適合。新レイアウトは下記:
+SPSC ring の slot は raw event（msgpack バイト列）を運ぶ。slot はコンパイル時固定の payload 配列を持たず、固定 8 byte のヘッダ（`occupied` / `payload_len`）に `slot_size - 8` byte の payload 領域が続く。`slot_size` は driver ごとに handshake で決まり（`DEFAULT_SLOT_SIZE` = 1032 byte / 上限 `HARD_SLOT_SIZE` = 65536 byte）、inline tier の event はすべて slot に inline で収まる。
 
-```rust
-// 新 RingSlot（既存と互換性なし。midori-core major bump）
-#[repr(C)]
-pub struct RingSlot {
-    pub occupied: u8,
-    pub _pad: [u8; 3],
-    pub payload_len: u32,             // msgpack バイト長（0 < len <= PAYLOAD_INLINE_MAX）
-    pub side_offset: u64,             // payload_len > INLINE 時の side channel オフセット（0=未使用）
-    pub side_len: u32,
-    pub _pad2: [u8; 4],
-    pub payload: [u8; PAYLOAD_INLINE_MAX],  // 例: 240 byte
-}
-```
-
-- `payload_len <= PAYLOAD_INLINE_MAX` のとき: msgpack バイト列をそのまま `payload` に inline
-- 超える場合（SysEx 1KB 級など）: 別 mmap 領域（**side channel**）に書き、`side_offset` / `side_len` を立てる。Bridge は side channel を読み出してから msgpack を decode
-
-`PAYLOAD_INLINE_MAX` は 240 byte 程度（現 `RingSlot` ~280 byte と同等のスロットサイズに収める）を見積もり。MIDI / OSC の通常イベントは inline で完結する。
-
-side channel の設計（mmap 領域サイズ・割り当て・ガベージ）は **本設計のスコープ外**。別 Issue で扱う。本書では「SPSC スロット側に side_offset/side_len の枠を確保する」までを決める。
-
-**この RingSlot 変更は midori-core の破壊変更**であり、MEW-37 で実装した SPSC FFI（`midori_sdk_spsc_*`）も影響を受ける。後続 Issue（後述）で扱う。
+slot レイアウト・handshake プロトコル・メモリ順序の規範は [`design/17-driver-comm/01-inline-ring.md`](17-driver-comm/01-inline-ring.md)。slot 上限を超えうる大型 payload の event は inline tier では扱えず、`tier: streamed`（将来拡張）として宣言する（[`design/17-driver-comm/00-overview.md`](17-driver-comm/00-overview.md)）。
 
 ### 実行インスタンス制約
 
@@ -718,7 +697,7 @@ if (cb->struct_size < offsetof(midori_driver_callbacks_t, on_configure)
 | Real-Time | `{type: "realtime", message: "start"}` | OK |
 | SysEx | `{type: "sysex", payload: <bytes>}` | OK（msgpack `bin`） |
 
-SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **side channel** 経由（SPSC スロットレイアウト変更節を参照）。side channel 設計が固まるまで、Driver は SysEx を 240 byte 程度の inline 範囲に収めること（運用上の制約として明記）。
+SysEx は MIDI driver の `bytes.max_length`（1 KiB 上限）宣言により、`DEFAULT_SLOT_SIZE`（payload 容量 1024 byte）の inline tier でそのまま運べる（`design/17-driver-comm/01-inline-ring.md`「メモリ予算」参照）。
 
 ### OSC
 
@@ -741,13 +720,13 @@ SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **
 
 本設計の承認後、以下の単位で実装 Issue を切ることを推奨する。「言語別」ではなく **L1 拡張を先に固める** のが鍵。
 
-### Phase 0: midori-core の SPSC スロット差し替え（前提・前提）
+### Phase 0: midori-core の SPSC スロット差し替え（完了）
 
-| Issue 案 | 内容 | 想定 SP |
+| Issue 案 | 内容 | 状態 |
 |---|---|---|
-| Core-1 | `midori-core::shm::RingSlot` を新レイアウト（payload_bytes + side_offset/len）に差し替え（**既存 SPSC FFI / `midori_sdk_spsc_*` も含めた major bump**） | 5 |
-| Core-2 | side channel（mmap プール）の確保・割り当て・解放方針の設計と Bridge 側パーサー | 5 |
-| Core-3 | events.yaml の **Bridge 側スキーマローダー**（msgpack で受けて schema 照合 → Layer 2 binding に流す） | 5 |
+| Core-1 | shm を variable-sized inline ring slot（`design/17-driver-comm/01-inline-ring.md`）へ再設計（**SPSC FFI / `midori_sdk_spsc_*` を含む major bump**） | 実装済み（midori-core 0.3.0） |
+| Core-2 | side channel（mmap プール）の確保・割り当て・解放 | 不採用。slot に収まらない大型 payload は streamed tier の領分（`design/17-driver-comm/00-overview.md`） |
+| Core-3 | events.yaml の **Bridge 側スキーマローダー**（msgpack で受けて schema 照合 → Layer 2 binding に流す） | スキーマローダー実装済み（`crates/midori-runtime/src/events_schema/`）。msgpack decode / binding 連携は後続 |
 
 ### Phase 1: L1 FFI 拡張
 
@@ -781,7 +760,7 @@ SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **
 
 「言語別」と「機能別」の両軸で切れる位置を意図的に Phase で区切る:
 
-- **Phase 0（midori-core）が L1 の前提**。RingSlot レイアウトと msgpack 採用が決まらないと L1 が始められない
+- **Phase 0（midori-core）が L1 の前提**。slot レイアウトと msgpack 採用（いずれも確定・実装済み）が L1 の基盤になる
 - **L1 が固まる前に L2/L3 に着手すると、L1 ABI を 4 言語ぶん何度も改修することになる**（高コスト）
 - C/Py/Node は Phase 2 内で並列可（L1 が共通基盤）
 - 公式 MIDI/OSC ドライバー（Drv-1/2）は L2 ラッパーの妥当性検証のために Phase 2 と並走させても良い
@@ -792,7 +771,7 @@ SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **
 - バージョニング戦略の semver 境界線確定
 - DMX / Art-Net / HID / Serial 等の追加ドライバー領域
 - **driver の `events.yaml` スキーマ仕様**（型語彙・enum・SysEx pattern 対応・GUI 流用方法など）。本書では「SDK は events.yaml を知らず素通しする」「Bridge が events.yaml で照合する」までを決め、yaml 文法は別 Issue
-- **side channel（mmap プール）の詳細設計**（領域サイズ・割り当て戦略・GC）。本書では SPSC スロットに `side_offset`/`side_len` の枠を確保するまで
+- **streamed tier（inline slot に収まらない大型 payload の配送経路）の詳細設計**。`design/17-driver-comm/00-overview.md` で仕様予約のみ
 - **wire format を msgpack から schema 駆動バイナリへ差し替えるタイミング**（性能要件が顕在化したら検討）
 
 ---
@@ -803,8 +782,8 @@ SysEx 1KB 級は SPSC スロットの `PAYLOAD_INLINE_MAX` を超えるので **
 - `design/14-repository-structure.md` — `midori-sdk` クレートの責務
 - `design/12-distribution.md` — 配布方針（参考のみ）
 - `crates/midori-sdk/src/driver.rs` — Rust `Driver` トレイトと CLI スキャフォールド実装
-- `crates/midori-sdk/src/ffi.rs` — MEW-37 で導入された L1 FFI（SPSC のみ）。本設計の Phase 0 で差し替え
-- `crates/midori-core/src/shm.rs` — `RingSlot` レイアウト。本設計の Phase 0 で差し替え
+- `crates/midori-sdk/src/ffi.rs` — L1 FFI（SPSC raw payload push / pop）
+- `crates/midori-core/src/shm.rs` — `SlotHeader` / `ShmHeader` と slot stride 実装
 - `design/layers/01-input-driver/requirements.md` — 物理型・コーデック責務（raw event の定義）
 - `design/layers/02-input-recognition/binding-requirements.md` — Bridge が events.yaml と raw event を照合する側の仕様
 - `design/config/drivers/midi.md` / `osc.md` — MIDI/OSC binding 構文（`from.type` 等は driver の events.yaml と一致する必要がある）
