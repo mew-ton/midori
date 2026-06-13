@@ -19,7 +19,7 @@
     "@astrojs/node": "^9.4.7",
     "astro": "^5.16.4",
     "concurrently": "^9.2.1",
-    "electron": "^33.4.11",
+    "electron": "^42.4.0",
     "wait-on": "^8.0.5"
   }
 }

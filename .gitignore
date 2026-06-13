@@ -1,6 +1,10 @@
 /target/
 /node_modules/
 **/node_modules/
+# pnpm's project-local content-addressable store, created when the global
+# store directory lives on a different filesystem than the workspace (the
+# usual case in the devcontainer, where /home and /workspaces are separate mounts).
+.pnpm-store/
 .claude/settings.local.json
 .claude/worktrees/
 

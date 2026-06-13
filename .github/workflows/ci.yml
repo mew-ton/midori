@@ -79,12 +79,13 @@ jobs:
     if: github.event.pull_request.draft != true
     steps:
       - uses: actions/checkout@v6
+      # No `version:` — pnpm/action-setup reads the pinned version from the
+      # root package.json `packageManager` field, the single source of truth
+      # shared with the devcontainer (activated there via `corepack enable`).
       - uses: pnpm/action-setup@v6
-        with:
-          version: 9
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
