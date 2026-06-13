@@ -75,6 +75,8 @@ GUI
 
 **GUI はブリッジの入出力に一切触れない。純粋な設定エディター + プロセスマネージャー。**
 
+複数プロファイルの同時実行は、GUI がプロファイルごとに独立したブリッジプロセスを起動・管理して実現する（プロセス分離。各ブリッジは1プロファイルのみを実行する）。ブリッジ↔ドライバーの共有メモリは常に1ブリッジ↔1ドライバーの1:1を保つため、同時実行数を増やしても各リングの不変条件は変わらない（→ [`config/05-profile.md`](config/05-profile.md)「実行の制約」）。
+
 Preview と Monitor は同一の `device-state` イベントを購読し、`direction` と `device` フィールドでフィルタリングする。
 
 ---
@@ -154,7 +156,7 @@ Preview と Monitor は同一の `device-state` イベントを購読し、`dire
 │   │   ├── .midori/
 │   │   │   └── plugin.yaml
 │   │   └── adapters/
-│   ├── driver-midi/       ← 公式ドライバー（アプリに同梱）
+│   ├── driver-midi/       ← 公式ドライバー（GUI が起動時に自動インストール）
 │   └── driver-osc/
 └── preferences.yaml       ← UI 設定・最近使用したファイル・AI 設定
 ```

@@ -114,4 +114,4 @@ settle するまで、driver 作者は `tier: streamed` event を宣言しても
 - `design/15-sdk-bindings-api.md` — SDK バインディング API（C / Node / Python）と driver プロセスモデル
 - `design/16-driver-events-schema.md` — events.yaml schema（`tier` 宣言の文法は本書と連動した「tier」節で定義）
 - `design/10-driver-plugin.md` — Driver プラグイン仕様（プロセス分離原則）
-- `crates/midori-core/src/shm.rs` — `RingSlot` / `ShmHeader` 実装
+- `crates/midori-core/src/shm.rs` — `SlotHeader` / `ShmHeader` 実装
