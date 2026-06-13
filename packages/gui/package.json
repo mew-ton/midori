@@ -3,12 +3,23 @@
   "version": "0.1.0",
   "description": "Midori desktop application (Electron + Astro SSR)",
   "private": true,
+  "type": "module",
+  "main": "electron/main.js",
   "scripts": {
-    "build": "echo 'TODO: implement build'",
-    "dev": "echo 'TODO: implement dev'"
+    "build": "astro build",
+    "dev": "concurrently --kill-others --names astro,electron --prefix-colors blue,magenta \"pnpm dev:astro\" \"pnpm dev:electron\"",
+    "dev:astro": "astro dev --port 4321 --host 127.0.0.1",
+    "dev:electron": "wait-on http://127.0.0.1:4321 && electron ."
   },
   "dependencies": {
     "@midori/runtime": "workspace:*",
     "@midori/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@astrojs/node": "^9.4.7",
+    "astro": "^5.16.4",
+    "concurrently": "^9.2.1",
+    "electron": "^42.4.0",
+    "wait-on": "^8.0.5"
   }
 }

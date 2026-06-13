@@ -1,6 +1,9 @@
 {
   "features": {
-    "ghcr.io/devcontainers/features/node:2": {},
+    // Pin Node to the current LTS (24); pnpm is pinned via the root
+    // package.json `packageManager` field and activated by `corepack enable`
+    // in setup.sh, so the same Node + pnpm pair is used here and in CI.
+    "ghcr.io/devcontainers/features/node:2": { "version": "24" },
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/common-utils:2": {}

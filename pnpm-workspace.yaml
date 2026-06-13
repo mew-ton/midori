@@ -1,2 +1,14 @@
 packages:
   - "packages/*"
+# Dependency build scripts allowed to run on install. pnpm 10+ blocks lifecycle
+# scripts by default; each entry is a dependency whose native/postinstall step
+# this workspace explicitly trusts:
+#   esbuild  — fetches its native binary used by Astro/Vite
+#   sharp    — compiles/loads native image processing
+#   lefthook — installs the local git hooks
+# Electron is intentionally absent: as of v42 it has no install script and
+# instead downloads its prebuilt binary lazily on the first `electron` launch.
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  sharp: true
