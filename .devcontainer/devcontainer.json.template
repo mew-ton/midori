@@ -1,0 +1,13 @@
+{
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+  "name": "Rust",
+  "image": "mcr.microsoft.com/devcontainers/rust:2-1-trixie",
+  // Install system build dependencies (ALSA dev headers for the MIDI driver).
+  // See .devcontainer/setup.sh for why.
+  "onCreateCommand": "bash .devcontainer/setup.sh"
+}
