@@ -2,3 +2,10 @@
 /node_modules/
 **/node_modules/
 .claude/settings.local.json
+
+# Personal devcontainer config (devcontainer.json, .env.container) stays local.
+# Only the shared template and setup script are tracked. Ignore dir *contents*
+# (not the dir itself) so the negations below can re-include specific files.
+.devcontainer/*
+!.devcontainer/devcontainer.json.template
+!.devcontainer/setup.sh
