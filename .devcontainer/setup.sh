@@ -10,5 +10,7 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends libasound2-dev
+# Retry on transient network failures: onCreateCommand runs once during container
+# build, where a single dropped connection would otherwise fail the whole setup.
+sudo apt-get -o Acquire::Retries=3 update
+sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libasound2-dev
