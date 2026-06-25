@@ -31,7 +31,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft != true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # cargo-deny reads only Cargo.lock plus its configuration, so one
       # Linux invocation covers every target platform of the workspace.
       # The default `check` subcommand exercises advisories, licenses,
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft != true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           version: 9
