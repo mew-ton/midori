@@ -29,6 +29,24 @@ advisories belong in `[advisories].ignore` (with reason and revisit
 timing); per-crate license carve-outs belong in `[licenses.exceptions]`
 (with a one-line justification). Never silence findings inline.
 
+## System prerequisites (Linux)
+
+Building or testing the workspace on Linux requires the ALSA development
+headers. `midori-driver-midi` depends on `midir`, which links the ALSA C
+library through `alsa-sys`; the build script locates `alsa.pc` via
+pkg-config, so without the headers `cargo build` and `cargo test` fail for
+the **whole workspace**, not just the MIDI crate. macOS uses CoreMIDI and
+Windows uses WinMM, so neither needs anything extra.
+
+On Debian / Ubuntu:
+
+```sh
+sudo apt-get install libasound2-dev
+```
+
+Other distributions ship the same headers under a different package name
+(for example `alsa-lib` on Arch, `alsa-lib-devel` on Fedora).
+
 ## Rust format / lint / test
 
 ```sh
